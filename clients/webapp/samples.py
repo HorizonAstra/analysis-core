@@ -46,12 +46,17 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
 import paths
 
 _TREE = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
+if str(_TREE / "infrastructure") not in sys.path:
+    sys.path.insert(0, str(_TREE / "infrastructure"))
+
+from datasource import refs as _refs                           # noqa: E402
 
 # How long a user's registry is held before it is read again. A registry only
 # changes when a run is submitted or polled, and the panel that asks this is
@@ -132,9 +137,7 @@ def _named_by(ref: str) -> str:
     alone names a whole study, and `study:<study>/<role>` names a role of one,
     and neither is a sample.
     """
-    if not isinstance(ref, str) or not ref.startswith("study:"):
-        return ""
-    parts = [p for p in ref[len("study:"):].strip("/").split("/") if p]
+    parts = _refs.study_parts(ref)
     if len(parts) < 2:
         return ""
     return "" if parts[1] in _roles() else parts[1]

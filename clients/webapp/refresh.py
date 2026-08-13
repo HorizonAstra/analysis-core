@@ -29,12 +29,13 @@ import render
 _TREE = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
 for _p in ("interfaces/run", "interfaces/catalog", "infrastructure/graph",
            "infrastructure/sites", "infrastructure/executors",
-           "infrastructure/artifact-store"):
+           "infrastructure/artifact-store", "infrastructure"):
     if str(_TREE / _p) not in sys.path:
         sys.path.insert(0, str(_TREE / _p))
 
 import plan as P                                            # noqa: E402
 import reachable as _reachable                              # noqa: E402
+from datasource import refs as _refs                        # noqa: E402
 from protocol import JobSpec                                # noqa: E402
 
 
@@ -60,10 +61,10 @@ def _about(executor, run: str, seen: set | None = None) -> tuple:
     later = []
     for value in rec.spec.inputs.values():
         text = str(value)
-        if text.startswith("study:"):
-            rest = text[len("study:"):].strip("/").split("/")
-            if len(rest) >= 2:
-                return rest[0], rest[1]
+        named = _refs.study_parts(text)
+        if named:
+            if len(named) >= 2:
+                return named[0], named[1]
         elif text.startswith("run:"):
             later.append(text[len("run:"):].strip("/").split("/")[0])
     for earlier in later:

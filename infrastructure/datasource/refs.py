@@ -117,61 +117,65 @@ def _versioned(name: str) -> tuple:
     return study, version
 
 
-def versions_of(directory: str, domain: str = "") -> list:
-    """Every version of a study's data, newest name first.
+def study_parts(reference) -> list:
+    """A `study:` reference, split into the study and whatever it named inside.
 
-    A version is a directory directly under the study holding the study's own
-    layout. A study with none is a study with one version that was never named,
-    which is what every study looked like before this existed and what most look
-    like now — so that case resolves to the study directory itself and nothing
-    has to be migrated for anything to keep working.
+    The study name comes back with no version on it, and that is the point of
+    having this at all. A version says which copy of the data to read; it never
+    says what the data is. So everything that asks "which study is this" — does
+    this machine hold it, which sample was that run about, which study to file a
+    result under — gets the same answer whether or not somebody pinned a
+    version, and none of them has to learn that versions exist.
 
-    Told apart by asking the domain, not by looking for a marker file. A version
-    wraps the study's own layout, so a version is a directory that is itself
-    recognisable as that study — it has the roles the domain declares, or the
-    samples. A directory that merely contains directories is not enough: a plain
-    study's `samples/` folder contains plenty and is part of the study rather
-    than a version of it, and treating it as one would offer `@samples` as
-    something to pin.
+    There were six of these written out by hand, one wherever the question came
+    up, and adding versions broke four of them at once: a reference carrying a
+    version named a study called `NSCLC@2026-08-13`, which no machine holds, so
+    the work was routed to whichever machine was first in the list. Splitting a
+    reference is this file's job, and it is one line, which is exactly why it got
+    written six times.
+
+    Empty for anything that is not a study reference, so a caller can ask without
+    checking first.
     """
-    root = Path(directory)
-    try:
-        inside = sorted((p for p in root.iterdir() if p.is_dir()), reverse=True)
-    except OSError:
+    text = str(reference or "")
+    if not text.startswith("study:"):
         return []
-    return [p.name for p in inside if _looks_like_version(p, domain)]
+    parts = [p for p in text[len("study:"):].strip("/").split("/") if p]
+    if parts:
+        parts[0] = _versioned(parts[0])[0]
+    return parts
 
 
-def _looks_like_version(path: Path, domain: str) -> bool:
-    """Whether a directory under a study is a version of it rather than part of it."""
-    if path.name.startswith(".") or not domain:
-        return False
-    try:
-        if _domains.match_roles(str(path), domain):
-            return True
-        return bool(_domains.sample_dirs(str(path), domain))
-    except Exception:                      # noqa: BLE001 - unrecognisable is not a version
-        return False
+def versions_of(study: str, data_root: str = "") -> list:
+    """Every version of one study's data, newest first, empty when it has none.
+
+    Which folders those are is not decided here. Discovery walks the tree once
+    and already has to know a version from a sample to answer at all, so it says
+    so in what it found, and this reads the answer. Working it out again from the
+    directory is how the two came apart the first time: this file guessed, and in
+    a harmonised spatial study every sample folder answered to the guess.
+    """
+    root = data_root or os.environ.get("DATA_ROOT", "data")
+    return list((_local.scan_studies(root).get(study) or {}).get("versions") or [])
 
 
-def _at_version(directory: str, name: str, version: str, domain: str = "") -> str:
+def _at_version(entry: dict, name: str, version: str) -> str:
     """The study directory for the version asked for, or for the newest.
 
-    An unversioned study ignores this entirely, which is how a tree that has
+    A study with no versions ignores this entirely, which is how a tree that has
     never been laid out in versions keeps resolving exactly as it did.
 
-    Asking for no version asks for the newest, which for a versioned study is a
-    directory deeper. Returning the study itself there would look for the roles
-    one level above where they are and report a study that holds nothing.
+    Asking for no version asks for the newest, and discovery already reports the
+    newest as the study's directory, so both cases are the same lookup.
     """
-    found = versions_of(directory, domain)
     if not version:
-        return str(Path(directory) / found[0]) if found else directory
+        return entry["dir"]
+    found = entry.get("versions") or []
     if version not in found:
         raise Unresolvable(
             f"{name} has no version '{version}'. It has: "
             f"{', '.join(found) or 'no versions, so name it without @'}")
-    return str(Path(directory) / version)
+    return os.path.join(entry["root"], version)
 
 
 def _study(rest: str, data_root: str) -> Path:
@@ -195,8 +199,8 @@ def _study(rest: str, data_root: str) -> Path:
     if name not in found:
         raise Unresolvable(
             f"no study called {name}. Available: {', '.join(sorted(found)) or 'none'}")
-    directory, domain = found[name]["dir"], found[name]["domain"]
-    directory = _at_version(directory, name, version, domain)
+    domain = found[name]["domain"]
+    directory = _at_version(found[name], name, version)
     if not tail:
         return Path(directory).resolve()
 

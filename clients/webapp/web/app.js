@@ -1079,7 +1079,9 @@ function drawVersions() {
     // far: a parameter is reconsidered for the study, not for one sample.
     const all = document.createElement("button");
     all.className = "ver-all"; all.type = "button"; all.textContent = "all newest";
-    all.title = `Point every sample's ${capTitle(c)} at its newest version`;
+    all.title = c === verDataColumn()
+      ? "Read every sample from the newest version of its data"
+      : `Point every sample's ${capTitle(c)} at its newest version`;
     all.addEventListener("click", () => {
       const picked = {};
       for (const r of rows) if (r.cells[c] && r.cells[c].versions.length) picked[`${r.subject}::${c}`] = null;
@@ -1115,11 +1117,27 @@ function drawVersions() {
     body.appendChild(t2);
   }
 
-  const filled = rows.reduce((n, r) => n + cols.filter((c) => r.cells[c] && r.cells[c].versions.length).length, 0);
-  const choices = rows.reduce((n, r) => n + cols.filter((c) => r.cells[c] && r.cells[c].versions.length > 1).length, 0);
+  // Counted over the capability columns only. The data column is what the
+  // results were computed from, not a result, and counting it as one would
+  // report work that nobody did.
+  const made = cols.filter((c) => c !== verDataColumn());
+  const filled = rows.reduce((n, r) => n + made.filter((c) => r.cells[c] && r.cells[c].versions.length).length, 0);
+  const choices = rows.reduce((n, r) => n + made.filter((c) => r.cells[c] && r.cells[c].versions.length > 1).length, 0);
   foot.textContent = `${filled} result${filled === 1 ? "" : "s"}, ` +
     `${choices === 0 ? "none with more than one version" :
        choices + " with more than one version"}.`;
+}
+
+function verDataColumn() {
+  return (verData && verData.data_column) || "";
+}
+
+// A version of a result is named by when it was submitted, and a version of data
+// is named by whoever laid the folder out. So a name is shown as a date only when
+// it is one, and otherwise shown as what it says.
+function verWhen(at) {
+  const d = new Date(at);
+  return isNaN(d.getTime()) ? at : d.toLocaleDateString();
 }
 
 function versionCell(subject, capability, cell) {
@@ -1159,21 +1177,25 @@ function openVersionMenu(td, subject, capability, cell) {
     b.type = "button";
     const n = document.createElement("span"); n.className = "ver-opt-n"; n.textContent = "v" + v.ordinal;
     const t = document.createElement("span"); t.className = "ver-opt-t";
-    t.textContent = v.label || new Date(v.at).toLocaleString();
+    t.textContent = v.label || verWhen(v.at);
     const w = document.createElement("span"); w.className = "ver-opt-w";
-    w.textContent = v.identity === cell.newest ? "newest" : new Date(v.at).toLocaleDateString();
+    w.textContent = v.identity === cell.newest ? "newest" : verWhen(v.at);
     b.append(n, t, w);
     b.addEventListener("click", () => { closeVersionMenu(); pickVersion({ [`${subject}::${capability}`]: v.identity }); });
     menu.appendChild(b);
   }
-  const clear = document.createElement("button");
-  clear.className = "ver-opt ver-clear" + (cell.cleared ? " on" : "");
-  clear.type = "button";
-  clear.textContent = "Clear — run this fresh next time";
-  clear.title = "Nothing is selected for this cell. Asking for it again computes it "
-              + "again instead of handing back what is already there.";
-  clear.addEventListener("click", () => { closeVersionMenu(); pickVersion({ [`${subject}::${capability}`]: "" }); });
-  menu.appendChild(clear);
+  // Emptying a cell asks for the work to be done again, and data is not work.
+  // It is on disk or it is not, so this column offers the choice without it.
+  if (cell.clearable !== false) {
+    const clear = document.createElement("button");
+    clear.className = "ver-opt ver-clear" + (cell.cleared ? " on" : "");
+    clear.type = "button";
+    clear.textContent = "Clear — run this fresh next time";
+    clear.title = "Nothing is selected for this cell. Asking for it again computes it "
+                + "again instead of handing back what is already there.";
+    clear.addEventListener("click", () => { closeVersionMenu(); pickVersion({ [`${subject}::${capability}`]: "" }); });
+    menu.appendChild(clear);
+  }
   td.appendChild(menu);
   setTimeout(() => document.addEventListener("click", closeVersionMenu, { once: true }), 0);
 }

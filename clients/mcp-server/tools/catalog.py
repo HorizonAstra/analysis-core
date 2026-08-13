@@ -28,11 +28,13 @@ from pydantic import Field
 
 _TREE = Path(__file__).resolve().parents[3]
 for _p in (_TREE / "interfaces" / "catalog", _TREE / "interfaces" / "run",
-           _TREE / "infrastructure" / "sites", _TREE / "infrastructure" / "executors"):
+           _TREE / "infrastructure" / "sites", _TREE / "infrastructure" / "executors",
+           _TREE / "infrastructure"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
 import entry as C
+from datasource.refs import study_parts
 from protocol import JobSpec
 
 from . import scope
@@ -105,7 +107,7 @@ def _tool_for(contract: dict, candidates: list) -> Any:
         given = {k: v for k, v in kwargs.items() if v not in (None, "")}
         workspace = given.pop("workspace", "default")
         names = {i["name"] for i in contract["inputs"]}
-        inputs = {k: v for k, v in given.items() if k in names}
+        inputs = {k: scope.at_chosen_version(v) for k, v in given.items() if k in names}
         site, executor = _where(candidates, inputs.values())
         parameters = {k: v for k, v in given.items() if k not in names}
         record = executor.submit(JobSpec(
@@ -217,11 +219,9 @@ def _was_cleared(qualified: str, inputs: dict, parameters: dict) -> bool:
         return False
     subjects = set()
     for ref in inputs.values():
-        text = str(ref)
-        if text.startswith("study:"):
-            parts = text[len("study:"):].strip("/").split("/")
-            if len(parts) >= 2:
-                subjects.add(parts[1])
+        parts = study_parts(ref)
+        if len(parts) >= 2:
+            subjects.add(parts[1])
     for key in ("sample", "sample_id"):
         if parameters.get(key):
             subjects.add(str(parameters[key]))

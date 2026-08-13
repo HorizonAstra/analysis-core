@@ -81,6 +81,36 @@ def study_allowed(study: str) -> bool:
     return allow is None or os.path.basename(str(study).rstrip("/\\")) in allow
 
 
+def versions_in(study_dir: str, domain: str) -> list[str]:
+    """The versions of a study kept under one folder, newest name first.
+
+    A study is worked on for months and the data under it gets replaced: a Space
+    Ranger run is redone, a sample is added, a batch is harmonised again.
+    Replacing it in place loses the only thing that makes an old result readable,
+    which is being able to say what it was computed from.
+
+    So a version is a folder under the study holding the study as it stood at
+    some point, and the study is the folder above them. Told apart by asking the
+    domain rather than by a marker file or a naming convention: a version wraps
+    the study's own layout, so a version is a child that is itself recognisable
+    as this study.
+
+    Only ever asked of a folder that is *not* a study itself, which is what makes
+    this safe. Asked of one that is, it answers wrongly and confidently: in a
+    harmonised spatial study every sample folder is recognisable as the study, so
+    every sample would be reported as a version of it. Newest name first, so a
+    study named without a version gets the newest.
+    """
+    try:
+        inside = sorted((n for n in os.listdir(study_dir) if not n.startswith(".")),
+                        reverse=True)
+    except OSError:
+        return []
+    return [n for n in inside
+            if os.path.isdir(os.path.join(study_dir, n))
+            and domains.is_study(os.path.join(study_dir, n), domain)]
+
+
 def _scan(data_root: str) -> dict[str, dict]:
     """Every study under a data root, as name -> {"domain", "dir"}.
 
@@ -89,6 +119,16 @@ def _scan(data_root: str) -> dict[str, dict]:
     names are the system-wide identifier, so a name appearing in two domains is a
     collision; the first by domain order wins and the loser is recorded in `_collisions`
     for callers that want to surface it.
+
+    A third: `data/<domain>/<study>/<version>/`, a study whose data is kept in
+    versions. It carries `root` and `versions` alongside, and `dir` is the newest,
+    so everything that only wants "the study" gets a study folder and needs to
+    know nothing about any of this.
+
+    Recognised under a named domain folder only. Anywhere else `data/<x>/<y>/` is
+    already ambiguous — `x` may be a container of studies or a study kept in
+    versions, and both look identical from here — and the older reading is the
+    one that has to keep working.
     """
     root = os.path.abspath(data_root)
     found: dict[str, dict] = {}
@@ -96,12 +136,12 @@ def _scan(data_root: str) -> dict[str, dict]:
     if not os.path.isdir(root):
         return found
 
-    def claim(name: str, domain: str, path: str) -> None:
+    def claim(name: str, domain: str, path: str, **also) -> None:
         prior = found.get(name)
         if prior is not None:
             collisions.append((name, prior["domain"], domain))
             return
-        found[name] = {"domain": domain, "dir": path}
+        found[name] = {"domain": domain, "dir": path, **also}
 
     for entry in sorted(os.listdir(root)):
         if entry.startswith("."):
@@ -109,8 +149,12 @@ def _scan(data_root: str) -> dict[str, dict]:
         path = os.path.join(root, entry)
         if not os.path.isdir(path):
             continue
-        # A study directly under data/: the pre-domain layout.
-        direct = domains.detect_domain(path)
+        # A study directly under data/: the pre-domain layout. A folder named for
+        # a domain is never one, and is not sniffed. Sniffed, it can match on its
+        # own contents: one study named for a role keyword — `cohort`, `genes` —
+        # is enough to make the domain folder answer as a study of that role, and
+        # every study inside it then disappears from discovery.
+        direct = None if entry in domains.DOMAINS else domains.detect_domain(path)
         if direct is not None:
             claim(entry, direct, path)
             continue
@@ -123,10 +167,20 @@ def _scan(data_root: str) -> dict[str, dict]:
                 continue
             # Inside a known domain folder, that domain wins over content sniffing, so a
             # sparse study is still read with its own domain's roles.
-            dom = entry if entry in domains.DOMAINS else domains.detect_domain(sdir)
-            if dom is None or not domains.is_study(sdir, dom):
+            named = entry in domains.DOMAINS
+            dom = entry if named else domains.detect_domain(sdir)
+            if dom is not None and domains.is_study(sdir, dom):
+                claim(sub, dom, sdir)
                 continue
-            claim(sub, dom, sdir)
+            if not named:
+                continue
+            # Not a study itself, so it may be one kept in versions. Checked only
+            # here, after the folder has already failed to be a study, because
+            # that is the one place where the question is not ambiguous.
+            kept = versions_in(sdir, entry)
+            if kept:
+                claim(sub, entry, os.path.join(sdir, kept[0]),
+                      root=sdir, versions=kept)
 
     found["_collisions"] = collisions  # type: ignore[assignment]
     return found

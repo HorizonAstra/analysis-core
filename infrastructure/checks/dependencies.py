@@ -50,6 +50,21 @@ KNOWN = {
 }
 
 
+# Directories holding code this tree did not write: virtual environments and
+# vendored packages. Skipped, and not because reading them is slow. The module
+# names the rules key on are ordinary words — `local`, `profile`, `store`,
+# `entry` — and a third-party file importing one of them is not this tree
+# reaching across a partition. Reading them also meant the rules reported
+# somebody else's syntax warnings as their own output.
+VENDORED = (".venv", "venv", "site-packages", "environments", "node_modules",
+            "__pycache__")
+
+
+def ours(path: Path) -> bool:
+    """Whether a file is this tree's own code rather than something installed."""
+    return not any(part in VENDORED for part in path.parts)
+
+
 def partition(path: Path) -> str | None:
     rel = path.relative_to(TREE).parts
     return rel[0] if rel and rel[0] in PARTS else None
@@ -74,7 +89,7 @@ def violations() -> list[tuple[str, str, str]]:
     found = []
     for path in sorted(TREE.rglob("*.py")):
         part = partition(path)
-        if part is None or "__pycache__" in path.parts or "/py/" in str(path):
+        if part is None or not ours(path):
             continue
         rel = str(path.relative_to(TREE))
         for name in imports(path):
@@ -94,7 +109,7 @@ def violations() -> list[tuple[str, str, str]]:
     # domain in a string is the same dependency, just harder to see.
     names = [p.name for p in (TREE / "domains").iterdir() if p.is_dir()]
     for path in sorted((TREE / "infrastructure").rglob("*.py")):
-        if "__pycache__" in path.parts:
+        if not ours(path):
             continue
         text = path.read_text(errors="replace")
         code = re.sub(r'("""|\'\'\')(?:.|\n)*?\1', "", text)      # docstrings are prose

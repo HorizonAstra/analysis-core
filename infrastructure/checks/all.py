@@ -16,6 +16,12 @@ What is checked, in the order a failure is worth hearing about:
     every render       every entry to every surface it can be rendered as
     the graph          that the capabilities order into a runnable sequence
     the methods        that what a domain says it computes is what it computes
+    the data layer     that every shape of data a domain declares is still found
+
+The last one builds its own data. Everything before it reads the tree, which is
+the same on every machine; data is not, and a check that only ever saw the seven
+flat studies on one laptop passed a change that broke every per-sample study on
+the cluster.
 
 Skipped is not passed. jsonschema is optional in the runner, deliberately, so a
 missing library never stops work; here it is a failure, because the whole
@@ -34,6 +40,7 @@ RENDER = TREE / "infrastructure" / "render-targets" / "render.py"
 GRAPH = TREE / "infrastructure" / "graph" / "graph.py"
 RULES = TREE / "infrastructure" / "checks" / "dependencies.py"
 METHODS = TREE / "infrastructure" / "checks" / "methods.py"
+DATA = TREE / "infrastructure" / "checks" / "data_layer.py"
 TARGETS = ("cli", "mcp", "openapi", "nextflow", "slurm", "verify")
 
 
@@ -101,6 +108,12 @@ def main() -> int:
     say(f"  {'ok  ' if ok else 'FAIL'}  methods · {out.strip().splitlines()[-1] if out.strip() else ''}")
     if not ok:
         found.append(("the methods", out.strip()))
+
+    ok, out = _run([str(DATA)])
+    say(f"  {'ok  ' if ok else 'FAIL'}  data layer · "
+        f"{out.strip().splitlines()[0] if out.strip() else ''}")
+    if not ok:
+        found.append(("the data layer", out.strip()))
 
     if found:
         print(f"\n{len(found)} problem(s):\n")

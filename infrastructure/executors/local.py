@@ -37,6 +37,8 @@ import profile as P
 from registry import JobRegistry
 import failure as _failure
 
+import reaching as _reaching
+
 RUNNER = _TREE / "infrastructure" / "runner" / "run.py"
 
 
@@ -55,12 +57,6 @@ def _read_tail(path) -> str:
             return fh.read().decode("utf-8", "replace")
     except OSError:
         return ""
-
-# How far back to look for a run when answering whether this machine holds it.
-# Deep enough to cover a cohort's worth of work, since the answer is used to
-# decide where a submission goes and a wrong no sends it to the wrong machine.
-_REACH_LIMIT = 5000
-
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -264,20 +260,8 @@ class LocalExecutor(Executor):
 
 
     def can_reach(self, reference: str) -> bool:
-        """Whether a reference names something this machine holds.
-
-        A study is checked against what it reported holding, a run against its
-        own store. Anything that is not a reference is a path, and a path is not
-        this layer's to judge.
-        """
-        ref = str(reference or "")
-        scheme, _, rest = ref.partition(":")
-        name = rest.strip("/").split("/", 1)[0]
-        if scheme == "study":
-            return any(d.get("study") == name for d in self.datasets())
-        if scheme == "run":
-            return any(r.get("run") == name for r in self.runs(limit=_REACH_LIMIT))
-        return True
+        """Whether a reference names something this machine holds."""
+        return _reaching.holds(self, reference)
 
     def read(self, job_id: str, name: str | None = None, rows: int = 20) -> list[dict]:
         return self.store.preview(self._name_of(job_id), name, rows)

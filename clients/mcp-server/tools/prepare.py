@@ -61,10 +61,11 @@ def _samples(reference: str, rows: list) -> list:
     """
     out = []
     for one in [r.strip() for r in str(reference).split(",") if r.strip()]:
-        if not one.startswith("study:"):
+        named = D.study_parts(one)
+        if not named:
             raise ValueError(f"'{one}' is not a sample. Use study:<study> for a whole "
                              f"study, or study:<study>/<sample> for one of them.")
-        study, _, sample = one[len("study:"):].strip("/").partition("/")
+        study, sample = named[0], (named[1] if len(named) > 1 else "")
         row = next((r for r in rows if r["study"] == study), None)
         if row is None:
             raise KeyError(f"no study called {study} available here. There is: "
@@ -170,7 +171,11 @@ def register(mcp, *, sites, domain_allowed=lambda d: True) -> list:
                     # A step's inputs name the steps before it by capability. The
                     # run ids only exist once those have been submitted, which is
                     # why the substitution happens here and not in the plan.
-                    inputs={k: v.format(**{q: ids[q] for q in ids})
+                    #
+                    # The chosen version of the data goes in at the same moment
+                    # and for the same reason: this is where a reference stops
+                    # being a plan and becomes what a machine will read.
+                    inputs={k: scope.at_chosen_version(v.format(**{q: ids[q] for q in ids}))
                             for k, v in step.inputs.items()},
                     parameters=step.parameters,
                     workspace=workspace,

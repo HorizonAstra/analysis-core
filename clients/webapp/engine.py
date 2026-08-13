@@ -328,7 +328,8 @@ class Engine:
     async def _apply_scope(self, session, scope: list[str],
                            domains: list[str] | None = None,
                            runs: list[str] | None = None,
-                           cleared: list[str] | None = None) -> None:
+                           cleared: list[str] | None = None,
+                           data: list[str] | None = None) -> None:
         """Point the user's running MCP server at this chat's studies.
 
         The user's own boundary is not this: each user gets their own server,
@@ -356,7 +357,26 @@ class Engine:
         await session.call_tool(_SCOPE_TOOL, {"studies": ",".join(scope),
                                               "domains": ",".join(domains or []),
                                               "runs": ",".join(runs or []),
-                                              "cleared": ",".join(cleared or [])})
+                                              "cleared": ",".join(cleared or []),
+                                              "data": ",".join(data or [])})
+
+    @staticmethod
+    def _data_pins(user: str, chat_id: str) -> list[str]:
+        """Which version of its data each sample in this chat is read from.
+
+        Travels with the scope for the same reason the cleared cells do: it has
+        to reach the process that builds the job, it has to be able to change
+        between turns, and only a value sent every turn can say that a pin was
+        removed.
+
+        Empty is the ordinary case and means the newest of everything, which is
+        what a reference without a version already means.
+        """
+        try:
+            import versions as _versions
+            return _versions.data_pins(user, chat_id)
+        except Exception:              # noqa: BLE001 - scope must not fail on this
+            return []
 
     @staticmethod
     def _cleared_cells(user: str, chat_id: str) -> list[str]:
@@ -569,7 +589,8 @@ class Engine:
                 await self._apply_scope(session, scope,
                                         self.domains_for(user, chat_id),
                                         chats.chat_runs(user, chat_id),
-                                        self._cleared_cells(user, chat_id))
+                                        self._cleared_cells(user, chat_id),
+                                        self._data_pins(user, chat_id))
                 system = (self.system_prompt(user, chat_id) + render.scope_note(scope)
                           + self._outcomes_note(user, chat_id))
                 for _ in range(_MAX_STEPS):

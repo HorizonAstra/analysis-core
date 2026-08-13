@@ -127,6 +127,7 @@ the machine that runs the work resolves the name:
     study:NSCLC-Neoadjuvant/1N              one sample
     study:NSCLC-Neoadjuvant/1N/matrix       one part of one sample
     study:NSCLC-Neoadjuvant/1N/raw/spatial  something inside a part that is a folder
+    study:NSCLC-Neoadjuvant@2026-08-13/1N   that sample, in one version of the data
     run:<id>/<output>                       an output of an earlier run
 
 That is the reason the paths in this file are worth writing down once and never
@@ -134,3 +135,24 @@ again. A path says which machine, which layout, and who may see it, and none of
 those are things a client can know. Ask what data exists and you are handed
 references; pass one straight to an analysis and it resolves wherever the work
 lands.
+
+## Data kept in versions
+
+A study's data can be replaced — a Space Ranger run redone, a sample added, a
+batch harmonised again — and replacing it in place makes every earlier result
+unreadable in the only sense that matters, because nothing can say what any of
+them were computed from. So a study may hold its versions as folders:
+
+    data/<domain>/<study>/<version>/...     the study as it stood at some point
+
+Optional, and nothing has to move. A study with no version layer is a study with
+one version that was never named, which is what most of them are, and it is found
+and resolved exactly as before. A study that has one resolves to its newest
+unless a reference says which, which is the `@` above.
+
+The version belongs in the reference and nowhere else. A reference is what the
+far machine resolves and what a run records as having read, so two runs over
+different data have to look different to anything comparing their inputs — which
+is what stops a finished run being handed back for data that has since been
+replaced. Which version each sample is read from is chosen in the versions grid,
+and written into the reference when the job is built.

@@ -81,14 +81,23 @@ def accessible_domains(user: str) -> list[str]:
     return found if allow is None else [d for d in found if d in allow]
 
 
-def accessible_studies(user: str, domains=None) -> list[str]:
-    """Every study this user may reach, before any per-chat scoping. The web process is
-    unrestricted, so both allowlists are applied here explicitly; this is the same set the
-    user's MCP server was launched with. `domains` narrows further to the domains a chat
-    actually works in.
+def accessible_data(user: str, domains=None) -> list[dict]:
+    """Every dataset this user may reach, as the machine holding it described it.
+
+    The rows rather than the names, for callers that need what is in a study and
+    not only that it exists. Both allowlists are applied here explicitly, because
+    the web process itself is unrestricted.
     """
     allow = allowed_studies(user)
     domains_ok = set(accessible_domains(user)) if not domains else set(domains)
-    return sorted(d["study"] for d in _found()
-                  if (allow is None or d["study"] in allow)
-                  and d.get("domain") in domains_ok)
+    return [d for d in _found()
+            if (allow is None or d["study"] in allow)
+            and d.get("domain") in domains_ok]
+
+
+def accessible_studies(user: str, domains=None) -> list[str]:
+    """Every study this user may reach, before any per-chat scoping. This is the same set
+    the user's MCP server was launched with. `domains` narrows further to the domains a
+    chat actually works in.
+    """
+    return sorted(d["study"] for d in accessible_data(user, domains))

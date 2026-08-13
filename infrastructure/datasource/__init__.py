@@ -29,6 +29,7 @@ from .local import (
     study_collisions,
     study_domain,
 )
+from .refs import study_parts
 from .tables import capabilities, ensure_parquet, read_tabular
 
 __all__ = [
@@ -54,6 +55,8 @@ __all__ = [
     "scan_studies",
     "study_domain",
     "study_collisions",
+    # references
+    "study_parts",
 ]
 
 

@@ -41,24 +41,37 @@ import os
 import sys
 from pathlib import Path
 
+import access
 import chats
 import paths
 import samples
 
 _TREE = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
-for _p in ("interfaces/run", "infrastructure/executors"):
+for _p in ("interfaces/run", "infrastructure/executors", "infrastructure"):
     if str(_TREE / _p) not in sys.path:
         sys.path.insert(0, str(_TREE / _p))
 
 import reuse as _reuse                                        # noqa: E402
 from registry import JobRegistry                              # noqa: E402
 from protocol import JobState                                 # noqa: E402
+from datasource.refs import AT                                # noqa: E402
 
 # Work that spans samples sits under this instead of a sample name. Not a sample
 # and not pretending to be one: a cohort is a different kind of subject, and the
 # row that holds it is named for its members rather than for the word "cohort",
 # because two cohorts over different samples are two different things.
 ACROSS = ""
+
+# The one column that is not a capability. Everything else in the grid is a
+# result someone asked for; this is what those results were computed from, and it
+# belongs in the same grid for the reason the grid exists: "which clusters am I
+# looking at" and "which data were they computed from" are one question, and
+# answering them in two places is how they stop agreeing.
+#
+# It behaves like the others on purpose. A version can be chosen, and clearing
+# the cell means the same thing it means anywhere else — nothing is selected, so
+# work here has to be asked for again rather than re-used.
+DATA = "data"
 
 
 def _sites() -> list[str]:
@@ -127,6 +140,63 @@ def grid(user: str) -> dict:
     for versions in out.values():
         for v in versions:
             v["label"] = _upstream_named(v["label"], where)
+    return out
+
+
+def data_grid(user: str) -> dict:
+    """Cells for the data itself: per sample, the versions of its study it is in.
+
+    Read from what each machine reported holding rather than from any run, which
+    is what makes this column different from every other one. A sample nothing
+    has been run on yet still gets a row, and that is the point: a study should
+    appear in the grid the day it arrives, with every result cell empty and its
+    data cell already answering.
+
+    A study kept in one unnamed version contributes nothing here, so a deployment
+    that never lays data out in versions sees this column stay empty rather than
+    fill up with a choice that is not one.
+    """
+    cells: dict = {}
+    for row in access.accessible_data(user):
+        for version in row.get("versions") or []:
+            for sample in version.get("samples") or []:
+                cells.setdefault((sample, DATA), []).append(
+                    {"identity": f"{row['study']}{AT}{version['name']}",
+                     "study": row["study"], "at": version["name"],
+                     "label": version["name"], "run": "", "runs": []})
+    for versions in cells.values():
+        versions.sort(key=lambda v: v["at"], reverse=True)
+        studies = {v["study"] for v in versions}
+        for n, v in enumerate(versions):
+            v["ordinal"] = len(versions) - n
+            # Two studies can name a sample the same, and then one cell holds
+            # versions of both. Saying which study is the difference between a
+            # choice and a guess.
+            if len(studies) > 1:
+                v["label"] = f"{v['study']} · {v['label']}"
+    return cells
+
+
+def data_pins(user: str, chat_id: str) -> list[str]:
+    """Which version each sample's data should be read from: `<study>/<sample>=<version>`.
+
+    Sent to the tool server, which rewrites any reference naming that sample so
+    it names the version too. In the reference rather than beside it, because the
+    reference is both what the far machine resolves and what the run records as
+    having read. A version kept anywhere else would leave two runs over different
+    data looking identical to anything comparing what they read, which is exactly
+    how re-use hands back a result built from data that has since been replaced.
+
+    Only what was chosen. A sample nobody has chosen for reads the newest, which
+    is what a bare reference already means — so sending a pin for it would change
+    nothing today and pin it against tomorrow's data.
+    """
+    out = []
+    for (subject, column), want in sorted(chosen(user, chat_id).items()):
+        if column != DATA or not want or AT not in want:
+            continue
+        study, _, version = want.partition(AT)
+        out.append(f"{study}/{subject}={version}")
     return out
 
 
@@ -202,9 +272,13 @@ def panel(user: str, chat_id: str) -> dict:
     so it gets its own rows, named for what went into each version rather than
     for the word cohort.
     """
-    built = grid(user)
+    built = {**data_grid(user), **grid(user)}
     picked = chosen(user, chat_id)
-    columns = sorted({c[1] for c in built})
+    # Data first, and it is not sorted in with the rest. It is what everything to
+    # the right of it was computed from, so reading the row left to right reads
+    # in the order the work happened.
+    columns = ([DATA] if any(c[1] == DATA for c in built) else []) \
+        + sorted({c[1] for c in built if c[1] != DATA})
     rows = sorted({c[0] for c in built if c[0]})
 
     def cell(subject: str, capability: str) -> dict:
@@ -219,6 +293,11 @@ def panel(user: str, chat_id: str) -> dict:
             "active": active_id,
             "cleared": want == "",
             "newest": versions[0]["identity"],
+            # Emptying a cell means "do this again", and data is not something
+            # anything can do again: it is on disk or it is not. So this column
+            # offers the choice and not the clearing, rather than offering a
+            # gesture that would have to be given a second meaning here.
+            "clearable": capability != DATA,
             "versions": [{"identity": v["identity"], "ordinal": v["ordinal"],
                           "label": v["label"], "at": v["at"],
                           "run": v["run"], "runs": len(v["runs"])}
@@ -227,6 +306,10 @@ def panel(user: str, chat_id: str) -> dict:
 
     return {
         "columns": columns,
+        # Said rather than assumed. The client has to treat this column
+        # differently in three places, and a name spelled out on both sides is a
+        # name that can drift on one of them.
+        "data_column": DATA,
         "rows": [{"subject": s, "label": s,
                   "cells": {c: cell(s, c) for c in columns}} for s in rows],
         # Named for its members, which is the only honest answer to "what is

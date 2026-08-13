@@ -39,6 +39,8 @@ from registry import JobRegistry
 import failure as _failure
 import reuse as _reuse
 
+import reaching as _reaching
+
 # What the scheduler says when it has nothing to add. Reported as nothing rather
 # than repeated, because "Reason: None" reads as an answer and is not one.
 _NO_REASON = {"", "none", "unknown"}
@@ -50,9 +52,6 @@ def _note(reason: str) -> str:
     return "" if reason.lower() in _NO_REASON else reason
 
 RENDER = _TREE / "infrastructure" / "render-targets" / "render.py"
-
-# See the note beside the same name in local.py.
-_REACH_LIMIT = 5000
 
 # What sacct and squeue call a state, and what this interface calls it. Anything
 # unlisted becomes UNKNOWN rather than a guess, because a wrong terminal state
@@ -513,20 +512,8 @@ class SlurmSshExecutor(Executor):
 
 
     def can_reach(self, reference: str) -> bool:
-        """Whether a reference names something this machine holds.
-
-        A study is checked against what it reported holding, a run against its
-        own store. Anything that is not a reference is a path, and a path is not
-        this layer's to judge.
-        """
-        ref = str(reference or "")
-        scheme, _, rest = ref.partition(":")
-        name = rest.strip("/").split("/", 1)[0]
-        if scheme == "study":
-            return any(d.get("study") == name for d in self.datasets())
-        if scheme == "run":
-            return any(r.get("run") == name for r in self.runs(limit=_REACH_LIMIT))
-        return True
+        """Whether a reference names something this machine holds."""
+        return _reaching.holds(self, reference)
 
     def _finished_dir(self, job_id: str) -> str:
         """The store's name for a run, whether or not this client submitted it.

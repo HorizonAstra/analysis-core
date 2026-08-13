@@ -24,9 +24,17 @@ could set its own scope does not have one.
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import Field
+
+_TREE = Path(__file__).resolve().parents[3]
+if str(_TREE / "infrastructure") not in sys.path:
+    sys.path.insert(0, str(_TREE / "infrastructure"))
+
+from datasource.refs import AT, study_parts                    # noqa: E402
 
 # What this server was launched with, read once. Read live instead and each call
 # would narrow against the result of the last one, so a chat about one study
@@ -49,6 +57,15 @@ _OUTER_DOMAINS = os.environ.get("ALLOWED_DOMAINS")
 CLEARED_CELLS = "CLEARED_CELLS"
 ALLOWED_RUNS = "ALLOWED_RUNS"
 
+# Which version of its data each sample is read from, as `<study>/<sample>=<version>`.
+# Set by the client from what the person chose in the grid, and applied where a job
+# is built, so a reference the model wrote without a version gets the chosen one.
+#
+# The model is never told any of this and has no way to ask. It has one set of
+# data, it names a study and a sample the way it always has, and which version
+# that is is not its question.
+DATA_VERSIONS = "DATA_VERSIONS"
+
 
 def allowed_runs() -> set[str] | None:
     """The runs in scope, or None where nothing narrowed them."""
@@ -69,6 +86,57 @@ def also_allow(run: str) -> None:
         return
     now = allowed_runs() or set()
     os.environ[ALLOWED_RUNS] = ",".join(sorted(now | {run}))
+
+
+def at_chosen_version(value):
+    """One input, with the version of the data the person chose written into it.
+
+    The model names `study:<study>/<sample>` and never learns there is anything
+    else to say. Which version of that data is in play is the person's choice,
+    made in the grid, and it is applied here — at the moment a job is built —
+    rather than put in the prompt, because a model that had to carry it would
+    sometimes not.
+
+    Written into the reference rather than kept beside it. The reference is both
+    what the far machine resolves and what the run records as having read, so a
+    version anywhere else leaves two runs over different data looking identical
+    to anything comparing their inputs. That is exactly how re-use hands back a
+    result computed from data that has since been replaced, and putting the
+    version here is what closes it: nothing in re-use had to change, because it
+    already folds the reference in as written.
+
+    Here rather than beside one of the two tools that build jobs, because both of
+    them do. A capability called on its own goes through one, a whole chain goes
+    through the other, and a pin that only the first one honoured would be a pin
+    that works until somebody asks for the chain.
+
+    A reference that already names a version is left alone. Somebody who said
+    which one they meant has said it.
+    """
+    text = str(value)
+    if not text.startswith("study:") or AT in text.split("/", 1)[0]:
+        return value
+    parts = study_parts(text)
+    if len(parts) < 2:
+        return value
+    version = data_versions().get(f"{parts[0]}/{parts[1]}")
+    if not version:
+        return value
+    return f"study:{parts[0]}{AT}{version}/" + "/".join(parts[1:])
+
+
+def data_versions() -> dict:
+    """The chosen versions, as `<study>/<sample>` -> version.
+
+    Read from the environment on every call rather than once, because the client
+    sets it per turn and this process outlives the turn.
+    """
+    out = {}
+    for pin in os.environ.get(DATA_VERSIONS, "").split(","):
+        where, _, version = pin.strip().partition("=")
+        if where and version:
+            out[where] = version
+    return out
 
 
 def _outer(value: str | None) -> set[str] | None:
@@ -116,6 +184,10 @@ def register(mcp) -> list[str]:
                         "has emptied in the versions grid. Work matching one of "
                         "these is computed again rather than re-used, because "
                         "emptying a cell is how somebody asks for that.")] = "",
+        data: Annotated[str, Field(
+            description="Comma separated <study>/<sample>=<version> pins. A "
+                        "reference naming that sample is resolved against that "
+                        "version of the data rather than the newest.")] = "",
     ) -> str:
         """Narrow this server to the studies a conversation is about.
 
@@ -128,6 +200,10 @@ def register(mcp) -> list[str]:
         # value that is always sent can say so.
         os.environ[CLEARED_CELLS] = ",".join(
             sorted({c.strip() for c in cleared.split(",") if c.strip()}))
+        # Also every turn, and also for that reason: a pin that was removed has
+        # to stop being a pin, and the way to say so is to send the set without it.
+        os.environ[DATA_VERSIONS] = ",".join(
+            sorted({d.strip() for d in data.split(",") if d.strip()}))
         outer_s, outer_d = _outer(_OUTER_STUDIES), _outer(_OUTER_DOMAINS)
         now_s = _narrow(studies, outer_s)
         if studies.strip() or outer_s is not None:

@@ -57,8 +57,31 @@ def survey(data_root: str) -> list[dict]:
             row["samples"] = samples
             row.update(_across_samples(
                 _domains.sample_root(directory, domain), samples, domain))
+        if entry.get("versions"):
+            row["version"] = os.path.basename(directory)
+            row["versions"] = _versions_held(entry, domain)
         out.append(row)
     return out
+
+
+def _versions_held(entry: dict, domain: str) -> list[dict]:
+    """Each version of a study's data, newest first, and which samples it holds.
+
+    Which samples and not only which versions, because a version can only be
+    offered for a sample that is actually in it. Data arrives a batch at a time,
+    so a sample added last month is in the newest version and in none before it,
+    and offering it against an older one would resolve to nothing — which the
+    person choosing would find out when the work failed rather than when they
+    chose.
+
+    Everything above this reports one version: `samples` and the roles describe
+    the newest, which is what the study is unless somebody says otherwise. So a
+    reader that knows nothing about versions still gets a correct answer about
+    the data as it stands.
+    """
+    return [{"name": name,
+             "samples": _domains.sample_dirs(os.path.join(entry["root"], name), domain)}
+            for name in entry["versions"]]
 
 
 _NAMED = 25          # samples named for a role only some of them have
