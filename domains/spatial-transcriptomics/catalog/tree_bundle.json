@@ -1,0 +1,159 @@
+{
+  "id": "tree_bundle",
+  "version": "0.1.0",
+  "title": "Assemble a region tree for viewing",
+  "summary": "Writes a spatial group run's tree where the tree viewer can read it, with the run's own spatial groups marked on it and, when the matrix is given, the expression of a handful of genes at every spot beside it. The tree itself is the run's, unchanged.",
+  "level": 2,
+  "scope": "per_sample",
+  "consumes": [
+    "region_finder",
+    "harmonize",
+    "slab"
+  ],
+  "kernel": {
+    "language": "python",
+    "entrypoint": "kernels/phyd3/build_tree.py",
+    "files": [
+      "kernels/phyd3/build_tree.py"
+    ],
+    "sha256": {
+      "kernels/phyd3/build_tree.py": "2ec36527069d9c41e99b2b7ea971ddc211dfe040c701f894ebc103a0e588e1ba"
+    },
+    "third_party": []
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {},
+    "provenance": "No image and no manifest. Standard library only, including the Newick parsing and the XML writing, so any Python this tree already requires can run it.",
+    "activation": {
+      "kind": "working_directory",
+      "path": ".",
+      "note": "Nothing to enter. The kernel imports nothing that is not in the standard library."
+    }
+  },
+  "inputs": [
+    {
+      "name": "tree",
+      "type": "file",
+      "format": "newick",
+      "required": true,
+      "staged_as": "{data_dir}/tree.nw",
+      "produced_by": "region_finder",
+      "description": "The tree the run reported. One leaf per spot, already pruned by region_finder at its own support threshold."
+    },
+    {
+      "name": "node_info",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/node_info.tsv",
+      "produced_by": "region_finder",
+      "description": "Per surviving node: its size, support and spatial statistic. Read here for which nodes it names, as the fallback for a run that found no groups to compare."
+    },
+    {
+      "name": "sg_pairs",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/sg_pairs.tsv",
+      "produced_by": "region_finder",
+      "description": "The spatial group comparisons. This is what says which nodes the run compared against the rest of their split, and those are the nodes marked on the tree."
+    },
+    {
+      "name": "matrix",
+      "type": "file",
+      "format": "dense_tsv_no_header",
+      "required": false,
+      "staged_as": "{data_dir}/M.txt",
+      "produced_by": "harmonize",
+      "description": "Spots by genes. Supplies the heat map beside the tree, which is the measured value at each spot and nothing derived from it."
+    },
+    {
+      "name": "features",
+      "type": "file",
+      "format": "tsv_one_column",
+      "required": false,
+      "staged_as": "{data_dir}/features.txt",
+      "produced_by": "harmonize",
+      "description": "One gene name per column of the matrix."
+    },
+    {
+      "name": "observations",
+      "type": "file",
+      "format": "tsv_one_column",
+      "required": false,
+      "staged_as": "{data_dir}/barcodes.txt",
+      "produced_by": "harmonize",
+      "description": "One spot label per row of the matrix. These are the barcodes the tree's leaves are named by, which is what joins the two."
+    },
+    {
+      "name": "slab_scores",
+      "type": "file",
+      "format": "tsv",
+      "required": false,
+      "staged_as": "{data_dir}/SLAB_scores.txt",
+      "produced_by": "slab",
+      "produced_output": "scores",
+      "description": "How widespread each feature's local bias is across the tissue. Decides which genes are worth a column of the heat map. Without it the genes that vary most across the spots are shown instead, and the legend says which was used."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "bundle",
+      "type": "directory",
+      "format": "directory",
+      "staged_as": "{output_base}",
+      "returnable": true,
+      "description": "One phyloXML file per sample, holding the tree, the spatial group marks and the heat map, in the layout the viewer reads.",
+      "interpretation": "The tree is region_finder's and its caveats apply here unchanged. A leaf is one spot and a region identifier is internal to one sample, so a name here means nothing in another sample's tree. Branch length is distance as the spatial group run measured it and is not a count of anything. When no SLAB run was given the genes shown were picked for varying most across the spots, which is a way of choosing something to look at rather than a finding.",
+      "viewer": "phyd3"
+    }
+  ],
+  "parameters": [
+    {
+      "name": "sample",
+      "type": "string",
+      "default": "sample",
+      "affects_results": false,
+      "is_sample_name": true,
+      "description": "What the tree is labelled with."
+    },
+    {
+      "name": "genes",
+      "type": "integer",
+      "default": 30,
+      "affects_results": false,
+      "description": "How many genes get a column of the heat map."
+    },
+    {
+      "name": "regions_only",
+      "type": "boolean",
+      "default": false,
+      "affects_results": false,
+      "description": "Reduce the tree to the spatial groups alone, lifting away the spots between them and summing their branches. Off by default, because the tree the run reported is the tree worth drawing and a reduced one is a different tree."
+    }
+  ],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "Rearranges its inputs. The same tree and table give the same result."
+  },
+  "resources": {
+    "scales_with": "nodes in the tree",
+    "bound_by": "trivial",
+    "cores_help": false,
+    "fans_out": false,
+    "basis": "derived_from_algorithm",
+    "memory_hint": "One tree held in memory, which is the surviving nodes rather than the spots beneath them."
+  },
+  "interpretation": "This decides nothing. It arranges a tree some other capability found, together with values other capabilities measured, so what it shows is only as sound as those runs and their caveats still apply when looking at this one. Anything read off the picture is a way of looking rather than a result.",
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "python3 {entrypoint} --tree {data_dir}/tree.nw --node-info {data_dir}/node_info.tsv --groups {data_dir}/sg_pairs.tsv --matrix {data_dir}/M.txt --features {data_dir}/features.txt --observations {data_dir}/barcodes.txt --slab {data_dir}/SLAB_scores.txt --genes {genes} --out {output_base} --sample {sample} --regions-only {regions_only}"
+  },
+  "notes": "The viewer this feeds is GPL v3 and vendored into the web client, unlike the spatial one, whose licence is academic and non-transferable. So this bundle can be shown to anyone a deployment serves without a per-copy licence question.",
+  "for_people": "Draws the tissue as a tree of spots, marks the regions the analysis found, and shows what is expressed where beside it."
+}

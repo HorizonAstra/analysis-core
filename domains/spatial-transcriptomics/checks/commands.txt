@@ -1,0 +1,12 @@
+RUN1=/scratch/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results
+RUN2=/scratch/rijulsareen/output-data/harmonized-small-test/20260713_233400/1N_results
+RUN3=/scratch/rijulsareen/output-data/harmonized-small-test/20260714_114022/1N_results
+
+python3.12 KL_Compare_TumorSPACE_v1.py --reference $RUN1 --new-run $RUN2 --verbose > compare_1_vs_2.log 2>&1
+python3.12 KL_Compare_TumorSPACE_v1.py --reference $RUN1 --new-run $RUN3 --verbose > compare_1_vs_3.log 2>&1
+python3.12 KL_Compare_TumorSPACE_v1.py --reference $RUN2 --new-run $RUN3 --verbose > compare_2_vs_3.log 2>&1
+
+# Compare gene identifiers ignoring node grouping - do the same genes even show up anywhere?
+cut -f1 /scratch/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results/optimal/gene/DA_significant.txt | sort -u > /tmp/genes_run1.txt
+cut -f1 /scratch/rijulsareen/output-data/harmonized-small-test/20260713_233400/1N_results/optimal/gene/DA_significant.txt | sort -u > /tmp/genes_run2.txt
+comm -12 /tmp/genes_run1.txt /tmp/genes_run2.txt | wc -l

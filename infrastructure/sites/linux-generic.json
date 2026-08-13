@@ -1,0 +1,14 @@
+{
+  "id": "linux-generic",
+  "description": "Any Linux host with singularity on PATH and the images in one directory. Names no particular cluster, so it is the starting point when adding a site.",
+  "launcher": "singularity exec --no-home {binds} --env-file {env_file} {image} {command}",
+  "image_root": "${TUMORSPACE_IMAGES:-./images}",
+  "preamble": [],
+  "binds": [
+    "{stage_root}",
+    "{repo}"
+  ],
+  "notes": "image_root reads an environment variable with a fallback, so pointing at a different image store is a variable rather than an edit. Add module loads only in a profile for a host that needs them.",
+  "runtime": "singularity",
+  "artifact_root": "./results"
+}

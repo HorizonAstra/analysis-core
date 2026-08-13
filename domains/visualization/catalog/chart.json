@@ -1,0 +1,188 @@
+{
+  "id": "chart",
+  "version": "0.1.0",
+  "title": "Draw a chart from a table",
+  "summary": "Draws one of six chart types from named columns of a table, on the machine the table is on, and returns an image. Bar, scatter, line, histogram, box and forest.",
+  "level": 4,
+  "scope": "cross_sample",
+  "consumes": [],
+  "kernel": {
+    "language": "python",
+    "entrypoint": "kernels/render_chart.py",
+    "files": [
+      "kernels/render_chart.py",
+      "kernels/charting/charts.py",
+      "kernels/charting/compose.py",
+      "kernels/charting/style.py",
+      "kernels/charting/plotting.py"
+    ],
+    "sha256": {
+      "kernels/render_chart.py": "6cf694c765de410195f2b1a2ce5031544c4ee98b082fc726a10c4336aff74fb6",
+      "kernels/charting/charts.py": "5a0ab7d901fe21173a43b29bc58edee0f8c2ead8379bdf4b49ac564430f49728",
+      "kernels/charting/compose.py": "d039aaadb738dab4d2a4ce6670f4be4d4158414e18232c76e37f92957370ff78",
+      "kernels/charting/style.py": "495e486538a58eab5d143f6b6534d6150ee54329e00f13b314607222981efb66",
+      "kernels/charting/plotting.py": "b680f0ac373aad9dd40fdd96cdd670f92479c028716325ba9d87679f8dd41394"
+    },
+    "third_party": [
+      {
+        "name": "matplotlib",
+        "version": "pinned by the manifest below",
+        "note": "Draws everything. A version change can move pixels without moving any number."
+      },
+      {
+        "name": "seaborn",
+        "version": "pinned by the manifest below"
+      },
+      {
+        "name": "pandas",
+        "version": "pinned by the manifest below"
+      }
+    ]
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {
+      "MPLBACKEND": "Agg"
+    },
+    "manifest": "environments/requirements.txt",
+    "manifest_sha256": "abf1a39f1d7a6adf6ff9378dd8b804259ad9a02ec525540a5a31e6c01add616c",
+    "provenance": "No image. A virtual environment built from the pin beside it.",
+    "activation": {
+      "kind": "venv",
+      "path": "environments/py",
+      "note": "Entered by putting its bin directory first on PATH.",
+      "ready_when": "bin/python",
+      "restore_with": "bash ../restore.sh"
+    }
+  },
+  "inputs": [
+    {
+      "name": "table",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/table.tsv",
+      "description": "Any table. Which columns to draw is said below, because this cannot know."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "image",
+      "type": "file",
+      "format": "png",
+      "staged_as": "{output_base}/{name}.png",
+      "returnable": true,
+      "description": "The chart.",
+      "interpretation": "A figure of governed data may travel where the table behind it may not, which is often the only way anyone sees it. That makes the figure the whole record, so it should be read with the caveats of whatever produced the table."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "chart",
+      "type": "string",
+      "default": "bar",
+      "affects_results": true,
+      "description": "One of bar, scatter, line, histogram, box, forest."
+    },
+    {
+      "name": "x",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "Column for the horizontal axis, or the categories for a bar or box."
+    },
+    {
+      "name": "y",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "Column for the values. Not used by histogram."
+    },
+    {
+      "name": "hue",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "Column to colour or split by, where the chart supports it."
+    },
+    {
+      "name": "label",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "Forest only: the row labels."
+    },
+    {
+      "name": "estimate",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "Forest only: the point estimate."
+    },
+    {
+      "name": "lower",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "Forest only: the lower bound."
+    },
+    {
+      "name": "upper",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "Forest only: the upper bound."
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "default": "",
+      "affects_results": false,
+      "description": "Figure title."
+    },
+    {
+      "name": "xlabel",
+      "type": "string",
+      "default": "",
+      "affects_results": false,
+      "description": "Horizontal axis label."
+    },
+    {
+      "name": "ylabel",
+      "type": "string",
+      "default": "",
+      "affects_results": false,
+      "description": "Vertical axis label."
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "default": "chart",
+      "affects_results": false,
+      "description": "Filename stem for the image."
+    }
+  ],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "Measured: the same table drawn twice gives a byte identical PNG."
+  },
+  "resources": {
+    "scales_with": "rows drawn",
+    "bound_by": "trivial",
+    "cores_help": false,
+    "fans_out": false,
+    "basis": "measured",
+    "memory_hint": "One figure held in memory."
+  },
+  "interpretation": "This decides nothing about the science. It draws the columns it is told to draw, so a misleading chart here is a misleading choice of columns rather than a fault in the drawing. Anything domain specific, such as painting spots onto a tissue image, belongs to the domain that knows what a spot is and is not this.",
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "python3 {entrypoint} --chart {chart} --table {data_dir}/table.tsv --out {output_base} --name {name} --x {x} --y {y} --hue {hue} --label {label} --estimate {estimate} --lower {lower} --upper {upper} --title {title} --xlabel {xlabel} --ylabel {ylabel}"
+  },
+  "notes": "Moved out of the client. A chart drawn client-side cannot see data that may not travel.",
+  "for_people": "Draws a chart from named columns of a table."
+}

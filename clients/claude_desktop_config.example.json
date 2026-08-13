@@ -1,0 +1,9 @@
+{
+  "_comment": "Claude Desktop (developer path only). The product is the web app (./mo web / docker compose up); Desktop is a cheap personal-account way to exercise the tools during development. `./mo desktop` merges this into your config for you on macOS, leaving any other MCP servers and your Desktop preferences alone; on Windows/Linux add the block below to your own config, replacing the two absolute paths. No API key goes here — Desktop uses your own Claude account. Work done from Desktop lands in outputs/local, kept separate from the web app's per-user folders. For Claude Code, the repo's .mcp.json already wires this up.",
+  "mcpServers": {
+    "analysis-toolkit": {
+      "command": "/ABSOLUTE/PATH/TO/llm-analysis-toolkit/.venv/bin/python3",
+      "args": ["/ABSOLUTE/PATH/TO/llm-analysis-toolkit/src/McpServer/mcp_server.py"]
+    }
+  }
+}

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in · Multiomics</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="login-body">
+  <main class="login">
+    <div class="login-card">
+      <div class="login-brand">
+        <img src="/static/icons/00-hexagon.svg?v=5" width="48" height="48" alt="" />
+        <span>Multiomics</span>
+      </div>
+      <form id="loginForm" autocomplete="on">
+        <input id="username" name="username" placeholder="Email" autocomplete="username" autofocus />
+        <input id="password" name="password" type="password" placeholder="Password" autocomplete="current-password" />
+        <button id="loginBtn" type="submit">Sign in</button>
+      </form>
+      <div class="login-error" id="loginError" aria-live="polite"></div>
+    </div>
+  </main>
+  <script src="/static/login.js"></script>
+</body>
+</html>

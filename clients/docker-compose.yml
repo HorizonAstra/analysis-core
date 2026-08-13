@@ -1,0 +1,35 @@
+# A LOCAL CONVENIENCE, not the deployment contract.
+#
+# The deployable artifact is the image (see Dockerfile). It is a plain OCI image and carries no
+# assumptions about where it runs, so the real contract is just: give it a port, secrets, a
+# read-only data mount, and a writable /state. Compose is one way to supply those; Kubernetes,
+# Podman, a plain `docker run`, or Apptainer on an HPC are equally valid and need nothing added
+# to the image.
+#
+#   docker compose up --build
+#
+# Secrets come from .env at runtime and are never baked in. Data is mounted READ-ONLY, which
+# matches the toolkit's own rule that input is never modified. Everything the app writes goes
+# to the `state` volume — outputs, the user store, and the (rebuildable) Parquet cache.
+
+services:
+  web:
+    build: .
+    init: true                     # PID 1 that forwards signals and reaps orphans
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8000"
+    volumes:
+      - ./data:/data:ro            # input is read-only, by design
+      - state:/state               # outputs + user store + cache
+      # To let this instance submit cluster jobs, mount a key and set RANDI_SSH_HOST in .env.
+      # Absent both, the secondary-analysis tools simply are not offered.
+      # - ~/.ssh/id_ed25519:/home/app/.ssh/id_ed25519:ro
+    restart: unless-stopped
+
+volumes:
+  state:

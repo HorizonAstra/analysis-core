@@ -1,0 +1,66 @@
+{
+  "capability": "differential_abundance",
+  "contract_version": "0.1.0",
+  "kernel_sha256": {
+    "workflows/tumorspace_core/julia/sg_diff_abundance.jl": "0e95c5d5ef20db8c9200dc6dafead8a634aa9072fa878c73742e20a579e9fb95"
+  },
+  "third_party": [
+    {
+      "name": "HypothesisTests.jl",
+      "version": "0.11.4",
+      "note": "Supplies MannWhitneyUTest. The test statistic comes from this package, so its version is part of the scientific surface. Resolved from workflows/tumorspace_core/julia/Manifest.toml."
+    },
+    {
+      "name": "julia",
+      "version": "1.9.4",
+      "note": "Read from the image. Manifest.toml records 1.9.0, so the lockfile and the runtime disagree; the image is what executes. The RNG stream is a language guarantee, so this matters under a fixed seed."
+    }
+  ],
+  "parameters": {
+    "num_shuffle": 20,
+    "seed": 42
+  },
+  "profile": "randi",
+  "images": {
+    "julia": "julia_1.9_with_gotree.sif"
+  },
+  "image_digests": {
+    "julia_1.9_with_gotree.sif": "9c98d4e052ae5bf6e43f92b7f4e86dce40ecbf4030cd8b0b31db732d8eeaab45"
+  },
+  "reproducible": true,
+  "started": "2026-08-07T09:29:59.444088+00:00",
+  "finished": "2026-08-07T09:45:38.273156+00:00",
+  "inputs": {
+    "sg_pairs": {
+      "path": "/ess/scratch/scratch1/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results/optimal/OptimalTree_pruned_node_compare_list.txt",
+      "sha256": "7b971e4d2176b05a73ff1116b51baf0a00d54a950aff68fb9555b11d19f894ec"
+    },
+    "sg_pair_members": {
+      "path": "/ess/scratch/scratch1/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results/optimal/OptimalTree_pruned_node_compare_leaves.txt",
+      "sha256": "068efd5ef9dcd295be03ff245d46c9da3340aaa86ab1003c3e1e12eeb0e9303c"
+    },
+    "matrix": {
+      "path": "/ess/scratch/scratch1/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results/optimal/M.txt",
+      "sha256": "05996616e6bcca116f84302723e23f124a26891fd4bbdaeb1e6310a7b5339874"
+    },
+    "observations": {
+      "path": "/ess/scratch/scratch1/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results/optimal/barcodes.txt",
+      "sha256": "04922c33e4f3dcb3cb20da612f9506683139293ccac55ea5bf0bb7cbb2fb8ec2"
+    },
+    "features": {
+      "path": "/ess/scratch/scratch1/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results/optimal/genes.txt",
+      "sha256": "be09a5831b780012cf2659305ece4344ac07cfb5681856861e0acc5a0cd2fe15"
+    }
+  },
+  "outputs": {
+    "results": "9061fa87487b487f4a778bd9f3f4fd99049ed590b05de2709bef72371e93f7ce",
+    "significant": "f4030442081c2bd57943a95f244340f8aecb04708fc281c2ceb815b5a0f6d91f",
+    "counts_by_node": "30438314d5804961962f13585aa4ad73a42d208e169ce5e4081b065c1318003e"
+  },
+  "baseline": {
+    "site": "randi",
+    "recorded": "2026-08-07",
+    "sample": "harmonized-small-test/1N",
+    "note": "Output digests from a run whose inputs and kernel are recorded above. A later run matching these digests computed the same thing."
+  }
+}

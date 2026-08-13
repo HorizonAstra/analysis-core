@@ -1,0 +1,133 @@
+{
+  "capability": "region_finder",
+  "contract_version": "0.1.0",
+  "kernel_sha256": {
+    "kernels/tumorspace_core/julia/tumorspace_core.jl": "1f4d6c60f50cd1b01350b36d01c7173afa285e15fcdedbac639128522474915b",
+    "kernels/tumorspace_core/julia/phylo_tree_build.jl": "31314d4e6ab4bf4980db1d8746f6c1827ff068eae54a251e2968bfb45c3debdc",
+    "kernels/tumorspace_core/julia/phylo_node_extract.jl": "9b9c8b4483e14ec7e23b4fdac090a68936d7e55068378040e91ea4b93c87483e",
+    "kernels/tumorspace_core/R/compute_ripley_k.R": "6fa05dd454fb3fd72c68fca2f9b0ed9878a844fe2f9859d366df7f3873589602",
+    "kernels/tumorspace_core/julia/spatial_optimize.jl": "cbb483ae4f44a4f366ebcb142f6424c6f70d7e742856600002ad5dbed39fd9df",
+    "kernels/tumorspace_core/julia/phylo_tree_prune.jl": "2ed4f2ea6eb6a0d5a687d262919a6fe6edf198b877ed4a6195930c38d6807c0a",
+    "kernels/tumorspace_core/R/sg_identify_pairs.R": "4af6ae6928822443551d96a2fea0f933bf98352616c5e82da1b7d29d00a94ec6",
+    "kernels/select_optimal_svd.sh": "d3e61d3a9383340d58d2b6505573deb050e11fc903ffc107e99470005bb67e96"
+  },
+  "third_party": [
+    {
+      "name": "julia",
+      "version": "1.9.4",
+      "note": "Read from the image. Manifest.toml records 1.9.0, so the lockfile and the runtime disagree; the image is what executes. The RNG stream is a language guarantee, so this matters under a fixed seed."
+    },
+    {
+      "name": "SpectralInference.jl",
+      "version": "0.4.1",
+      "note": "Supplies the singular value decomposition and the spectral distance between spots. The entire tree derives from this."
+    },
+    {
+      "name": "PhyloNetworks.jl",
+      "version": "1.3.1",
+      "note": "Tree representation and Newick writing."
+    },
+    {
+      "name": "NewickTree.jl",
+      "version": "0.4.0",
+      "note": "Branch support handling during pruning."
+    },
+    {
+      "name": "Distances.jl",
+      "version": "0.10.12"
+    },
+    {
+      "name": "Noise.jl",
+      "version": "0.3.3",
+      "note": "Backs the multiplicative Gaussian perturbation used to build replicate trees."
+    },
+    {
+      "name": "spatstat.explore",
+      "version": "3.8.1",
+      "note": "Supplies the border corrected Ripley's K. Modern spatstat is split into several packages and Kest lives here."
+    },
+    {
+      "name": "booster (installed as gotree)",
+      "version": "v0.1.2-5-gb9eee3213b",
+      "note": "The binary at /usr/local/bin/gotree self identifies as booster, a different tool with a different command line. It is committed to this repository at bin/gotree, sha256 c1984a89b66b625045178fcbc1ed653f55d0f8c4802ce4cdd673c4cea4ea3dd2, which makes it the best pinned dependency here. It also fails to start unless LD_LIBRARY_PATH includes /lib64, because singularity replaces the library path and libgomp is not found."
+    },
+    {
+      "name": "ape",
+      "version": "5.8.1",
+      "note": "Tree walking during pair construction."
+    },
+    {
+      "name": "phangorn",
+      "version": "2.12.1",
+      "note": "Descendant and sibling lookups during pair construction."
+    },
+    {
+      "name": "spatstat.geom",
+      "version": "3.8.1",
+      "note": "Point pattern geometry underlying Kest."
+    }
+  ],
+  "parameters": {
+    "svd_values": [
+      5,
+      50,
+      150
+    ],
+    "dataset": "benchmark",
+    "num_boot": 10,
+    "support_threshold": 0.5,
+    "seed": 42
+  },
+  "profile": "randi",
+  "images": {
+    "julia": "julia_1.9_with_gotree.sif",
+    "r": "tumorspace_r.sif",
+    "shell": null
+  },
+  "image_digests": {
+    "julia_1.9_with_gotree.sif": "9c98d4e052ae5bf6e43f92b7f4e86dce40ecbf4030cd8b0b31db732d8eeaab45",
+    "tumorspace_r.sif": "07722fde3c28cfece589f4cf3772cd11e7161cc76821234aadb40995ba1c0c77"
+  },
+  "reproducible": true,
+  "anchored_by": [
+    "kernel files",
+    "image digests",
+    "environment manifest"
+  ],
+  "freeze_check": "passed",
+  "started": "2026-08-09T03:02:26.732451+00:00",
+  "finished": "2026-08-09T03:28:21.291499+00:00",
+  "resumed_steps": 0,
+  "inputs": {
+    "matrix": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data/M.txt",
+      "sha256": "53fa9310e90e0359b42afd42007d49a7f63c9497bcfc15c2dd47b66e269df93c"
+    },
+    "observations": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data/barcodes.txt",
+      "sha256": "b4bd89f2ba7640b49e2b8c89d053e1505289c424c94f662b03e1b128c87864d4"
+    },
+    "positions": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data/barcodes_positions.txt",
+      "sha256": "cc78f08e345eba9d793799b9a841408bf5578f368057988eb3dde55f9bd46e4e"
+    }
+  },
+  "outputs": {
+    "tree": "c574c3bd15a384fe421ba766e4b5c6449de79927b53e83d2cfbea4362c29294d",
+    "sg_pairs": "94a3e0b3756715a210b2366a4c53735af75fa187914f2cd5b90ecfb4c95e7cf8",
+    "sg_pair_members": "3fb85f42cecec0743936c8b7fc29edd9524125e4a6ee44812d09fddd6a558da2",
+    "node_info": "8717ff6ad4615105b0f529a532436b5cddc30ba92f23b224821cc83d3dea2f66",
+    "node_leaves": "7c8dec49f6b03432e09c405da41ecb3cfbf21d1126934a242420116a099cb9f5",
+    "node_parents": "2856eae5b103ee0577b8fd220a12d8e1857ba9896e0683584370180a7d18e944",
+    "chosen_svd": "207f7783dafeeb75229bfbf8092428653b6d07cb0ff67e92630a8f496a0aefba"
+  },
+  "volatile_outputs": {
+    "chosen_svd": [
+      "^# Generated:"
+    ]
+  },
+  "supersedes": [
+    "region_finder-randi-2003ad90-2026-08-07.json"
+  ],
+  "superseded_reason": "Recorded before the seed fix: tree_build discarded the seed and always used offset 1000, so seed 42 did not mean 42. Superseded by a run under the corrected semantics."
+}

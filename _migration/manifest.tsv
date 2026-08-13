@@ -1,0 +1,142 @@
+# repo	source	dest	action	note
+# ---------------------------------------------------------------- interfaces
+tumorspace	contracts/schema.json	interfaces/catalog/schema.json	copy	the catalog format
+toolkit	src/compute/base.py	interfaces/run/protocol.py	rewritten	the four operations, with combo and study gone and Launcher deleted
+-	-	interfaces/run/PROTOCOL.md	new	submit poll cancel collect, written down once
+# ---------------------------------------------------------------- domain: spatial transcriptomics
+tumorspace	contracts/capabilities/	domains/spatial-transcriptomics/catalog/	copy	9 entries
+tumorspace	workflows/	domains/spatial-transcriptomics/kernels/	copy	8 workflow dirs, julia and R
+tumorspace	containers/	domains/spatial-transcriptomics/environments/	copy	container definitions
+tumorspace	bin/gotree	domains/spatial-transcriptomics/environments/bin/gotree	copy	third-party binary a kernel calls
+tumorspace	reference_data/	domains/spatial-transcriptomics/reference/	copy	8.7 MB, gene name maps
+tumorspace	contracts/checks/ripley/	domains/spatial-transcriptomics/checks/	copy	compares two implementations of one method
+tumorspace	contracts/extracted/select_optimal_svd.sh	domains/spatial-transcriptomics/kernels/	copy	extracted from an orchestration script
+toolkit	src/analysis/domains/spatial_transcriptomics/study.py	domains/spatial-transcriptomics/kernels/python/	rewrite	built in a client; 9 hardcoded filenames move to catalog
+toolkit	src/analysis/domains/spatial_transcriptomics/stats.py	domains/spatial-transcriptomics/kernels/python/	rewrite	same
+toolkit	src/McpServer/tools/tertiary/spatial.py	domains/spatial-transcriptomics/catalog/	rewrite	prose becomes interpretation; plumbing deleted
+toolkit	context/spatial-transcriptomics/	domains/spatial-transcriptomics/interpretation/	copy	4 files
+# ---------------------------------------------------------------- domain: microbiome
+biobakery	bin/run_wmgx.sh	domains/microbiome/kernels/	copy	the pipeline invocation
+biobakery	bin/submit_wmgx.sh	domains/microbiome/kernels/	rewrite	SLURM submission is the executor's job; keep the argv build
+biobakery	bin/build_env.sh	domains/microbiome/environments/	copy
+biobakery	bin/postinstall.sh	domains/microbiome/environments/	copy
+biobakery	bin/patch_anadama2.sh	domains/microbiome/environments/patches/	copy	patches the third-party package
+biobakery	bin/patch_humann.sh	domains/microbiome/environments/patches/	copy
+biobakery	bin/patch_workflows_counts.sh	domains/microbiome/environments/patches/	copy
+biobakery	bin/patch_workflows_strainphlan.sh	domains/microbiome/environments/patches/	copy
+biobakery	bin/config_humann_dbs.sh	domains/microbiome/reference/	copy	marker database wiring
+biobakery	bin/link_metaphlan_db.sh	domains/microbiome/reference/	copy
+biobakery	bin/link_humann_ec_map.sh	domains/microbiome/reference/	copy
+biobakery	envs/exports/biobakery_workflows.20260724.lock	domains/microbiome/environments/	copy	the pin
+biobakery	config/env.sh	domains/microbiome/environments/	split	database versions stay here
+biobakery	config/site.sh	-	superseded	every value in it is now a field of infrastructure/sites/randi.json
+biobakery	templates/study-run.sh	domains/microbiome/kernels/	copy
+biobakery	bootstrap.sh	domains/microbiome/environments/	copy
+toolkit	src/analysis/domains/microbiome/study.py	domains/microbiome/kernels/python/	copy	the 5-table assembler
+toolkit	src/analysis/workflows/differential.py	domains/microbiome/kernels/python/	copy	CLR, per-subject random effect, reference cohort
+toolkit	src/compute/tertiary/r/	domains/microbiome/kernels/r/	copy	the R wrappers stay as kernels
+toolkit	src/compute/tertiary/maaslin.py	domains/microbiome/catalog/maaslin3.json	rewritten	the argument assembly is the catalog entry now; the R wrapper is the kernel
+toolkit	src/compute/tertiary/lefser.py	domains/microbiome/catalog/lefser.json	rewritten	same
+toolkit	src/compute/tertiary/halla.py	domains/microbiome/catalog/	rewrite	same
+toolkit	src/compute/secondary/biobakery.py	domains/microbiome/catalog/	rewrite	COMBOS dict becomes entries with produced_by edges
+toolkit	src/compute/secondary/inputs.py	domains/microbiome/catalog/	rewrite	same
+toolkit	src/McpServer/tools/tertiary/biobakery.py	domains/microbiome/catalog/	rewrite	520 lines, mostly argument plumbing
+toolkit	src/McpServer/tools/tertiary/microbiome.py	domains/microbiome/catalog/	rewrite	205 lines, same
+toolkit	context/microbiome/	domains/microbiome/interpretation/	copy	4 files
+toolkit	envs/r-stats/	domains/microbiome/environments/r-stats/	partial	the renv project: lockfile, activate, restore. The built library is not copied
+toolkit	envs/halla/	domains/microbiome/environments/	partial	lockfile only; 321 MB build is not copied
+# ---------------------------------------------------------------- domain: statistics
+toolkit	src/analysis/primitives/	domains/statistics/kernels/primitives/	copy	all 22, including jsonsafe.py, which the primitives import
+toolkit	src/analysis/workflows/ordination.py	domains/statistics/kernels/workflows/	copy
+toolkit	src/analysis/workflows/survival.py	domains/statistics/kernels/workflows/	copy
+toolkit	src/analysis/workflows/inputs.py	domains/statistics/kernels/workflows/	copy
+# ---------------------------------------------------------------- infrastructure
+tumorspace	contracts/bin/run.py	infrastructure/runner/	copy	staging, digests, refusals
+tumorspace	contracts/bin/_contract.py	interfaces/catalog/entry.py	rewritten	split: the catalog format moved here, profile loading to infrastructure/sites/profile.py
+tumorspace	contracts/bin/render.py	infrastructure/render-targets/	copy
+tumorspace	contracts/bin/graph.py	infrastructure/graph/	copy
+tumorspace	contracts/bin/baseline.py	infrastructure/artifact-store/	copy
+tumorspace	contracts/bin/status.py	infrastructure/artifact-store/	copy
+tumorspace	contracts/baselines/	infrastructure/artifact-store/baselines/	copy	stale until re-recorded
+tumorspace	contracts/profiles/	infrastructure/sites/	copy	randi, local, linux-generic
+tumorspace	contracts/checks/environment/	infrastructure/checks/	copy
+tumorspace	template_dir/	infrastructure/render-targets/nextflow/	copy	hand-written; the renderer supersedes it
+toolkit	src/compute/sites/randi.py	infrastructure/sites/	merge	second description of the same machine
+toolkit	src/compute/backends/	infrastructure/executors/	rewritten	the four operations over the runner: local.py, slurm_ssh.py, registry.py. The synchronous rscript and pycli backends are superseded by local.py, which drives the runner instead of a language.
+toolkit	src/provenance/	infrastructure/artifact-store/	superseded	one store.py replaces all six; they were a package and could not run flattened
+toolkit	src/datasource/base.py	infrastructure/datasource/	copy
+toolkit	src/datasource/local.py	infrastructure/datasource/	copy
+toolkit	src/datasource/tables.py	infrastructure/datasource/	copy
+toolkit	src/datasource/paths.py	infrastructure/datasource/	copy
+toolkit	src/datasource/ingest.py	infrastructure/datasource/	copy
+toolkit	src/datasource/domains.py	infrastructure/datasource/	split	discovery stays; the shape of a study goes to each domain
+toolkit	src/analysis/errors/	infrastructure/runner/validation/	copy	validates a call against declared types
+biobakery	provenance/runs.tsv	-	superseded	third provenance format
+# ---------------------------------------------------------------- clients
+toolkit	src/McpServer/mcp_server.py	clients/mcp-server/	rewritten	rebuilt on the catalog and the run interface; names no capability
+toolkit	src/McpServer/context.py	clients/mcp-server/	superseded	per-call study state; inputs are declared paths under the run interface
+toolkit	src/McpServer/derived.py	clients/mcp-server/	superseded	derived quantities belong to run_code, which is a capability
+toolkit	src/McpServer/tools/platform/	clients/mcp-server/tools/	split	discovery becomes tools/data.py; scratch becomes a capability; scope is session state, not a tool
+toolkit	src/McpServer/tools/secondary/pipelines.py	clients/mcp-server/tools/	superseded	submit, poll, cancel and collect are the run interface
+toolkit	src/McpServer/sandbox.py	clients/mcp-server/	rewrite	becomes the run_code kernel in domains/statistics
+toolkit	src/McpServer/run_sandbox.py	clients/mcp-server/	rewrite	same
+toolkit	src/capabilities.py	clients/	rewritten	asks each site what it can run, which is what the server does at startup
+toolkit	src/chat_client.py	clients/	copy
+toolkit	src/providers.py	clients/	copy
+toolkit	src/system_prompt.py	clients/	copy
+toolkit	src/analysis/visualization/	domains/visualization/kernels/charting/	copy	A chart drawn inside a client cannot see data that may not leave the machine, and carries no record of what produced it. Domain-free, so its own domain.
+toolkit	context/shared/	clients/context/	copy	8 files, product voice
+toolkit	context/frameworks/	clients/context/	copy	how to conduct an analysis
+toolkit	webapp/	clients/webapp/	copy	untouched by this plan
+toolkit	mo	clients/	copy	CLI entry point
+toolkit	Dockerfile	clients/	copy
+toolkit	docker-compose.yml	clients/	copy
+toolkit	requirements.txt	clients/	copy
+toolkit	examples/	clients/	copy
+# ---------------------------------------------------------------- excluded
+tumorspace	benchmarks/	-	exclude	74 MB of results
+tumorspace	archive/ logs/ tmux/ meeting_notes/ srun	-	exclude	not source; srun is a 0-byte file
+tumorspace	local/ config/cache/	-	exclude	local scratch
+toolkit	.venv/ data/ outputs/ .cache/ .userdata/ .retired/	-	exclude
+toolkit	src/analysis/frameworks/	-	exclude	only compiled artifacts remain, the source is gone
+toolkit	versioning/	-	exclude	release tooling for the current product
+# ---------------------------------------------------------------- second pass: everything the coverage check found
+tumorspace	LICENSE	./LICENSE	copy	same licence for the whole tree
+tumorspace	README.md	domains/spatial-transcriptomics/	copy	describes the pipeline
+tumorspace	docs/	domains/spatial-transcriptomics/docs/	split	follows whatever each file describes
+tumorspace	tests/	domains/spatial-transcriptomics/checks/	copy	per-workflow tests
+tumorspace	pytest.ini	domains/spatial-transcriptomics/	copy
+tumorspace	comparison/	domains/spatial-transcriptomics/checks/	copy	compares two versions of one method
+tumorspace	benchmarking/	infrastructure/checks/	copy	timing and seed reproducibility
+tumorspace	setup.sh	infrastructure/sites/	rewrite	machine setup, currently one script for one machine
+tumorspace	slurm_container_setup.sh	infrastructure/sites/	rewrite	same
+tumorspace	test_installation.sh	infrastructure/checks/	copy
+tumorspace	run_pipeline.sh	-	superseded	the runner and the graph replace it
+tumorspace	run_clean_e2e_workflow.sh	-	superseded	same
+tumorspace	run_benchmark.sh	infrastructure/checks/	copy
+tumorspace	CHANGELOG.md CURRENT_PRODUCTION_STATE.md	-	exclude	describe the old repository
+tumorspace	maaslin3	-	exclude	empty directory
+toolkit	README.md	clients/	copy
+toolkit	documentation/	clients/documentation/	split	architecture.md becomes the infrastructure README
+toolkit	.mcp.json .env .dockerignore	clients/	copy	product deployment
+toolkit	.vscode	-	exclude
+biobakery	README.md	domains/microbiome/	copy
+-	.DS_Store	-	exclude	everywhere
+# ---------------------------------------------------------------- third pass: files a per-directory row did not reach
+biobakery	config/activate.sh	domains/microbiome/environments/	copy	sources env.sh and enters the conda env
+tumorspace	bin/LICENSE_BOOSTER	domains/spatial-transcriptomics/environments/bin/	copy	licence for the gotree binary
+tumorspace	bin/README.md	domains/spatial-transcriptomics/environments/bin/	copy
+tumorspace	config/README.md config/hpc_profile.sh.example config/slurm_config.sh.example	infrastructure/sites/	copy	site examples
+tumorspace	contracts/README.md	interfaces/catalog/	copy	describes the format
+tumorspace	contracts/checks/README.md	infrastructure/checks/	copy
+toolkit	.github/	clients/.github/	copy	deployment workflow for the product
+toolkit	src/compute/__init__.py	infrastructure/executors/	copy	package marker
+toolkit	src/compute/secondary/__init__.py src/compute/tertiary/__init__.py	domains/microbiome/catalog/	copy	package markers, deleted once the entries replace the modules
+toolkit	src/compute/sites/__init__.py	infrastructure/sites/	copy	package marker
+toolkit	src/datasource/__init__.py	infrastructure/datasource/	copy	package marker
+toolkit	src/analysis/domains/__init__.py src/analysis/domains/microbiome/__init__.py	domains/microbiome/kernels/python/	copy	package markers
+toolkit	src/analysis/domains/spatial_transcriptomics/__init__.py	domains/spatial-transcriptomics/kernels/python/	copy	package marker
+toolkit	src/McpServer/tools/__init__.py src/McpServer/tools/secondary/__init__.py src/McpServer/tools/tertiary/__init__.py	clients/mcp-server/tools/	copy	package markers
+tumorspace	.gitignore contracts/.gitignore tmux	-	exclude	repository bookkeeping and a stray file
+toolkit	.gitignore	-	exclude
+biobakery	.gitignore envs/exports/.gitkeep	-	exclude

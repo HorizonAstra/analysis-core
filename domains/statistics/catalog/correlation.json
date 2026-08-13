@@ -1,0 +1,145 @@
+{
+  "id": "correlation",
+  "version": "0.1.0",
+  "title": "Correlation between features, one pair or every pair",
+  "summary": "Correlates features and returns a flat table of pairs with n, r and a p value. With a subject column it also returns the within-subject estimate beside the marginal one. With covariates it returns partial correlation.",
+  "level": 4,
+  "scope": "cross_sample",
+  "consumes": [],
+  "kernel": {
+    "language": "python",
+    "entrypoint": "kernels/run_primitive.py",
+    "files": [
+      "kernels/run_primitive.py",
+      "kernels/primitives/correlation.py",
+      "kernels/primitives/transformations.py",
+      "kernels/primitives/multiple_testing.py",
+      "kernels/primitives/jsonsafe.py"
+    ],
+    "sha256": {
+      "kernels/run_primitive.py": "2f7c48d4892857119ceec18c1b339613cb432e2c7ab37da0932547dc7f5caeeb",
+      "kernels/primitives/correlation.py": "eb716d72374b53b3ed6aaa3f06d0a340130af01b94d3b6773ffde92c34b28964",
+      "kernels/primitives/transformations.py": "78f060ea1e9c6543ba047e433be5d1148083e17466a978058290ebe02e32e740",
+      "kernels/primitives/multiple_testing.py": "cf13d537179dc045fd834b0c73d5483f1dea29055d93027d5f2b9aa8f7536f0b",
+      "kernels/primitives/jsonsafe.py": "a8fb22eae7f12629cf3c807add5c08ca73c9c5e42cbfda8a1b6a8a08850a5e08"
+    },
+    "functions": [
+      "correlation"
+    ],
+    "third_party": [
+      {
+        "name": "pandas",
+        "version": "unpinned"
+      },
+      {
+        "name": "scipy",
+        "version": "unpinned",
+        "note": "Supplies the correlation and its p value."
+      }
+    ]
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "manifest": "environments/requirements.txt",
+    "provenance": "No image. A virtual environment built from the pin beside it, 86 packages.",
+    "manifest_sha256": "ab853b8109e0e7173b99f8a4e684af6dcb04defb35537d4c7bd9f18e72431eb7",
+    "activation": {
+      "kind": "venv",
+      "path": "environments/py",
+      "note": "Entered by putting its bin directory first on PATH. Where python itself lives is the machine's business.",
+      "ready_when": "bin/python",
+      "restore_with": "bash ../restore.sh"
+    }
+  },
+  "inputs": [
+    {
+      "name": "table",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/table.tsv",
+      "description": "Samples by features, sample identifier in the first column."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "pairs",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/table.tsv",
+      "description": "One row per pair: x, y, n, r, p_value, and the within-subject columns when a subject column was given."
+    },
+    {
+      "name": "notes",
+      "type": "file",
+      "format": "json",
+      "required": false,
+      "staged_as": "{output_base}/notes.json",
+      "description": "What the primitive recorded about the estimate, including when it is partial and which cases were dropped.",
+      "interpretation": "Not decoration. A result read without these is misread."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "x",
+      "type": "array",
+      "default": [],
+      "affects_results": true,
+      "description": "Columns to correlate. With y omitted, every unordered pair within x is returned."
+    },
+    {
+      "name": "y",
+      "type": "array",
+      "default": [],
+      "affects_results": true,
+      "description": "Optional second set, giving a grid of x against y rather than pairs within x."
+    },
+    {
+      "name": "method",
+      "type": "string",
+      "default": "pearson",
+      "affects_results": true,
+      "description": "pearson or spearman."
+    },
+    {
+      "name": "subject_col",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "Adds the repeated-measures estimate beside the marginal one."
+    },
+    {
+      "name": "covar_cols",
+      "type": "array",
+      "default": [],
+      "affects_results": true,
+      "description": "Partial correlation, controlling for these columns. Complete cases are taken per pair."
+    }
+  ],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "Closed-form estimates. Nothing is sampled."
+  },
+  "resources": {
+    "scales_with": "pairs times samples",
+    "bound_by": "cpu",
+    "cores_help": false,
+    "fans_out": false,
+    "basis": "derived_from_algorithm",
+    "memory_hint": "The whole grid is computed in one pass, so memory follows the table rather than the number of pairs."
+  },
+  "interpretation": "Nothing here is corrected for multiple testing. A grid is many tests, so a p value from it must be adjusted before anything is read as significant. When a subject column is given, the gap between the marginal and the within-subject estimate is the finding: a large marginal r with a small within-subject r means the association is between subjects rather than something tracking within a person over time.",
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "python3 {entrypoint} --module primitives.correlation --function correlation --table {data_dir}/table.tsv --out {output_base} --list-args x,y,covar_cols --x {x} --y {y} --method {method} --subject_col {subject_col} --covar_cols {covar_cols}"
+  },
+  "notes": "First entry in this domain. The adapter is shared by every statistics capability.",
+  "for_people": "Correlates features against each other, one pair or every pair."
+}

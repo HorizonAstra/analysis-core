@@ -1,0 +1,119 @@
+{
+  "id": "growchain",
+  "version": "0.1.0",
+  "title": "Spatial group nesting depth",
+  "summary": "For each spatial group, how many progressively larger spatial domains contain it.",
+  "level": 2,
+  "scope": "per_sample",
+  "consumes": [
+    "harmonize",
+    "region_finder"
+  ],
+  "kernel": {
+    "language": "julia",
+    "entrypoint": "kernels/tumorspace_core/julia/sg_depth_growchain.jl",
+    "files": [
+      "kernels/tumorspace_core/julia/sg_depth_growchain.jl"
+    ],
+    "sha256": {
+      "kernels/tumorspace_core/julia/sg_depth_growchain.jl": "fff298945548959301dbe487a708bed89b62661518d1a957c49f953e066d43e6"
+    },
+    "functions": [
+      "leaf_dist",
+      "node_depth"
+    ],
+    "third_party": [
+      {
+        "name": "julia",
+        "version": "1.9.4",
+        "note": "Read from the image. Manifest.toml records 1.9.0, so the lockfile and the runtime disagree; the image is what executes. The RNG stream is a language guarantee, so this matters under a fixed seed."
+      }
+    ]
+  },
+  "environment": {
+    "manifest": "kernels/tumorspace_core/julia/Manifest.toml",
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "JULIA_NUM_THREADS": "1",
+      "JULIA_DEPOT_PATH": "{stage_root}/julia_depot:/opt/julia_depot"
+    },
+    "images": {
+      "julia": "julia_1.9_with_gotree.sif"
+    },
+    "digests": {
+      "julia_1.9_with_gotree.sif": "9c98d4e052ae5bf6e43f92b7f4e86dce40ecbf4030cd8b0b31db732d8eeaab45"
+    },
+    "provenance": "Digest read from the build on randi dated 2026-07-02. The recipe cannot regenerate it: build_r_container.sh resolves CRAN against 'latest' rather than a dated snapshot, so this file is currently the only record of the versions below.",
+    "manifest_sha256": "b657f21e7f34766fd477b606e07860c66650a7c28f093843e97559383389a241"
+  },
+  "invocation": {
+    "style": "positional",
+    "staging": "directory",
+    "template": "julia --project=kernels/tumorspace_core/julia {entrypoint} {input_base} {output_base} {data_dir}"
+  },
+  "inputs": [
+    {
+      "name": "node_parents",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{input_base}/optimal/allnodes_parents.tsv",
+      "produced_by": "region_finder",
+      "description": "Ancestor chain for every node in the tree."
+    },
+    {
+      "name": "node_leaves",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{input_base}/optimal/allnodes_leaves.tsv",
+      "produced_by": "region_finder",
+      "description": "Spots beneath every node, with coordinates."
+    },
+    {
+      "name": "sg_pairs",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{input_base}/optimal/OptimalTree_pruned_node_compare_list.txt",
+      "produced_by": "region_finder",
+      "description": "The spatial group pairs whose depth is measured."
+    },
+    {
+      "name": "positions",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/barcodes_positions.txt",
+      "produced_by": "harmonize",
+      "from_role": "positions",
+      "description": "Spot coordinates. Only the millimetre columns are used."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "depths",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/optimal/SG_GrowChain_depths.txt",
+      "description": "One nesting depth per spatial group. Zero means peripheral and standalone."
+    }
+  ],
+  "parameters": [],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "Fully deterministic. Given identical inputs the output is identical, which makes this the safest place to prove an adapter pattern."
+  },
+  "resources": {
+    "scales_with": "number of nodes in the tree, and spots beneath each",
+    "bound_by": "trivial",
+    "cores_help": false,
+    "fans_out": false,
+    "fan_out_over": null,
+    "memory_hint": "Comfortable well under 8 GB at Visium scale.",
+    "basis": "derived_from_algorithm"
+  },
+  "for_people": "Reports how deeply each spatial group sits inside the tree of groups."
+}

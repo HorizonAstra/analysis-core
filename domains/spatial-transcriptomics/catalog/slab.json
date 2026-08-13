@@ -1,0 +1,128 @@
+{
+  "id": "slab",
+  "version": "0.1.0",
+  "title": "Spatially localized abundance bias",
+  "summary": "What fraction of a tissue's spots carry a local up or down bias for each feature.",
+  "level": 3,
+  "scope": "per_sample",
+  "consumes": [
+    "harmonize",
+    "region_finder",
+    "differential_abundance"
+  ],
+  "kernel": {
+    "language": "julia",
+    "entrypoint": "kernels/tumorspace_core/julia/sg_slab_score.jl",
+    "files": [
+      "kernels/tumorspace_core/julia/sg_slab_score.jl"
+    ],
+    "sha256": {
+      "kernels/tumorspace_core/julia/sg_slab_score.jl": "ebd8e13f794b59a48ffececc5d592924bb4ded8cde7de92ce8f7a36f441de461"
+    },
+    "functions": [
+      "sg_slab_score"
+    ],
+    "third_party": [
+      {
+        "name": "julia",
+        "version": "1.9.4",
+        "note": "Read from the image. Manifest.toml records 1.9.0, so the lockfile and the runtime disagree; the image is what executes. The RNG stream is a language guarantee, so this matters under a fixed seed."
+      }
+    ]
+  },
+  "environment": {
+    "manifest": "kernels/tumorspace_core/julia/Manifest.toml",
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "JULIA_NUM_THREADS": "1",
+      "JULIA_DEPOT_PATH": "{stage_root}/julia_depot:/opt/julia_depot"
+    },
+    "images": {
+      "julia": "julia_1.9_with_gotree.sif"
+    },
+    "digests": {
+      "julia_1.9_with_gotree.sif": "9c98d4e052ae5bf6e43f92b7f4e86dce40ecbf4030cd8b0b31db732d8eeaab45"
+    },
+    "provenance": "Digest read from the build on randi dated 2026-07-02. The recipe cannot regenerate it: build_r_container.sh resolves CRAN against 'latest' rather than a dated snapshot, so this file is currently the only record of the versions below.",
+    "manifest_sha256": "b657f21e7f34766fd477b606e07860c66650a7c28f093843e97559383389a241"
+  },
+  "invocation": {
+    "style": "positional",
+    "staging": "directory",
+    "template": "julia --project=kernels/tumorspace_core/julia {entrypoint} {work_dir}"
+  },
+  "inputs": [
+    {
+      "name": "significant",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{work_dir}/DA_significant.txt",
+      "produced_by": "differential_abundance",
+      "produced_output": "significant",
+      "description": "Features that passed the permutation cutoff, with both group means. Direction is read from those means."
+    },
+    {
+      "name": "sg_pairs",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{work_dir}/OptimalTree_pruned_node_compare_list.txt",
+      "produced_by": "region_finder",
+      "description": "Supplies the size of each side, which decides which branch is the smaller one."
+    },
+    {
+      "name": "sg_pair_members",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{work_dir}/OptimalTree_pruned_node_compare_leaves.txt",
+      "produced_by": "region_finder",
+      "description": "Which spots belong to each side of each pair."
+    },
+    {
+      "name": "positions",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{work_dir}/barcodes_positions.txt",
+      "produced_by": "harmonize",
+      "from_role": "positions",
+      "description": "Supplies the total spot count that the score is divided by."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "scores",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{work_dir}/SLAB_scores.txt",
+      "description": "One score per feature per direction. Up, Down, and Both are reported separately."
+    },
+    {
+      "name": "barcodes",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{work_dir}/SLAB_barcodes.txt",
+      "description": "Which spots carry each bias. This is what makes it possible to paint a feature back onto the tissue image."
+    }
+  ],
+  "parameters": [],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "Deterministic. Every step is a join, a comparison of means, or a deduplication."
+  },
+  "resources": {
+    "scales_with": "significant features x spots carrying each bias",
+    "bound_by": "memory",
+    "cores_help": false,
+    "fans_out": false,
+    "fan_out_over": null,
+    "memory_hint": "The orchestrator requests 64 GB and raises it with spot count. The spot level table is the driver, not the score table.",
+    "basis": "declared_in_repo"
+  },
+  "interpretation": "A score is how widespread a bias is across the tissue, not how strong it is. A feature carried by many spots may be a mild field effect, and a feature carried by few may be a strong local one, so spread and effect answer different questions and neither substitutes for the other. Up, Down and Both are reported separately and must not be summed.\n\nA score describes a whole sample, not one comparison within it. It is computed over every spot in the tissue and pooled across every group the feature was significant in, so the same value repeats on every row for that feature. Reporting it as a property of one group against its neighbour is wrong, and it is the easiest mistake to make here because the rows look as though it were. The direction is a property of spots for the same reason, which is why it can read up for a feature whose effect in a given comparison is down.",
+  "for_people": "Reports what share of a tissue's spots carry a local rise or fall for each gene."
+}

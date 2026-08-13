@@ -1,0 +1,60 @@
+#!/bin/bash
+#
+# SLURM Configuration Template
+#
+# Copy this file to slurm_config.sh and customize with your HPC settings:
+#   cp config/slurm_config.sh.example config/slurm_config.sh
+#
+# Then source it before running workflows:
+#   source config/slurm_config.sh
+#   workflows/orchestration/run_pipeline_full.sh --dataset DATASET --mode container
+#
+
+# ============================================================================
+# SLURM Account & Partition
+# ============================================================================
+
+# Your SLURM account (required for job submission)
+export SLURM_ACCOUNT="<your-account>"
+
+# Your default SLURM partition/queue
+export SLURM_PARTITION="<your-partition>"
+
+# ============================================================================
+# Optional: Resource Defaults
+# ============================================================================
+
+# Default memory allocation
+# export SLURM_MEM="32G"
+
+# Default CPU count
+# export SLURM_CPUS="8"
+
+# Default time limit
+# export SLURM_TIME="04:00:00"
+
+# ============================================================================
+# Optional: Email Notifications
+# ============================================================================
+
+# Email address for job notifications
+# export SLURM_EMAIL="your-email@example.com"
+
+# When to send emails (BEGIN, END, FAIL, ALL)
+# export SLURM_MAIL_TYPE="FAIL"
+
+# ============================================================================
+# Usage Notes
+# ============================================================================
+#
+# After configuring, you can use environment variables or explicit arguments:
+#
+# Option 1: Use environment variables (set above)
+#   source config/slurm_config.sh
+#   workflows/orchestration/run_pipeline_full.sh --dataset DATASET --mode container
+#
+# Option 2: Explicit arguments (overrides environment)
+#   workflows/orchestration/run_pipeline_full.sh \
+#       --dataset DATASET --mode container \
+#       --account your-account --partition your-partition
+#

@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+# mo — the one entry point for Multiomics. Everything you can start, you start from here:
+#
+#   ./mo setup      install and configure, once
+#   ./mo web        the browser app
+#   ./mo cli        the terminal chat
+#   ./mo desktop    register the tools with Claude Desktop
+#   ./mo docker     the container build
+#   ./mo status     what is installed and configured right now
+#   ./mo capabilities  which analysis tools are actually available, and why not
+#
+# One command with subcommands, instead of a handful of scripts whose names you have to
+# remember. Run `./mo` on its own for the list.
+
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+
+PY=".venv/bin/python3"
+BOLD=$'\033[1m'; DIM=$'\033[2m'; OFF=$'\033[0m'
+
+die() { echo "error: $*" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+
+${BOLD}Multiomics${OFF} ${DIM}analysis toolkit${OFF}
+
+  ${BOLD}./mo setup${OFF}      install dependencies, create folders, warm the data cache
+  ${BOLD}./mo web${OFF}        run the browser app        ${DIM}(sets up first if needed)${OFF}
+  ${BOLD}./mo cli${OFF}        run the terminal chat
+  ${BOLD}./mo desktop${OFF}    register the tools with Claude Desktop
+  ${BOLD}./mo docker${OFF}     build and run the container
+  ${BOLD}./mo status${OFF}     show what is installed and configured
+  ${BOLD}./mo capabilities${OFF}  which analysis tools are actually available, and why not
+  ${BOLD}./mo help${OFF}       this list
+
+${DIM}Options are environment variables, in front of the command:
+  PORT=8080 ./mo web            serve on another port
+  DEV_RELOAD=1 ./mo web         restart on file edits
+  LLM_PROVIDER=google ./mo cli  use Gemini instead of Claude${OFF}
+
+EOF
+}
+
+# ── shared checks ───────────────────────────────────────────────────────────
+have_venv() { [ -x "$PY" ]; }
+
+need_venv() {
+  have_venv || die "not set up yet. Run: ./mo setup"
+}
+
+# .env holds the keys and the session secret; set once, not per run. Anything already in
+# the real environment wins over the file, so `LLM_PROVIDER=google ./mo cli` does what it
+# says. That is also how config.py reads it on the Python side, and the two must agree.
+load_env() {
+  [ -f .env ] || return 0
+  local already; already="$(export -p)"      # snapshot before the file can overwrite
+  set -a; . ./.env; set +a
+  # put the caller's own values back. `export -p` emits `declare -x`, and plain `declare`
+  # inside a function makes a local that dies on return, so rewrite it to `export`.
+  eval "${already//declare -x /export }" 2>/dev/null || true
+}
+
+# Checks the key for whichever provider is selected. $1 is the provider default to assume
+# when nothing sets one (the web app serves Google; the CLI is Claude-first).
+need_key() {
+  local provider="${LLM_PROVIDER:-$1}"
+  case "$provider" in
+    google|gemini)
+      [ -n "${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}" ] || die \
+        "LLM_PROVIDER=$provider but no GEMINI_API_KEY or GOOGLE_API_KEY found. Put one in .env"
+      ;;
+    *)
+      [ -n "${ANTHROPIC_API_KEY:-}" ] || die \
+        "ANTHROPIC_API_KEY is not set. Put it in .env, or use Google: LLM_PROVIDER=google"
+      ;;
+  esac
+  echo "$provider"
+}
+
+studies_line() { ls data/ 2>/dev/null | grep -v README | tr '\n' ' ' || echo "(none yet)"; }
+
+# ── commands ────────────────────────────────────────────────────────────────
+cmd_setup() {
+  echo; echo "${BOLD}Setting up Multiomics${OFF}  ${DIM}$ROOT${OFF}"; echo
+
+  if [ ! -d .venv ]; then
+    echo "[1/5] Creating the virtual environment..."
+    python3 -m venv .venv
+  else
+    echo "[1/5] Virtual environment already present."
+  fi
+
+  echo "[2/5] Installing dependencies..."
+  "$PY" -m pip install --upgrade pip -q
+  "$PY" -m pip install -r requirements.txt -q
+
+  echo "[3/5] Creating data/ and outputs/..."
+  # outputs/ is the whole provenance trail. There is no separate results/ tree: whether an
+  # artifact was "presented" is a flag on its manifest, so one place holds everything.
+  mkdir -p data outputs
+
+  echo "[4/5] Restoring the external analysis environments..."
+  # The bioBakery tools (MaAsLin 3, LEfSe, HAllA) run as external programs in their own
+  # pinned environments. Without them the toolkit still works, it just offers fewer tools —
+  # so this is attempted, reported, and never fatal. restore.sh installs from locks only.
+  if command -v Rscript >/dev/null 2>&1; then
+    bash envs/r-stats/restore.sh >/dev/null 2>&1 \
+      && echo "      r-stats  ready" || echo "      r-stats  FAILED ${DIM}(see: bash envs/r-stats/restore.sh)${OFF}"
+    bash envs/halla/restore.sh >/dev/null 2>&1 \
+      && echo "      halla    ready" || echo "      halla    FAILED ${DIM}(see: bash envs/halla/restore.sh)${OFF}"
+  else
+    echo "      skipped ${DIM}(no R found; install R to enable the bioBakery stats tools)${OFF}"
+  fi
+
+  echo "[5/5] Warming the data cache for any studies already present..."
+  PYTHONPATH="$ROOT/src" "$PY" -m datasource.ingest --all --data-root "$ROOT/data" || true
+
+  echo
+  echo "${BOLD}Done.${OFF} Next:"
+  echo "  1. Put study folders in  data/"
+  echo "  2. Copy examples/.env.example to .env and add your API key"
+  echo "  3. ./mo web"
+  echo
+  echo "  ${DIM}./mo capabilities  shows which analysis tools are actually available${OFF}"
+  echo "  ${DIM}For Claude Desktop instead: ./mo desktop${OFF}"
+  echo
+}
+
+cmd_capabilities() {
+  have_venv || die "not set up yet. Run: ./mo setup"
+  PYTHONPATH="$ROOT/src" "$PY" "$ROOT/src/capabilities.py" --tools "$@"
+}
+
+cmd_web() {
+  have_venv || { echo "First run, setting up..."; cmd_setup; }
+  "$PY" -c "import fastapi, uvicorn" 2>/dev/null \
+    || die "web dependencies missing. Run: ./mo setup"
+  [ -f .env ] || die "no .env found. Copy it first:  cp examples/.env.example .env"
+  load_env
+  local provider; provider="$(need_key google)"
+  local port="${PORT:-8000}"
+  echo
+  echo "${BOLD}Multiomics${OFF}  ${DIM}web${OFF}"
+  echo "  Provider: $provider"
+  echo "  Open:     http://127.0.0.1:$port"
+  echo "  Studies:  $(studies_line)"
+  echo
+  exec "$PY" webapp/server.py
+}
+
+cmd_cli() {
+  need_venv
+  load_env
+  local provider; provider="$(need_key anthropic)"
+  local model
+  case "$provider" in
+    google|gemini) model="${GEMINI_MODEL:-${GOOGLE_MODEL:-gemini-2.5-flash}}" ;;
+    *)             model="${ANTHROPIC_MODEL:-claude-sonnet-5}" ;;
+  esac
+  echo
+  echo "${BOLD}Multiomics${OFF}  ${DIM}cli${OFF}"
+  echo "  Provider: $provider    Model: $model"
+  echo "  Studies:  $(studies_line)"
+  echo
+  exec "$PY" src/chat_client.py
+}
+
+cmd_desktop() {
+  need_venv
+  local dir="$HOME/Library/Application Support/Claude"
+  local cfg="$dir/claude_desktop_config.json"
+  local server="$ROOT/src/McpServer/mcp_server.py"
+
+  [ -d "$HOME/Library/Application Support" ] || die \
+    "this writes the macOS Claude Desktop config. On Windows or Linux, copy
+       examples/claude_desktop_config.example.json into your own config and fix the paths."
+
+  mkdir -p "$dir"
+  if [ -f "$cfg" ]; then
+    cp "$cfg" "$cfg.backup_$(date +%Y%m%d_%H%M%S)"
+    echo "Backed up the existing config."
+  fi
+
+  # MERGE, never overwrite. That file is not ours: it also holds Claude Desktop's own
+  # preferences and any other MCP server the user has wired up, and clobbering it to add one
+  # entry costs them all of that. Only mcpServers["analysis-toolkit"] is touched.
+  "$ROOT/$PY" - "$cfg" "$ROOT/$PY" "$server" <<'PY'
+import json, os, sys
+cfg, py, server = sys.argv[1], sys.argv[2], sys.argv[3]
+
+data, note = {}, ""
+if os.path.isfile(cfg):
+    try:
+        with open(cfg) as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            data, note = {}, "the existing config was not a JSON object; started fresh"
+    except (ValueError, OSError) as e:
+        data, note = {}, f"the existing config could not be parsed ({e}); started fresh"
+
+servers = data.setdefault("mcpServers", {})
+if not isinstance(servers, dict):
+    servers, note = {}, "mcpServers was not an object; replaced it"
+    data["mcpServers"] = servers
+
+servers["analysis-toolkit"] = {"command": py, "args": [server]}
+with open(cfg, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+
+others = sorted(k for k in servers if k != "analysis-toolkit")
+if note:
+    print(f"  ! {note} (the backup has the original)")
+print(f"  kept {len(data) - 1} other top-level settings"
+      + (f", and MCP server(s): {', '.join(others)}" if others else ""))
+PY
+  echo "Written: $cfg"
+  echo
+  echo "Now fully quit Claude Desktop (Cmd+Q) and reopen it. The tools appear in its panel."
+  echo
+}
+
+cmd_docker() {
+  # A local convenience. The deployable artifact is the image itself (see Dockerfile), which
+  # is a plain OCI image: it also runs under Podman or Kubernetes, and converts to
+  # Apptainer/Singularity for an HPC with no Docker. Compose is just one way to hand it a
+  # port, secrets, a read-only data mount and a writable /state.
+  command -v docker >/dev/null || die "docker is not installed"
+  [ -f .env ] || die "no .env found. Copy it first:  cp examples/.env.example .env"
+  exec docker compose up --build
+}
+
+cmd_status() {
+  echo
+  echo "${BOLD}Multiomics${OFF}  ${DIM}$ROOT${OFF}"
+  echo
+  if have_venv; then
+    echo "  setup      ready ${DIM}($("$PY" --version 2>&1))${OFF}"
+  else
+    echo "  setup      not done ${DIM}(run: ./mo setup)${OFF}"
+  fi
+  if [ -f .env ]; then
+    load_env
+    local provider="${LLM_PROVIDER:-google}" key="missing"
+    case "$provider" in
+      google|gemini) [ -n "${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}" ] && key="present" ;;
+      *)             [ -n "${ANTHROPIC_API_KEY:-}" ] && key="present" ;;
+    esac
+    echo "  .env       found ${DIM}(provider: $provider, key: $key)${OFF}"
+    [ "$key" = "missing" ] && echo "             ${DIM}add the key for '$provider' to .env${OFF}"
+  else
+    echo "  .env       missing ${DIM}(cp examples/.env.example .env)${OFF}"
+  fi
+  local n; n="$(ls data/ 2>/dev/null | grep -cv README || true)"
+  echo "  studies    ${n:-0} in data/  ${DIM}$(studies_line)${OFF}"
+  if [ -f "$HOME/Library/Application Support/Claude/claude_desktop_config.json" ] \
+     && grep -q "analysis-toolkit" "$HOME/Library/Application Support/Claude/claude_desktop_config.json" 2>/dev/null; then
+    echo "  desktop    registered"
+  else
+    echo "  desktop    not registered ${DIM}(run: ./mo desktop)${OFF}"
+  fi
+  echo
+}
+
+case "${1:-help}" in
+  setup)            shift; cmd_setup "$@" ;;
+  web|start|app)    shift; cmd_web "$@" ;;
+  cli|chat)         shift; cmd_cli "$@" ;;
+  desktop)          shift; cmd_desktop "$@" ;;
+  docker)           shift; cmd_docker "$@" ;;
+  status)           shift; cmd_status "$@" ;;
+  capabilities|caps) shift; cmd_capabilities "$@" ;;
+  help|-h|--help)   usage ;;
+  *) echo "unknown command: $1" >&2; usage; exit 1 ;;
+esac

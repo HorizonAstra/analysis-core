@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta content="text/html;charset=UTF-8" http-equiv="content-type">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Region Tree</title>
+
+    <!--
+      The page PhyD3 ships, with what it takes to run here and nothing else.
+
+      Its own `dist/index.html` loads jQuery, Bootstrap and d3 from public
+      content delivery networks and reports every visit to an analytics service.
+      Neither is acceptable: a cluster is often on a closed network, where a
+      viewer that fetches its own libraries over the internet does not open at
+      all, and nobody looking at their own results should be reported to a third
+      party for doing it. So the libraries sit in `libs/` and the analytics are
+      gone.
+
+      What it loads is different too. Theirs reads one file sitting beside it.
+      This one asks which samples the bundle holds and reads the tree of
+      whichever is chosen, which is what lets several runs be looked at as one
+      study.
+
+      Everything that draws a tree is PhyD3's, untouched, in `js/phyd3.min.js`.
+      The controls below are its controls, bound by the element ids it looks for.
+      Only the ones a Newick tree can drive are here: the rest of its panel reads
+      annotations that only phyloXML carries, and a control that cannot do
+      anything is worse than an absent one.
+    -->
+
+    <link rel="stylesheet" href="libs/bootstrap.min.css">
+    <link rel="stylesheet" href="libs/bootstrap-theme.min.css">
+    <link rel="stylesheet" href="css/phyd3.min.css" />
+    <script src="libs/jquery.min.js"></script>
+    <script src="libs/bootstrap.min.js"></script>
+    <script src="libs/d3.v3.min.js"></script>
+    <script src="js/phyd3.min.js"></script>
+
+    <style>
+        /* The tree is drawn in the typeface PhyD3 asks for by name, which it
+           does not ship a copy of. Declared here rather than in its stylesheet,
+           which stays as it came. */
+        @font-face {
+            font-family: "Open Sans";
+            src: url("fonts/OpenSans.woff2") format("woff2"),
+                 url("fonts/OpenSans.woff") format("woff");
+            font-display: swap;
+        }
+        html, body { height: 100%; margin: 0; background: #ffffff; }
+        .viewer { display: flex; height: 100%; }
+        .controls {
+            flex: 0 0 268px; overflow-y: auto; padding: 20px 16px 32px;
+            border-right: 1px solid #e9e7e1;
+        }
+        .stage { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+        #phyd3 { flex: 1 1 auto; min-width: 0; overflow: auto; }
+        .hint {
+            flex: 0 0 auto; margin: 0; padding: 10px 18px; font-size: 12.6px;
+            line-height: 1.5; color: #57534e; border-top: 1px solid #e9e7e1;
+        }
+        .group { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+        .group + .group, .divider + .group { margin-top: 0; }
+        .divider { border-top: 1px solid #e9e7e1; margin: 18px 0 14px; }
+        .trouble { padding: 28px; max-width: 42rem; line-height: 1.55; }
+        #sample { margin-bottom: 4px; }
+        .stack > .form-group { margin-bottom: 2px; }
+        .btn-row { margin-top: 10px; }
+        .btn-row .btn { margin-bottom: 6px; }
+    </style>
+
+    <script>
+        // PhyD3's own options, set for what a region tree is rather than for
+        // what a gene family is. Two of them matter and the rest are its
+        // defaults: every region here is an inner node of the tree, so drawing
+        // only the leaves would label almost nothing; and the distances the
+        // spatial group run measured are worth seeing, so branches are drawn to
+        // scale rather than evenly.
+        var opts = {
+            dynamicHide: true,
+            height: 800,
+            invertColors: false,
+            lineupNodes: true,
+            showDomains: false,
+            showDomainNames: false,
+            showDomainColors: false,
+            showGraphs: true,
+            showGraphLegend: true,
+            showLength: false,
+            showNodeNames: true,
+            showNodesType: "all",
+            showPhylogram: true,
+            showTaxonomy: false,
+            showFullTaxonomy: false,
+            showSequences: false,
+            showTaxonomyColors: false,
+            backgroundColor: "#ffffff",
+            foregroundColor: "#000000"
+        };
+
+        var showing = null;      // the parsed tree on screen
+        var drawnAt = 0;         // the width it was drawn for
+        var pending = null;
+        var watcher = null;
+        var waited = 0;
+
+        // Set as text rather than as markup. A sample name reaches this from a
+        // directory in the results store, and a name is not a thing this page
+        // should ever be executing.
+        function trouble(message) {
+            showing = null;
+            d3.select("#phyd3").text(null)
+              .append("p").attr("class", "trouble").text(message);
+        }
+
+        function tips(node) {
+            if (!node.branchset || !node.branchset.length) return 1;
+            return node.branchset.reduce(function (n, c) { return n + tips(c); }, 0);
+        }
+
+        // PhyD3 measures the space it has once, while it builds, and never
+        // again. So a frame revealed after its page has loaded gets a tree drawn
+        // for no width at all, and a window that changes size keeps a tree drawn
+        // for the old one. Neither is the viewer's problem to solve, so the page
+        // waits until it has a width and draws again when that width changes.
+        function draw() {
+            if (!showing) return;
+            var width = document.getElementById("phyd3").clientWidth;
+            if (!width) {
+                // Laid out at no width, which happens while whatever holds this
+                // page is still being put on screen. Asking again shortly costs
+                // nothing and is the only way to find out; giving up after a few
+                // seconds is better than a loop nobody can see. A timer rather
+                // than an animation frame, because a page that is not being
+                // drawn yet is exactly the case where frames do not arrive.
+                if (waited++ < 60) setTimeout(draw, 50);
+                return;
+            }
+            waited = 0;
+            // A hundred regions in a fixed eight hundred pixels is a smudge. The
+            // picture grows with the tree instead and the stage scrolls, which
+            // is the honest way round: the tree is the size it is.
+            opts.height = Math.max(600, tips(showing) * 22);
+            phyd3.phylogram.build("#phyd3", showing, opts);
+            drawnAt = width;
+        }
+
+        // Watched two ways because neither covers the other. A window resize is
+        // the person dragging the edge of their browser; an element resize is
+        // the page around this one changing shape without the window moving,
+        // which is what happens when a panel opens. The observer is held in a
+        // variable rather than left anonymous so nothing can collect it.
+        function watch() {
+            window.addEventListener("resize", redraw);
+            if (typeof ResizeObserver !== "undefined") {
+                watcher = new ResizeObserver(redraw);
+                watcher.observe(document.getElementById("phyd3"));
+            }
+        }
+
+        function redraw() {
+            var width = document.getElementById("phyd3").clientWidth;
+            if (!showing || !width || width === drawnAt) return;
+            clearTimeout(pending);
+            pending = setTimeout(draw, 120);
+        }
+
+        // Which samples there are is a question about the bundle rather than
+        // about the tree, and the server already answers it. Asked once, so a
+        // study assembled out of several runs is one picture with a chooser
+        // rather than several pages.
+        function load() {
+            watch();
+            d3.select("#phyd3").text("Loading...");
+            d3.json("samples", function (found) {
+                var names = (found && found.samples) || [];
+                if (!names.length) {
+                    trouble("This bundle holds no samples. A tree is built from " +
+                            "a spatial group run, so if none has finished there " +
+                            "is nothing here yet.");
+                    return;
+                }
+                var picker = d3.select("#sample");
+                picker.selectAll("option").data(names).enter()
+                      .append("option").attr("value", String).text(String);
+                picker.on("change", function () { show(this.value); });
+                show(names[0]);
+            });
+        }
+
+        // phyloXML rather than Newick, because Newick has nowhere to put a
+        // number that is not a branch length and everything beside the tree —
+        // which nodes are spatial groups, what is expressed where — is exactly
+        // that. Both parsers are in the bundle, so a plain Newick file still
+        // opens if a bundle holds one.
+        function show(name) {
+            var base = "data/" + encodeURIComponent(name) + "/";
+            var file = base + "tree.xml";
+            d3.select("#linkTree").attr("href", file)
+              .attr("download", name + ".xml");
+            d3.select("#phyd3").text("Loading...");
+            // d3 hands a one argument callback the document, or null when the
+            // request failed. There is no error to inspect, so the message says
+            // what is true either way.
+            d3.xml(file, function (xml) {
+                if (!xml) {
+                    d3.text(base + "tree.nwk", function (text) {
+                        if (!text) {
+                            trouble("The tree for " + name + " could not be read. " +
+                                    "If it was built on another machine it may " +
+                                    "still be on its way here.");
+                            return;
+                        }
+                        d3.select("#phyd3").text(null);
+                        showing = phyd3.newick.parse(text);
+                        draw();
+                    });
+                    return;
+                }
+                d3.select("#phyd3").text(null);
+                showing = phyd3.phyloxml.parse(xml);
+                draw();
+            });
+        }
+    </script>
+</head>
+<body onload="load()">
+  <div class="viewer">
+    <div class="controls container-fluid">
+        <p class="group">Sample</p>
+        <select id="sample" class="form-control"></select>
+
+        <div class="divider"></div>
+        <p class="group">Drawing</p>
+        <div class="stack">
+            <div class="form-group"><div class="checkbox"><label>
+                <input id="phylogram" type="checkbox" checked="checked"> Branches drawn to scale
+            </label></div></div>
+            <div class="form-group"><div class="checkbox"><label>
+                <input id="lineupNodes" type="checkbox" checked="checked"> Line up the tips
+            </label></div></div>
+            <div class="form-group"><div class="checkbox"><label>
+                <input id="dynamicHide" type="checkbox" checked="checked"> Hide names that collide
+            </label></div></div>
+            <div class="form-group"><div class="checkbox"><label>
+                <input id="nodeNames" type="checkbox" checked="checked"> Show region names
+            </label></div></div>
+            <div class="form-group"><div class="checkbox"><label>
+                <input id="lengthValues" type="checkbox"> Show branch lengths
+            </label></div></div>
+            <div class="form-group"><div class="checkbox"><label>
+                <input id="invertColors" type="checkbox"> Dark background
+            </label></div></div>
+        </div>
+        <div class="row">
+            <div class="col-xs-4 middle-padding">Show</div>
+            <div class="col-xs-8 no-padding">
+                <select id="nodesType" class="form-control">
+                    <option selected="selected">all</option>
+                    <option>only leaf</option>
+                    <option>only inner</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+        <p class="group">Size</p>
+        <div class="row">
+            <div class="col-xs-3 middle-padding">Names</div>
+            <div class="col-xs-3 text-right no-padding">
+                <button id="nodeHeightLower" class="btn btn-primary" title="Make them smaller"><span class="glyphicon glyphicon-zoom-out" aria-hidden="true"></span></button>
+            </div>
+            <div class="col-xs-3 text-center no-padding">
+                <input type="text" id="nodeHeight" disabled="disabled" class="form-control text-center" />
+            </div>
+            <div class="col-xs-3 text-left no-padding">
+                <button id="nodeHeightHigher" class="btn btn-primary" title="Make them bigger"><span class="glyphicon glyphicon-zoom-in" aria-hidden="true"></span></button>
+            </div>
+        </div>
+        <div class="row btn-row">
+            <div class="col-xs-4 col-xs-offset-4 text-center">
+                <button id="zoominY" class="btn btn-primary" title="Zoom in along Y"><span class="glyphicon glyphicon-zoom-in" aria-hidden="true"></span> Y</button>
+            </div>
+        </div>
+        <div class="row btn-row">
+            <div class="col-xs-4 text-center no-padding">
+                <button id="zoomoutX" class="btn btn-primary" title="Zoom out along X"><span class="glyphicon glyphicon-zoom-out" aria-hidden="true"></span> X</button>
+            </div>
+            <div class="col-xs-4 text-center no-padding">
+                <button id="resetZoom" class="btn btn-link">RESET</button>
+            </div>
+            <div class="col-xs-4 text-center no-padding">
+                <button id="zoominX" class="btn btn-primary" title="Zoom in along X"><span class="glyphicon glyphicon-zoom-in" aria-hidden="true"></span> X</button>
+            </div>
+        </div>
+        <div class="row btn-row">
+            <div class="col-xs-4 col-xs-offset-4 text-center">
+                <button id="zoomoutY" class="btn btn-primary" title="Zoom out along Y"><span class="glyphicon glyphicon-zoom-out" aria-hidden="true"></span> Y</button>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+        <p class="group">Tracks</p>
+        <div class="stack">
+            <div class="form-group"><div class="checkbox"><label>
+                <input id="graphs" type="checkbox" checked="checked"> Show the tracks
+            </label></div></div>
+            <div class="form-group"><div class="checkbox"><label>
+                <input id="graphLegend" type="checkbox" checked="checked"> Show the legend
+            </label></div></div>
+        </div>
+        <div class="row">
+            <div class="col-xs-3 middle-padding">Width</div>
+            <div class="col-xs-3 text-right no-padding">
+                <button id="graphWidthLower" class="btn btn-primary" title="Make them narrower"><span class="glyphicon glyphicon-zoom-out" aria-hidden="true"></span></button>
+            </div>
+            <div class="col-xs-3 text-center no-padding">
+                <input type="text" id="graphWidth" disabled="disabled" class="form-control text-center" />
+            </div>
+            <div class="col-xs-3 text-left no-padding">
+                <button id="graphWidthHigher" class="btn btn-primary" title="Make them wider"><span class="glyphicon glyphicon-zoom-in" aria-hidden="true"></span></button>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+        <p class="group">Download</p>
+        <div class="btn-row">
+            <button class="btn btn-primary" id="linkSVG">SVG</button>
+            <button class="btn btn-primary" id="linkPNG">PNG</button>
+            <a href="#" class="btn btn-primary" id="linkTree" download>Tree</a>
+        </div>
+    </div>
+
+    <div class="stage">
+        <div id="phyd3"></div>
+        <p class="hint">
+            Drag to move the tree and scroll to zoom. Hold Ctrl and scroll to
+            stretch it vertically, Alt and scroll to stretch it sideways.
+            A region sits inside the one it hangs from, branch length is how far
+            apart two regions are, and a region name means nothing outside its
+            own sample.
+        </p>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,432 @@
+#!/bin/bash
+#
+# run_phylo_node_extract.sh
+#
+# Step 2: Node Extraction Orchestration Script (Job Array Version)
+#
+# This script extracts structural information from phylogenetic trees (Tree_0.nw)
+# produced in Step 1. Uses SLURM job arrays to process multiple SVD runs in parallel.
+#
+# Usage:
+#   bash run_phylo_node_extract.sh --dataset DATASET --account ACCOUNT --partition PARTITION \
+#                                  --input-base DIR --output-base DIR --num-svd N \
+#                                  [--container PATH] [--test] [--mem SIZE]
+#
+# Required Arguments:
+#   --dataset DATASET       Dataset name (e.g., GSE213688_GSM6592057)
+#   --account ACCOUNT       SLURM account (e.g., pi-araman)
+#   --partition PARTITION   SLURM partition (e.g., caslake)
+#   --input-base DIR        Base directory containing Step 1 outputs (svd_run_N/ subdirs)
+#                           Outputs will also be written here
+#   --num-svd N            Number of SVD runs to process (default: 30)
+#
+# Optional Arguments:
+#   --container PATH        Path to Singularity container (enables container mode)
+#   --test                  Test mode: only process 3 SVDs (1-3)
+#   --mem SIZE             Memory per task (default: 8G)
+#   --time TIME            Time limit (default: 00:30:00)
+#   --input-dir DIR        Input data directory (for barcodes_positions.txt)
+#
+# Environment:
+#   HPC mode: Uses system Julia installation
+#   Container mode: Uses Singularity container (--container flag)
+#
+# Outputs (per SVD, written to input-base/svd_run_N/):
+#   - tree_nodes.tsv: Node structural information (node numbers, names, leaf status)
+#   - tree_edges.tsv: Edge structural information (parent-child, branch lengths)
+#   - allnodes_leaves.tsv: All descendant leaves for each internal node
+#   - allnodes_parents.tsv: All ancestor nodes for each node
+#   - spectral_dist_melt.tsv: Ranked spot matches based on spectral distance
+#
+# Resource Requirements:
+#   - Memory: 8 GB (sufficient for datasets up to ~10K spots)
+#   - Time: <10 min per SVD for typical datasets
+#   - CPUs: 1 per task (no intra-task parallelization)
+#
+# Example:
+#   # Native mode (HPC)
+#   bash run_phylo_node_extract.sh --dataset GSE213688_GSM6592057 \
+#       --account pi-araman --partition caslake \
+#       --input-base test_step1_output \
+#       --input-dir benchmarks/GSE213688_GSM6592057/input_data --test
+#
+#   # Container mode
+#   bash run_phylo_node_extract.sh --dataset GSE213688_GSM6592057 \
+#       --account pi-araman --partition caslake \
+#       --input-base test_step1_output \
+#       --input-dir benchmarks/GSE213688_GSM6592057/input_data \
+#       --container containers --test
+#
+
+set -e
+
+# Load HPC cluster profile (exports module names; falls back to .example defaults)
+_HPC_PROFILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/config/hpc_profile.sh"
+[[ -f "$_HPC_PROFILE" ]] || _HPC_PROFILE="${_HPC_PROFILE}.example"
+# shellcheck disable=SC1090
+source "$_HPC_PROFILE" && unset _HPC_PROFILE
+
+# Default values
+DATASET=""
+ACCOUNT=""
+PARTITION=""
+INPUT_BASE=""
+INPUT_DIR=""
+NUM_SVD=30
+CONTAINER=""
+TEST_MODE=false
+MEM="8G"
+TIME_LIMIT="00:30:00"
+DEPENDENCY=""
+WORKSPACE_ROOT=""
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --dataset)
+            DATASET="$2"
+            shift 2
+            ;;
+        --account)
+            ACCOUNT="$2"
+            shift 2
+            ;;
+        --partition)
+            PARTITION="$2"
+            shift 2
+            ;;
+        --workspace-root)
+            WORKSPACE_ROOT="$2"
+            shift 2
+            ;;
+        --input-base)
+            INPUT_BASE="$2"
+            shift 2
+            ;;
+        --input-dir)
+            INPUT_DIR="$2"
+            shift 2
+            ;;
+        --num-svd)
+            NUM_SVD="$2"
+            shift 2
+            ;;
+        --container)
+            CONTAINER="$2"
+            shift 2
+            ;;
+        --test)
+            TEST_MODE=true
+            shift
+            ;;
+        --mem)
+            MEM="$2"
+            shift 2
+            ;;
+        --time)
+            TIME_LIMIT="$2"
+            shift 2
+            ;;
+        --dependency)
+            DEPENDENCY="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Run with --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Validate required arguments
+if [ -z "$DATASET" ] || [ -z "$ACCOUNT" ] || [ -z "$PARTITION" ] || [ -z "$INPUT_BASE" ]; then
+    echo "ERROR: Missing required arguments"
+    echo ""
+    echo "Required: --dataset, --account, --partition, --input-base"
+    echo ""
+    echo "Usage:"
+    echo "  bash run_phylo_node_extract.sh --dataset DATASET --account ACCOUNT --partition PARTITION \\"
+    echo "                                 --input-base DIR --input-dir DIR [--num-svd N] [--container PATH] [--test]"
+    exit 1
+fi
+
+# Auto-derive workspace root if not provided
+if [ -z "$WORKSPACE_ROOT" ]; then
+    WORKSPACE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd ../../.. && pwd)"
+fi
+
+# Validate workspace root
+if [ ! -d "$WORKSPACE_ROOT" ]; then
+    echo "Error: Workspace root directory not found: $WORKSPACE_ROOT"
+    exit 1
+fi
+
+# Workspace and script locations
+JULIA_SCRIPT="$WORKSPACE_ROOT/workflows/tumorspace_core/julia/phylo_node_extract.jl"
+CONTAINER_JULIA_SCRIPT="/opt/workflows/julia/phylo_node_extract.jl"
+
+# Determine mode
+if [ -n "$CONTAINER" ]; then
+    MODE="CONTAINER"
+    # If directory provided, auto-append .sif filename
+    if [ -d "$CONTAINER" ]; then
+        CONTAINER="$CONTAINER/julia_1.9_with_gotree.sif"
+    fi
+    # Validate .sif file exists
+    if [ ! -f "$CONTAINER" ]; then
+        echo "Error: Container SIF file not found: $CONTAINER"
+        echo "Expected a .sif file, not a directory"
+        exit 1
+    fi
+    # Convert to absolute path for SBATCH script (compute nodes may have different working directory)
+    CONTAINER=$(realpath "$CONTAINER")
+else
+    MODE="HPC"
+fi
+
+# Convert to absolute paths
+INPUT_BASE=$(realpath "$INPUT_BASE")
+
+# Check INPUT_BASE exists
+if [ ! -d "$INPUT_BASE" ]; then
+    echo "ERROR: Input base directory not found: $INPUT_BASE"
+    exit 1
+fi
+
+# Test mode: Clean previous outputs to force fresh computation
+if [ "$TEST_MODE" = true ]; then
+    for i in $(seq 1 3); do
+        SVD_DIR="$INPUT_BASE/svd_run_$i"
+        if [ -d "$SVD_DIR" ]; then
+            rm -f "$SVD_DIR/tree_nodes.tsv" "$SVD_DIR/tree_edges.tsv" "$SVD_DIR/allnodes_leaves.tsv" \
+                  "$SVD_DIR/allnodes_parents.tsv" "$SVD_DIR/spectral_dist_melt.tsv"
+        fi
+    done
+    echo "TEST MODE: Cleaned node extraction outputs for SVDs 1-3"
+    echo ""
+fi
+
+# Find barcodes_positions.txt
+BARCODE_POSITIONS=""
+if [ -n "$INPUT_DIR" ]; then
+    INPUT_DIR=$(realpath "$INPUT_DIR")
+    BARCODE_POSITIONS="$INPUT_DIR/barcodes_positions.txt"
+    if [ ! -f "$BARCODE_POSITIONS" ]; then
+        echo "ERROR: Barcode positions file not found: $BARCODE_POSITIONS"
+        exit 1
+    fi
+else
+    # Try to find in INPUT_BASE
+    if [ -f "$INPUT_BASE/barcodes_positions.txt" ]; then
+        BARCODE_POSITIONS="$INPUT_BASE/barcodes_positions.txt"
+    else
+        echo "ERROR: Cannot locate barcodes_positions.txt"
+        echo "Provide --input-dir pointing to directory containing barcodes_positions.txt"
+        exit 1
+    fi
+fi
+
+# Test mode: limit to 3 SVDs
+if [ "$TEST_MODE" = true ]; then
+    NUM_SVD=3
+    ARRAY_SPEC="1-3"
+else
+    ARRAY_SPEC="1-${NUM_SVD}"
+fi
+
+# Create logs directory
+mkdir -p logs
+
+# Generate timestamp for this run
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+# Create SLURM batch script
+SBATCH_SCRIPT="./logs/step2_sbatch_${TIMESTAMP}.sh"
+
+cat > "$SBATCH_SCRIPT" << 'HEREDOC_END'
+#!/bin/bash
+#SBATCH --job-name=step2_nodeextract
+#SBATCH --output=logs/step2_%A_%a.out
+#SBATCH --error=logs/step2_%A_%a.err
+#SBATCH --array=ARRAY_SPEC_PLACEHOLDER
+#SBATCH --time=TIME_LIMIT_PLACEHOLDER
+#SBATCH --mem=MEM_PLACEHOLDER
+#SBATCH --cpus-per-task=1
+#SBATCH --account=ACCOUNT_PLACEHOLDER
+#SBATCH --partition=PARTITION_PLACEHOLDER
+
+set -euo pipefail
+
+# Get SVD number from array task ID
+SVD_NUM=$SLURM_ARRAY_TASK_ID
+
+# Directories for this SVD
+# Note: node_extract.jl reads AND writes to the same directory
+SVD_DIR="INPUT_BASE_PLACEHOLDER/svd_run_${SVD_NUM}"
+
+# Required input files
+# Use Tree_support.nw (with bootstrap support values) instead of Tree_0.nw
+TREE_FILE="$SVD_DIR/Tree_support.nw"
+BARCODE_POSITIONS="BARCODE_POSITIONS_PLACEHOLDER"
+
+# Verify Tree_support.nw exists (created by Step 1b: bootstrap support computation)
+if [ ! -f "$TREE_FILE" ]; then
+    echo "ERROR: Tree_support.nw not found: $TREE_FILE"
+    echo "Ensure Step 1b (bootstrap support computation) has completed for SVD $SVD_NUM"
+    echo ""
+    echo "Tree_support.nw is required because:"
+    echo "  - Contains bootstrap support values (0.0-1.0) for internal nodes"
+    echo "  - Used for hyperparameter optimization (Prune threshold)"
+    echo "  - Enables node filtering based on bootstrap confidence"
+    echo ""
+    echo "If Tree_0.nw exists but Tree_support.nw is missing:"
+    echo "  - Run Step 1b: bash run_phylo_bootstrap_support.sh <args>"
+    echo "  - Or re-run Step 1 with bootstrap support enabled"
+    exit 1
+fi
+
+if [ ! -f "$BARCODE_POSITIONS" ]; then
+    echo "ERROR: Barcode positions file not found: $BARCODE_POSITIONS"
+    exit 1
+fi
+
+# Check for distance matrix (created by Step 1)
+DISTANCE_FILE=""
+for fname in "SPI_Dist_mtx.txt" "SPI_Dist_mtx.tsv" "Obs_Dij_ObsDat_Spectral.tsv" "Obs_Dij_ObsDat_Spectral.txt"; do
+    if [ -f "$SVD_DIR/$fname" ]; then
+        DISTANCE_FILE="$SVD_DIR/$fname"
+        break
+    fi
+done
+
+if [ -z "$DISTANCE_FILE" ]; then
+    echo "ERROR: Distance matrix not found in $SVD_DIR"
+    echo "Looked for: SPI_Dist_mtx.txt, Obs_Dij_ObsDat_Spectral.tsv, etc."
+    echo "Ensure Step 1 has completed successfully for SVD $SVD_NUM"
+    exit 1
+fi
+
+# Print job information
+echo "=============================================================================="
+echo "Step 2: Node Extraction - SVD $SVD_NUM"
+echo "=============================================================================="
+echo "Job ID:       ${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+echo "Node:         $(hostname)"
+echo "Started:      $(date)"
+echo "Mode:         MODE_PLACEHOLDER"
+echo "SVD Dir:      $SVD_DIR"
+echo "Tree File:    $TREE_FILE"
+echo "Distance:     $DISTANCE_FILE"
+echo "Barcodes:     $BARCODE_POSITIONS"
+echo "Memory:       MEM_PLACEHOLDER"
+echo "CPUs:         $SLURM_CPUS_PER_TASK"
+echo "=============================================================================="
+echo
+
+# Record start time
+START_TIME=$(date +%s)
+
+# Run node extraction
+MODE_EXEC_PLACEHOLDER
+
+# Record completion
+END_TIME=$(date +%s)
+ELAPSED=$((END_TIME - START_TIME))
+
+echo
+echo "=============================================================================="
+echo "Step 2 Complete - SVD $SVD_NUM"
+echo "=============================================================================="
+echo "Elapsed time: ${ELAPSED}s"
+echo "Outputs written to: $SVD_DIR"
+echo "  - tree_nodes.tsv"
+echo "  - tree_edges.tsv"
+echo "  - allnodes_leaves.tsv"
+echo "  - allnodes_parents.tsv"
+echo "  - spectral_dist_melt.tsv"
+echo "=============================================================================="
+
+HEREDOC_END
+
+# Substitute placeholders
+sed -i "s|ARRAY_SPEC_PLACEHOLDER|${ARRAY_SPEC}|g" "$SBATCH_SCRIPT"
+sed -i "s|TIME_LIMIT_PLACEHOLDER|${TIME_LIMIT}|g" "$SBATCH_SCRIPT"
+sed -i "s|MEM_PLACEHOLDER|${MEM}|g" "$SBATCH_SCRIPT"
+sed -i "s|ACCOUNT_PLACEHOLDER|${ACCOUNT}|g" "$SBATCH_SCRIPT"
+sed -i "s|PARTITION_PLACEHOLDER|${PARTITION}|g" "$SBATCH_SCRIPT"
+sed -i "s|INPUT_BASE_PLACEHOLDER|${INPUT_BASE}|g" "$SBATCH_SCRIPT"
+sed -i "s|BARCODE_POSITIONS_PLACEHOLDER|${BARCODE_POSITIONS}|g" "$SBATCH_SCRIPT"
+sed -i "s|MODE_PLACEHOLDER|${MODE}|g" "$SBATCH_SCRIPT"
+
+# Generate mode-specific execution command
+if [ "$MODE" = "CONTAINER" ]; then
+    # Write execution block for container mode
+    cat >> "$SBATCH_SCRIPT" << EOF
+
+# Container execution
+${HPC_LOAD_SINGULARITY}
+
+singularity exec --no-home --cleanenv \\
+    --env JULIA_DEPOT_PATH=/tmp/julia_depot:/opt/julia_depot \\
+    --bind "$INPUT_BASE:$INPUT_BASE" \\
+    --bind "$(dirname "$BARCODE_POSITIONS"):$(dirname "$BARCODE_POSITIONS")" \\
+    "$CONTAINER" \\
+    julia "$CONTAINER_JULIA_SCRIPT" "\$SVD_DIR" "\$TREE_FILE" "\$BARCODE_POSITIONS"
+EOF
+else
+    # Write execution block for native mode
+    cat >> "$SBATCH_SCRIPT" << EOF
+
+# Native execution
+${HPC_LOAD_JULIA}
+julia "$JULIA_SCRIPT" "\$SVD_DIR" "\$TREE_FILE" "\$BARCODE_POSITIONS"
+EOF
+fi
+
+# Remove placeholder line
+sed -i '/MODE_EXEC_PLACEHOLDER/d' "$SBATCH_SCRIPT"
+
+# Submit job
+echo "=============================================================================="
+echo "Step 2: Node Extraction Job Submission"
+echo "=============================================================================="
+echo "Dataset:      $DATASET"
+echo "Mode:         $MODE"
+echo "Account:      $ACCOUNT"
+echo "Partition:    $PARTITION"
+echo "Input Base:   $INPUT_BASE"
+echo "Barcodes:     $BARCODE_POSITIONS"
+echo "SVD Array:    $ARRAY_SPEC"
+echo "Memory:       $MEM per task"
+echo "Time Limit:   $TIME_LIMIT per task"
+if [ "$MODE" = "CONTAINER" ]; then
+    echo "Container:    $CONTAINER"
+fi
+if [ -n "$DEPENDENCY" ]; then
+    echo "Dependency:   afterok:$DEPENDENCY"
+fi
+echo "=============================================================================="
+echo
+
+if [ -n "$DEPENDENCY" ]; then
+    JOB_ID=$(sbatch --parsable --dependency=afterok:$DEPENDENCY "$SBATCH_SCRIPT")
+else
+    JOB_ID=$(sbatch --parsable "$SBATCH_SCRIPT")
+fi
+
+echo "✓ Job submitted successfully"
+echo "Job ID: $JOB_ID"
+echo "SLURM script saved to: $SBATCH_SCRIPT"
+echo ""
+echo "Monitor job status:"
+echo "  squeue -j $JOB_ID -u \$USER"
+echo "  squeue -j $JOB_ID --array"
+echo "  tail -f ./logs/step2_${JOB_ID}_*.out"
+echo ""
+echo "Check completion:"
+echo "  sacct -j $JOB_ID --format=JobID,State,ExitCode,Elapsed"
+echo ""
+
+# Return job ID for downstream dependency management
+echo "$JOB_ID"

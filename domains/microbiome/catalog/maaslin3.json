@@ -1,0 +1,191 @@
+{
+  "id": "maaslin3",
+  "version": "0.1.0",
+  "title": "Associations between features and sample metadata",
+  "summary": "Fits per-feature models across a cohort and reports which features associate with the supplied fixed effects, in both abundance and prevalence. Runs once over the whole cohort, not per sample.",
+  "level": 4,
+  "scope": "cross_sample",
+  "consumes": [],
+  "kernel": {
+    "language": "r",
+    "entrypoint": "kernels/r/run_maaslin3.R",
+    "files": [
+      "kernels/r/run_maaslin3.R"
+    ],
+    "sha256": {
+      "kernels/r/run_maaslin3.R": "6533051307dab452b760fb85e8c28eb5a691b2e8f7d2263d5b65f74a54217752"
+    },
+    "third_party": [
+      {
+        "name": "maaslin3",
+        "version": "1.2.0",
+        "note": "Carries the entire computation. The file above assembles arguments and calls it, so the package version is the scientific surface. Its own normalization and its own multiple-testing correction are inside it and are not ours."
+      },
+      {
+        "name": "R",
+        "version": "4.5.0"
+      },
+      {
+        "name": "lme4",
+        "version": "2.0-6",
+        "note": "Supplies the mixed model used whenever a random effect is given."
+      }
+    ]
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "manifest": "environments/r-stats/renv.lock",
+    "provenance": "No image. Runs as a subprocess inside an renv project pinning 295 packages, declared through environment.activation.",
+    "activation": {
+      "kind": "working_directory",
+      "path": "environments/r-stats",
+      "note": "renv project. Its .Rprofile puts the 295 pinned packages on the library path, and only does so when R starts inside this directory.",
+      "ready_when": "renv/library",
+      "restore_with": "Rscript -e \"renv::restore(prompt = FALSE)\""
+    },
+    "manifest_sha256": "2f88db60c49131ba17d3368398fb4b8b3011f554fb7f74a5db9257c3fe81f394"
+  },
+  "inputs": [
+    {
+      "name": "features",
+      "type": "file",
+      "staged_as": "{data_dir}/features.tsv",
+      "format": "tsv",
+      "description": "Samples by features, sample_id in the first column. Raw abundances: maaslin3 does its own normalization and transform.",
+      "required": true
+    },
+    {
+      "name": "metadata",
+      "type": "file",
+      "staged_as": "{data_dir}/metadata.tsv",
+      "format": "tsv",
+      "description": "Samples by variables, same sample_id index, carrying every fixed and random effect named below.",
+      "required": true
+    }
+  ],
+  "outputs": [
+    {
+      "name": "all_results",
+      "type": "file",
+      "staged_as": "{output_base}/maaslin3/all_results.tsv",
+      "format": "tsv",
+      "description": "Every feature-by-effect model fit, significant or not."
+    },
+    {
+      "name": "significant_results",
+      "type": "file",
+      "staged_as": "{output_base}/maaslin3/significant_results.tsv",
+      "format": "tsv",
+      "description": "The subset passing max_significance, by the package's own correction."
+    },
+    {
+      "name": "summary_plot",
+      "type": "file",
+      "staged_as": "{output_base}/maaslin3/figures/summary_plot.png",
+      "format": "png",
+      "description": "Package-generated overview figure.",
+      "required": false
+    },
+    {
+      "name": "log",
+      "type": "file",
+      "staged_as": "{output_base}/maaslin3/maaslin3.log",
+      "format": "text",
+      "description": "The package's own run log.",
+      "required": false,
+      "volatile": [
+        "^\\[[0-9]{4}-[0-9]{2}-[0-9]{2}"
+      ]
+    }
+  ],
+  "parameters": [
+    {
+      "name": "fixed_effects",
+      "type": "array",
+      "default": [],
+      "affects_results": true,
+      "description": "Metadata columns tested for association. STRAIN: this is required in practice \u2014 the capability is meaningless without it \u2014 but the format has no way to say a parameter is mandatory, only that an input is."
+    },
+    {
+      "name": "random_effects",
+      "type": "array",
+      "default": [],
+      "affects_results": true,
+      "description": "Grouping columns for repeated measures, e.g. subject_id. Absent, every sample is treated as independent."
+    },
+    {
+      "name": "reference",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "Reference level for a categorical fixed effect, as 'variable,level'. Changes what every coefficient is relative to."
+    },
+    {
+      "name": "normalization",
+      "type": "string",
+      "default": "TSS",
+      "affects_results": true,
+      "description": "Package normalization applied before the transform."
+    },
+    {
+      "name": "transform",
+      "type": "string",
+      "default": "LOG",
+      "affects_results": true,
+      "description": "Package transform applied after normalization."
+    },
+    {
+      "name": "min_prevalence",
+      "type": "number",
+      "default": 0.1,
+      "affects_results": true,
+      "description": "Features present in fewer than this fraction of samples are dropped before fitting, which also shrinks the multiple-testing family."
+    },
+    {
+      "name": "min_abundance",
+      "type": "number",
+      "default": 0.0,
+      "affects_results": true,
+      "description": "Abundance floor for the prevalence test above."
+    },
+    {
+      "name": "max_significance",
+      "type": "number",
+      "default": 0.1,
+      "affects_results": true,
+      "description": "Cutoff for the significant_results table. This is the package's own corrected value, not an FDR we compute."
+    },
+    {
+      "name": "cores",
+      "type": "integer",
+      "default": 1,
+      "affects_results": false,
+      "description": "Parallel model fits."
+    }
+  ],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "UNVERIFIED. The models are fitted rather than sampled, so runs are expected to be reproducible without a seed. Not measured here."
+  },
+  "resources": {
+    "scales_with": "features",
+    "bound_by": "cpu",
+    "cores_help": true,
+    "fans_out": false,
+    "basis": "derived_from_algorithm",
+    "memory_hint": "One model per feature per effect, parallel across features. Not measured here."
+  },
+  "notes": "First entry written for this domain. The kernel is the R wrapper; the argument assembly that used to sit in Python is this file.",
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "Rscript {entrypoint} --data {data_dir}/features.tsv --metadata {data_dir}/metadata.tsv --output {output_base}/maaslin3 --fixed {fixed_effects} --random {random_effects} --reference {reference} --normalization {normalization} --transform {transform} --min_prevalence {min_prevalence} --min_abundance {min_abundance} --max_significance {max_significance} --cores {cores} --plots TRUE"
+  },
+  "for_people": "Tests which features are associated with sample metadata, allowing for repeated sampling."
+}

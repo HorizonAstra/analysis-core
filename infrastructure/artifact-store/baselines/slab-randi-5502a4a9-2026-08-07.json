@@ -1,0 +1,53 @@
+{
+  "capability": "slab",
+  "contract_version": "0.1.0",
+  "kernel_sha256": {
+    "workflows/tumorspace_core/julia/sg_slab_score.jl": "ebd8e13f794b59a48ffececc5d592924bb4ded8cde7de92ce8f7a36f441de461"
+  },
+  "third_party": [
+    {
+      "name": "julia",
+      "version": "1.9.4",
+      "note": "Read from the image. Manifest.toml records 1.9.0, so the lockfile and the runtime disagree; the image is what executes. The RNG stream is a language guarantee, so this matters under a fixed seed."
+    }
+  ],
+  "parameters": {},
+  "profile": "randi",
+  "images": {
+    "julia": "julia_1.9_with_gotree.sif"
+  },
+  "image_digests": {
+    "julia_1.9_with_gotree.sif": "9c98d4e052ae5bf6e43f92b7f4e86dce40ecbf4030cd8b0b31db732d8eeaab45"
+  },
+  "reproducible": true,
+  "started": "2026-08-07T14:28:35.880780+00:00",
+  "finished": "2026-08-07T14:30:03.321379+00:00",
+  "inputs": {
+    "significant": {
+      "path": "/ess/scratch/scratch1/rijulsareen/cap_out/da_seed42_a/significant",
+      "sha256": "f4030442081c2bd57943a95f244340f8aecb04708fc281c2ceb815b5a0f6d91f"
+    },
+    "sg_pairs": {
+      "path": "/ess/scratch/scratch1/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results/optimal/OptimalTree_pruned_node_compare_list.txt",
+      "sha256": "7b971e4d2176b05a73ff1116b51baf0a00d54a950aff68fb9555b11d19f894ec"
+    },
+    "sg_pair_members": {
+      "path": "/ess/scratch/scratch1/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results/optimal/OptimalTree_pruned_node_compare_leaves.txt",
+      "sha256": "068efd5ef9dcd295be03ff245d46c9da3340aaa86ab1003c3e1e12eeb0e9303c"
+    },
+    "positions": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/input-data/harmonized-small-test/1N/barcodes_positions.txt",
+      "sha256": "98b2b127c4762dc951e2c5fcf180354a791b8774d2ff06b6a832c3095c100389"
+    }
+  },
+  "outputs": {
+    "scores": "dd1daf414d30114ed07c7376ad8af63ad4ba948fca99693c14f009d65f8df317",
+    "barcodes": "d859ab08e89d644a62d79626f9f8f73b92ac95a0bd8aa5c57496494064d8f0ac"
+  },
+  "baseline": {
+    "site": "randi",
+    "recorded": "2026-08-07",
+    "sample": "harmonized-small-test/1N",
+    "note": "Output digests from a run whose inputs and kernel are recorded above. Its 'significant' input came from the seeded differential_abundance baseline, so this records the level 1 to 3 chain end to end."
+  }
+}

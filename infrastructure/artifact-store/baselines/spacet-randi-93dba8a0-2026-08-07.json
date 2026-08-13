@@ -1,0 +1,55 @@
+{
+  "capability": "spacet",
+  "contract_version": "0.1.0",
+  "kernel_sha256": {
+    "workflows/spacet/R/run_spacet.R": "5908c564232b73d00dcf0b274058d0cecead643c2f7481f903384c7c61d255a7"
+  },
+  "third_party": [
+    {
+      "name": "SpaCET",
+      "version": "1.4.0",
+      "note": "Carries the entire computation, including the reference profiles each cancer type is deconvolved against. The file listed above contains no mathematics of its own, so this package version is the whole scientific pin."
+    },
+    {
+      "name": "R",
+      "version": "4.4.1",
+      "note": "The base image version."
+    }
+  ],
+  "parameters": {
+    "cancer_type": "LUAD",
+    "cores": 4
+  },
+  "profile": "randi",
+  "images": {
+    "r": "tumorspace_r.sif"
+  },
+  "image_digests": {
+    "tumorspace_r.sif": "07722fde3c28cfece589f4cf3772cd11e7161cc76821234aadb40995ba1c0c77"
+  },
+  "reproducible": true,
+  "started": "2026-08-07T15:19:23.875740+00:00",
+  "finished": "2026-08-07T15:21:32.437720+00:00",
+  "resumed_steps": 0,
+  "inputs": {
+    "matrix": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data/M.txt",
+      "sha256": "53fa9310e90e0359b42afd42007d49a7f63c9497bcfc15c2dd47b66e269df93c"
+    },
+    "features": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data/features.txt",
+      "sha256": "3c2c49efb159c62fd3fb048b072b00e824ddc379cdfe035ef3fd5dec4c98a85f"
+    },
+    "positions": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data/barcodes_positions.txt",
+      "sha256": "cc78f08e345eba9d793799b9a841408bf5578f368057988eb3dde55f9bd46e4e"
+    },
+    "ref_dir": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/reference_data",
+      "sha256": "50cca7ed162a4b1848d02d5a8fd1e449b09546505c22e4f4c01ea68ceebfddc7"
+    }
+  },
+  "outputs": {
+    "proportions": "186705543e0baddf362e4fadf7b859228d85afaec8dc8682af497fb602304965"
+  }
+}

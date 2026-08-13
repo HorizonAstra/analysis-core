@@ -1,0 +1,135 @@
+{
+  "id": "bayesspace",
+  "version": "0.1.0",
+  "title": "Spatially aware clustering",
+  "summary": "Partition a tissue into a chosen number of clusters, using each spot's expression together with its neighbours'.",
+  "level": 1,
+  "scope": "per_sample",
+  "consumes": [],
+  "kernel": {
+    "language": "r",
+    "entrypoint": "kernels/bayesspace/R/run_bayesspace.R",
+    "files": [
+      "kernels/bayesspace/R/run_bayesspace.R"
+    ],
+    "sha256": {
+      "kernels/bayesspace/R/run_bayesspace.R": "1575dbf63028a1998bafc9a906a91070afbfce9e4a740462583a63be9e872541"
+    },
+    "functions": [
+      "readVisium_custom",
+      "run_BayesSpace"
+    ],
+    "third_party": [
+      {
+        "name": "BayesSpace",
+        "version": "1.16.0",
+        "note": "Carries the entire computation. The file listed above configures and calls it, so the version of this package is the scientific pin, not the hash of any file in this repository."
+      },
+      {
+        "name": "harmony",
+        "version": "2.0.5",
+        "note": "Batch integration, used only in joint mode across several samples."
+      },
+      {
+        "name": "mclust",
+        "version": "6.1.2",
+        "note": "Supplies the initialisation the sampler starts from."
+      },
+      {
+        "name": "R",
+        "version": "4.4.1",
+        "note": "The base image version. R's RNG stream is version dependent, so a different R can produce a different chain under the same seed."
+      }
+    ]
+  },
+  "environment": {
+    "manifest": null,
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "images": {
+      "r": "tumorspace_r.sif"
+    },
+    "digests": {
+      "tumorspace_r.sif": "07722fde3c28cfece589f4cf3772cd11e7161cc76821234aadb40995ba1c0c77"
+    },
+    "provenance": "Digest read from the build on randi dated 2026-07-02. The recipe cannot regenerate it: build_r_container.sh resolves CRAN against 'latest' rather than a dated snapshot, so this file is currently the only record of the versions below."
+  },
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "Rscript {entrypoint} --datapath {data_dir} --outdir {output_base} --nPCs {n_pcs} --q {q} --theta {theta}"
+  },
+  "inputs": [
+    {
+      "name": "sample_dir",
+      "type": "directory",
+      "format": "spaceranger_or_harmonised",
+      "required": true,
+      "staged_as": "{data_dir}",
+      "from_role": ".",
+      "description": "One sample directory, or several separated by commas. The script detects its own format: a filtered_feature_bc_matrix folder triggers the package's native reader, otherwise M.txt triggers a custom one. This is the only capability that can read SpaceRanger output without harmonisation."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "clusters",
+      "type": "file",
+      "format": "csv",
+      "staged_as": "{output_base}/bayesspace_coldata.csv",
+      "description": "One cluster label per spot."
+    },
+    {
+      "name": "plot",
+      "type": "file",
+      "format": "png",
+      "staged_as": "{output_base}/cluster_plot.png",
+      "description": "Clusters drawn on the tissue layout."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "q",
+      "type": "integer",
+      "default": 8,
+      "description": "Number of clusters. This is chosen, never discovered: the method partitions into exactly this many.",
+      "affects_results": true
+    },
+    {
+      "name": "n_pcs",
+      "type": "integer",
+      "default": 15,
+      "description": "Principal components retained before clustering.",
+      "affects_results": true
+    },
+    {
+      "name": "theta",
+      "type": "number",
+      "default": 2,
+      "description": "Harmony penalty. Ignored unless several sample directories are passed.",
+      "affects_results": true
+    },
+    {
+      "name": "seed",
+      "type": "integer",
+      "description": "Seeds R's global generator before the script starts, which fixes the two seeds it draws for itself. Omitting it leaves the run unreproducible."
+    }
+  ],
+  "determinism": {
+    "consumes_rng": true,
+    "seed_env": "R_PROFILE_USER",
+    "seed_mechanism": "r_profile",
+    "seeded_by_default": false,
+    "note": "A Markov chain Monte Carlo sampler, 2000 iterations after 100 burn in. The script takes fixed seeds only through its test mode, so an ordinary run picks its own with sample(10000000, 1) and two runs of one input give different cluster labels. It does not follow that seeding needs a change to the script. Those two draws come from R's global generator, and the script is launched with Rscript without --vanilla, so R sources a user profile before the script runs. A profile holding set.seed() therefore fixes the state the script draws its own seeds from, and everything after follows. The adapter writes that profile and points R_PROFILE_USER at it. The kernel is untouched, and the seeds the script chose are still written into its own output, so a run stays self describing."
+  },
+  "resources": {
+    "scales_with": "spots x 2000 sampler iterations, and by sample count in joint mode",
+    "bound_by": "walltime",
+    "cores_help": false,
+    "fans_out": false,
+    "fan_out_over": null,
+    "memory_hint": "Moderate. The cost is time rather than memory, and a sampler chain cannot be shortened by adding cores.",
+    "basis": "derived_from_algorithm"
+  },
+  "for_people": "Divides a sample's spots into a chosen number of groups, using position as well as expression."
+}

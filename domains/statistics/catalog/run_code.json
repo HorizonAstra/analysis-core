@@ -1,0 +1,102 @@
+{
+  "id": "run_code",
+  "version": "0.1.0",
+  "title": "Run submitted code against this domain's primitives",
+  "summary": "For the arrangement between analyses, where no capability covers what is being computed: filtering a result on a condition, joining two of them, deriving a quantity, defining a group by a rule that suits one question. Runs Python you supply, with a table available as `df` when one is given, and this domain's methods importable for the ones this catalog does not yet offer as capabilities of their own. Call `save(object, name)` for anything that should survive the run; nothing else does. Read what is on offer before reaching for this: a method that already exists here carries its own guardrails, a fixed environment and a record of exactly what ran, and writing it out again loses all three and gains nothing.",
+  "level": 4,
+  "scope": "cross_sample",
+  "consumes": [],
+  "executes_submitted_code": true,
+  "kernel": {
+    "language": "python",
+    "entrypoint": "kernels/run_code.py",
+    "files": [
+      "kernels/run_code.py"
+    ],
+    "sha256": {
+      "kernels/run_code.py": "3a755bb5a0c841ea54c8d4c986f33b386797d1c0047ad7d3416c8865586c2c48"
+    },
+    "third_party": [
+      {
+        "name": "pandas",
+        "version": "pinned by the manifest below",
+        "note": "The table is handed over as a data frame, so its behaviour is part of what the submitted code sees."
+      },
+      {
+        "name": "numpy",
+        "version": "pinned by the manifest below"
+      }
+    ]
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "MPLBACKEND": "Agg"
+    },
+    "manifest": "environments/requirements.txt",
+    "provenance": "The statistics environment, built from the pin beside it. Submitted code reaches exactly the versions every other capability in this domain reaches.",
+    "activation": {
+      "kind": "venv",
+      "path": "environments/py",
+      "note": "Entered by putting its bin directory first on PATH.",
+      "ready_when": "bin/python",
+      "restore_with": "bash ../restore.sh"
+    },
+    "manifest_sha256": "ab853b8109e0e7173b99f8a4e684af6dcb04defb35537d4c7bd9f18e72431eb7"
+  },
+  "inputs": [
+    {
+      "name": "code",
+      "type": "text",
+      "format": "python",
+      "required": true,
+      "staged_as": "{data_dir}/submitted.py",
+      "description": "The Python to run. `df` holds the table when one was given, `pd` and `np` are imported, and this domain's methods are importable as `primitives.<module>`.\n\nNothing survives the run unless it is saved. Each run is a fresh process: no variable, import or frame from an earlier one is still here, and there is no session to reach back into, so work that has to share state belongs in one run. Call `save(object, name)` for every result worth keeping: a data frame is written as a table, a figure as an image, anything else as JSON. Calling a method from here saves nothing on its own, whatever it returns.\n\nPrint a summary and save the whole thing. The top and bottom rows of a ranking are enough to reason from; printing thousands of rows fills the conversation with the result instead of the answer, and the file is where the result belongs."
+    },
+    {
+      "name": "table",
+      "type": "file",
+      "format": "tsv",
+      "required": false,
+      "staged_as": "{data_dir}/table.tsv",
+      "description": "A table to work on, available as `df`. Usually an output of an earlier run."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "results",
+      "type": "directory",
+      "format": "directory",
+      "staged_as": "{output_base}",
+      "returnable": true,
+      "returnable_note": "What comes back is whatever the submitted code chose to save, so this flag cannot mean here what it means elsewhere. On a machine holding data that must not leave, decline to offer this capability rather than relying on the flag.",
+      "description": "Everything the code saved, plus saved.json listing it, or error.txt when the code raised.",
+      "interpretation": "The code that produced this is recorded in the manifest as the input it was. Read it before trusting the result: this capability describes how the code ran, never what it computed."
+    }
+  ],
+  "parameters": [],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": false,
+    "note": "Unknowable. Whether a run repeats depends on the submitted code, which is not this contract's to describe. Anything sampling has to seed itself."
+  },
+  "resources": {
+    "scales_with": "whatever was submitted",
+    "bound_by": "cpu",
+    "cores_help": false,
+    "fans_out": false,
+    "basis": "unknown",
+    "memory_hint": "Not predictable. Cpu time and written file size are capped in the kernel; memory is the machine's to bound."
+  },
+  "interpretation": "This is the only entry here whose behaviour its entry does not describe, because the behaviour arrives with the request. So a result from it carries no statement of what method produced it and no caveats about how to read it, and both of those have to come from whoever wrote the code. Where the number matters to a conclusion, say that it came from something written for the occasion rather than from an established method. Where a capability exists for what is being computed, call that one instead.",
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "python3 {entrypoint} --code {data_dir}/submitted.py --table {data_dir}/table.tsv --out {output_base}"
+  },
+  "notes": "Replaces the run_code tool that lived in the MCP server, where there was no boundary at which to record what had been run.",
+  "for_people": "Runs an analysis written for the question, where no other capability covers it."
+}

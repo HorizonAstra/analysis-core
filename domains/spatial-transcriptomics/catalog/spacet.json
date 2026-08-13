@@ -1,0 +1,133 @@
+{
+  "id": "spacet",
+  "version": "0.1.0",
+  "title": "Cell type deconvolution",
+  "summary": "Estimate what fraction of each spot is each cell type, since a spot holds several cells of mixed types.",
+  "level": 1,
+  "scope": "per_sample",
+  "consumes": [
+    "harmonize"
+  ],
+  "kernel": {
+    "language": "r",
+    "entrypoint": "kernels/spacet/R/run_spacet.R",
+    "files": [
+      "kernels/spacet/R/run_spacet.R"
+    ],
+    "sha256": {
+      "kernels/spacet/R/run_spacet.R": "5908c564232b73d00dcf0b274058d0cecead643c2f7481f903384c7c61d255a7"
+    },
+    "functions": [],
+    "third_party": [
+      {
+        "name": "SpaCET",
+        "version": "1.4.0",
+        "note": "Carries the entire computation, including the reference profiles each cancer type is deconvolved against. The file listed above contains no mathematics of its own, so this package version is the whole scientific pin."
+      },
+      {
+        "name": "R",
+        "version": "4.4.1",
+        "note": "The base image version."
+      }
+    ]
+  },
+  "environment": {
+    "manifest": null,
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "images": {
+      "r": "tumorspace_r.sif"
+    },
+    "digests": {
+      "tumorspace_r.sif": "07722fde3c28cfece589f4cf3772cd11e7161cc76821234aadb40995ba1c0c77"
+    },
+    "provenance": "Digest read from the build on randi dated 2026-07-02. The recipe cannot regenerate it: build_r_container.sh resolves CRAN against 'latest' rather than a dated snapshot, so this file is currently the only record of the versions below."
+  },
+  "invocation": {
+    "style": "named",
+    "staging": "directory",
+    "template": "Rscript {entrypoint} --raw-data-dir {data_dir} --outdir {output_base} --cancer-type {cancer_type} --cores {cores} --ref-dir {data_dir}/reference"
+  },
+  "inputs": [
+    {
+      "name": "matrix",
+      "type": "file",
+      "format": "dense_tsv_no_header",
+      "required": true,
+      "staged_as": "{data_dir}/M.txt",
+      "produced_by": "harmonize",
+      "from_role": "matrix",
+      "description": "Spots by genes."
+    },
+    {
+      "name": "features",
+      "type": "file",
+      "format": "tsv_one_column",
+      "required": true,
+      "staged_as": "{data_dir}/features.txt",
+      "produced_by": "harmonize",
+      "from_role": "features",
+      "description": "Gene names. Duplicates are collapsed before deconvolution."
+    },
+    {
+      "name": "positions",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/barcodes_positions.txt",
+      "produced_by": "harmonize",
+      "from_role": "positions",
+      "description": "Spot coordinates. Note this capability reads positions rather than barcodes.txt for its spot labels."
+    },
+    {
+      "name": "ref_dir",
+      "type": "directory",
+      "required": true,
+      "staged_as": "{data_dir}/reference",
+      "description": "The reference_data directory. It must be the one holding Hg38_GeneNames_MultipleFormats.txt, not a subdirectory of it: the script joins that filename onto whatever path it is given.",
+      "from_site": "tumorspace"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "proportions",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/Spacet_Matrix.txt",
+      "description": "Spots by cell types, each row summing to one. Feeding this to differential_abundance as its matrix is what produces enriched cell types instead of enriched genes."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "cancer_type",
+      "type": "string",
+      "default": "LUAD",
+      "description": "Which reference to deconvolve against, as a SpaCET code such as LUAD or BRCA. A lookup table exists under reference_data but the changelog states it is documentation only and is never read by any script, so this value is chosen by hand.",
+      "affects_results": true
+    },
+    {
+      "name": "cores",
+      "type": "integer",
+      "default": 8,
+      "description": "Parallel workers. Affects speed only.",
+      "affects_results": false
+    }
+  ],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "This script sets no seed and draws nothing itself. Whether a run reproduces therefore depends entirely on the package internals, which is not something this repository can assert. Treat the claim as unverified until a repeat run confirms it."
+  },
+  "resources": {
+    "scales_with": "spots x reference size",
+    "bound_by": "cpu",
+    "cores_help": true,
+    "fans_out": false,
+    "fan_out_over": null,
+    "memory_hint": "Moderate. Unlike most capabilities here, adding cores genuinely helps, and the script exposes a parameter for it.",
+    "basis": "derived_from_algorithm"
+  },
+  "for_people": "Estimates what mix of cell types each spot holds, since a spot covers several cells."
+}

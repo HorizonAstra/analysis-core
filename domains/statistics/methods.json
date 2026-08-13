@@ -1,0 +1,113 @@
+{
+  "note": "What this domain can compute, written for a reader rather than for a caller. A catalog entry describes one capability, and most of what is here is not a capability of its own: it is a method that submitted code imports as `primitives.<module>`. Nothing lists those, so nothing could show them, and a person reading what the product does saw two entries where there are twenty one methods. Every module below is a real file in `kernels/primitives/`, and a check fails if that stops being true in either direction.",
+  "not_methods": [
+    "jsonsafe"
+  ],
+  "methods": [
+    {
+      "module": "hypothesis_tests",
+      "name": "Hypothesis Tests",
+      "what": "Paired, unpaired and unequal variance t-tests, one way and two way ANOVA, and a per feature test for volcano summaries."
+    },
+    {
+      "module": "correlation",
+      "name": "Correlation",
+      "what": "Correlates any two sets of features, every pair at once. Corrected within subject where the data is repeated measures, with the uncorrected estimate reported beside it."
+    },
+    {
+      "module": "regression",
+      "name": "Regression",
+      "what": "Linear, polynomial, multiple, logistic and regularized models, with effect sizes and confidence intervals."
+    },
+    {
+      "module": "mixed_models",
+      "name": "Mixed Models",
+      "what": "Random intercept models for repeated measures, fitted to one feature or to many in one call."
+    },
+    {
+      "module": "survival",
+      "name": "Survival",
+      "what": "Kaplan-Meier curves by group and Cox models. You define the event and the censoring."
+    },
+    {
+      "module": "prediction",
+      "name": "Prediction",
+      "what": "Decision trees, random forests and gradient boosting, with a cross validated score and feature importances."
+    },
+    {
+      "module": "multivariate",
+      "name": "Partial Least Squares",
+      "what": "Projects many collinear features onto a few components that track the outcome, and ranks features by importance."
+    },
+    {
+      "module": "ordination",
+      "name": "Ordination",
+      "what": "Principal coordinates from a distance matrix, with tests for whether groups separate and whether their spread differs."
+    },
+    {
+      "module": "distances",
+      "name": "Distances",
+      "what": "Distance between every pair of samples, by Bray-Curtis, Jaccard, Canberra, Euclidean and others."
+    },
+    {
+      "module": "diversity",
+      "name": "Diversity",
+      "what": "Within sample diversity, with every index named for exactly what it computes."
+    },
+    {
+      "module": "dimensionality_reduction",
+      "name": "Dimensionality Reduction",
+      "what": "Projects many features onto a few axes with t-SNE, for looking at structure."
+    },
+    {
+      "module": "clustering",
+      "name": "Clustering",
+      "what": "Groups samples by density, and reports how well separated the groups are."
+    },
+    {
+      "module": "association_rule",
+      "name": "Association Rules",
+      "what": "Finds features that occur together more often than chance, with support, confidence and lift."
+    },
+    {
+      "module": "mediation",
+      "name": "Mediation",
+      "what": "Splits the effect of one variable on another into a direct path and a path through a mediator, with a bootstrapped interval."
+    },
+    {
+      "module": "confounders",
+      "name": "Confounding",
+      "what": "Variance inflation for collinear predictors, and change in estimate testing for candidate confounders."
+    },
+    {
+      "module": "multiple_testing",
+      "name": "Multiple Testing",
+      "what": "False discovery rate control across a set of tests, by Benjamini-Hochberg, Bonferroni or Holm."
+    },
+    {
+      "module": "aggregation",
+      "name": "Repeated Measurements",
+      "what": "Collapses a subject's repeated measurements into one value per feature, by mean, median, first, last, slope or area under the curve."
+    },
+    {
+      "module": "transformations",
+      "name": "Transformations",
+      "what": "Centered log ratio, log, total sum scaling and Fisher z, and filtering features by how often and how strongly they appear."
+    },
+    {
+      "module": "ratios",
+      "name": "Feature Ratios",
+      "what": "Ratios and log ratios of one feature to another, across every sample at once."
+    },
+    {
+      "module": "simple",
+      "name": "Descriptive Summaries",
+      "what": "Mean, median, variance, standard deviation, range, sum, minimum and maximum."
+    },
+    {
+      "module": "histogram",
+      "name": "Histograms",
+      "what": "Bins a distribution, with the bin width chosen by a stated rule or set by hand."
+    }
+  ]
+}

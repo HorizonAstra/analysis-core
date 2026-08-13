@@ -1,0 +1,61 @@
+{
+  "capability": "differential_abundance",
+  "contract_version": "0.1.0",
+  "kernel_sha256": {
+    "workflows/tumorspace_core/julia/sg_diff_abundance.jl": "0e95c5d5ef20db8c9200dc6dafead8a634aa9072fa878c73742e20a579e9fb95"
+  },
+  "third_party": [
+    {
+      "name": "HypothesisTests.jl",
+      "version": "0.11.4",
+      "note": "Supplies MannWhitneyUTest. The test statistic comes from this package, so its version is part of the scientific surface. Resolved from workflows/tumorspace_core/julia/Manifest.toml."
+    },
+    {
+      "name": "julia",
+      "version": "1.9.4",
+      "note": "Read from the image. Manifest.toml records 1.9.0, so the lockfile and the runtime disagree; the image is what executes. The RNG stream is a language guarantee, so this matters under a fixed seed."
+    }
+  ],
+  "parameters": {
+    "num_shuffle": 20,
+    "seed": 42
+  },
+  "profile": "randi",
+  "images": {
+    "julia": "julia_1.9_with_gotree.sif"
+  },
+  "image_digests": {
+    "julia_1.9_with_gotree.sif": "9c98d4e052ae5bf6e43f92b7f4e86dce40ecbf4030cd8b0b31db732d8eeaab45"
+  },
+  "reproducible": true,
+  "started": "2026-08-07T15:35:52.052751+00:00",
+  "finished": "2026-08-07T15:37:52.157754+00:00",
+  "resumed_steps": 0,
+  "inputs": {
+    "sg_pairs": {
+      "path": "/ess/scratch/scratch1/rijulsareen/cap_out/rf_seed42/sg_pairs",
+      "sha256": "d6a457807af00aadb4f40cf3d353fc385fc7a167b22e0ac5c24a62f5fe0028e7"
+    },
+    "sg_pair_members": {
+      "path": "/ess/scratch/scratch1/rijulsareen/cap_out/rf_seed42/sg_pair_members",
+      "sha256": "38607debe91dcb73679b648ea3551799faf5c9dbe9f2da408f422f86d6f7d9a7"
+    },
+    "matrix": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data/M.txt",
+      "sha256": "53fa9310e90e0359b42afd42007d49a7f63c9497bcfc15c2dd47b66e269df93c"
+    },
+    "observations": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data/barcodes.txt",
+      "sha256": "b4bd89f2ba7640b49e2b8c89d053e1505289c424c94f662b03e1b128c87864d4"
+    },
+    "features": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data/features.txt",
+      "sha256": "3c2c49efb159c62fd3fb048b072b00e824ddc379cdfe035ef3fd5dec4c98a85f"
+    }
+  },
+  "outputs": {
+    "results": "df04c60cc99d0e3242127192e7c2d99b611fad086e1f3a15d9ba633a5158f49b",
+    "significant": "94e044bb89e8ecf12b2873d03b962e2e299abae724c583130f8f8cf3f7cc50c9",
+    "counts_by_node": "da240b9092aae12e78bcc47a224a7bb274be158d370d79767966af0b14b8afdc"
+  }
+}

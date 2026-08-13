@@ -1,0 +1,184 @@
+{
+  "id": "spatialview_bundle",
+  "version": "0.1.0",
+  "title": "Assemble a spatial viewer bundle",
+  "summary": "Writes a directory in the layout an interactive spatial viewer reads: the expression matrix sparsely, the spot table with its cluster assignment, marker genes per cluster, and the tissue image with its scale factors. Produces no numbers of its own.",
+  "level": 2,
+  "scope": "per_sample",
+  "consumes": [
+    "harmonize",
+    "bayesspace"
+  ],
+  "kernel": {
+    "language": "python",
+    "entrypoint": "kernels/spatialview/build_bundle.py",
+    "files": [
+      "kernels/spatialview/build_bundle.py"
+    ],
+    "sha256": {
+      "kernels/spatialview/build_bundle.py": "fcccc73c902d635920ee96bff5301af12c3016299def4db354d9929327c5f6fb"
+    },
+    "third_party": []
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {},
+    "provenance": "No image and no manifest. Standard library only, so any Python this tree already requires can run it.",
+    "activation": {
+      "kind": "working_directory",
+      "path": ".",
+      "note": "Nothing to enter. The kernel imports nothing that is not in the standard library."
+    }
+  },
+  "inputs": [
+    {
+      "name": "matrix",
+      "type": "file",
+      "format": "dense_tsv_no_header",
+      "required": true,
+      "staged_as": "{data_dir}/M.txt",
+      "produced_by": "harmonize",
+      "from_role": "matrix",
+      "description": "Spots by features."
+    },
+    {
+      "name": "observations",
+      "type": "file",
+      "format": "tsv_one_column",
+      "required": true,
+      "staged_as": "{data_dir}/barcodes.txt",
+      "produced_by": "harmonize",
+      "from_role": "observations",
+      "description": "Row labels for the matrix, in its row order."
+    },
+    {
+      "name": "features",
+      "type": "file",
+      "format": "tsv_one_column",
+      "required": true,
+      "staged_as": "{data_dir}/features.txt",
+      "produced_by": "harmonize",
+      "from_role": "features",
+      "description": "Feature names, in the matrix's column order."
+    },
+    {
+      "name": "positions",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/barcodes_positions.txt",
+      "produced_by": "harmonize",
+      "from_role": "positions",
+      "description": "Spot coordinates. The viewer draws in full-resolution pixels, so the pixel columns are the ones that matter here rather than the millimetre ones."
+    },
+    {
+      "name": "clusters",
+      "type": "file",
+      "format": "csv",
+      "required": true,
+      "staged_as": "{data_dir}/clusters.csv",
+      "produced_by": "bayesspace",
+      "description": "One row per spot, carrying its cluster. First column is the barcode; the assignment is the last column unless cluster_column says otherwise. Any clustering capability's output will do."
+    },
+    {
+      "name": "spatial_dir",
+      "type": "directory",
+      "required": true,
+      "staged_as": "{data_dir}/spatial",
+      "stage_mode": "link",
+      "from_role": [
+        "instrument_run/spatial",
+        "spatial"
+      ],
+      "description": "The spatial/ folder of the Space Ranger run this sample came from, for the tissue image and its scale factors. Nothing downstream of harmonize keeps a copy of these, so this has to come from the original run."
+    },
+    {
+      "name": "markers",
+      "type": "file",
+      "format": "csv",
+      "required": false,
+      "staged_as": "{data_dir}/markers.csv",
+      "produced_by": "de_analysis",
+      "produced_output": "markers_top",
+      "description": "Differential expression results, to fill the marker gene list shown per cluster. Needs a gene column and a cluster column; without it every cluster is listed as undefined."
+    },
+    {
+      "name": "gene_names",
+      "type": "file",
+      "format": "tsv",
+      "required": false,
+      "staged_as": "{data_dir}/gene_names.tsv.gz",
+      "from_role": [
+        "counts/features.tsv.gz",
+        "instrument_run/filtered_feature_bc_matrix/features.tsv.gz"
+      ],
+      "description": "The instrument's own feature list, which pairs each identifier with its symbol. Only Space Ranger writes both, so this comes back to the same run the tissue image does. Without it the viewer shows identifiers, which are correct and unreadable."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "bundle",
+      "type": "directory",
+      "format": "directory",
+      "staged_as": "{output_base}",
+      "returnable": true,
+      "description": "One directory per sample, in the layout the viewer reads.",
+      "interpretation": "This is spot level expression, and looking at it is what sends it: a view drawn in a browser has already delivered every spot it drew. So who may open a bundle is the control, and it is checked at the moment of asking rather than assumed from where the files sit. Marking this as unable to leave its machine did not protect anything, since the same measurements leave as the preparation step's own output and would reach the same browser either way; it only meant nobody could open the view.\n\nAnything computed inside a viewer from this bundle happened in a browser and has no run record here. Treat a number produced that way as a way of looking rather than as a result, and re-run it as a capability before it is reported.",
+      "viewer": "spatialview"
+    }
+  ],
+  "parameters": [
+    {
+      "name": "sample",
+      "type": "string",
+      "default": "sample",
+      "affects_results": false,
+      "description": "Name of the sample directory inside the bundle. This is what the viewer labels it.",
+      "is_sample_name": true
+    },
+    {
+      "name": "cluster_column",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "Which column of the clusters file holds the assignment. Empty means the last one."
+    },
+    {
+      "name": "decimals",
+      "type": "integer",
+      "default": 3,
+      "affects_results": true,
+      "description": "Decimal places kept in the expression matrix. Fewer makes a smaller download, and everything here is drawn rather than tested, but it is still a rounding of the measurements."
+    },
+    {
+      "name": "gene_labels",
+      "type": "string",
+      "default": "symbol",
+      "affects_results": false,
+      "description": "symbol or id. What genes are called in the searchable list and in the marker lists, which are always the same as each other. Falls back to the identifier for a gene that has no symbol, and to identifiers throughout when the feature list above was not given."
+    }
+  ],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "Rearranges its inputs. The same inputs give the same bundle."
+  },
+  "resources": {
+    "scales_with": "spots times features",
+    "bound_by": "io",
+    "cores_help": false,
+    "fans_out": false,
+    "basis": "derived_from_algorithm",
+    "memory_hint": "The matrix is streamed a spot at a time and never held, so memory is one row rather than one sample."
+  },
+  "interpretation": "This decides nothing. It reorganises a clustering that some other capability produced, so a bundle is only as sound as the run that clustered it, and the caveats of that run still apply when looking at this one.",
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "python3 {entrypoint} --matrix {data_dir}/M.txt --observations {data_dir}/barcodes.txt --features {data_dir}/features.txt --positions {data_dir}/barcodes_positions.txt --clusters {data_dir}/clusters.csv --spatial-dir {data_dir}/spatial --markers {data_dir}/markers.csv --gene-names {data_dir}/gene_names.tsv.gz --gene-labels {gene_labels} --out {output_base} --sample {sample} --cluster-column {cluster_column} --decimals {decimals}"
+  },
+  "notes": "The viewer itself is not shipped here. It is third-party software under its own licence, and what this produces is our data in a published layout.",
+  "for_people": "Assembles a sample into an interactive view, with its spots drawn on the tissue image."
+}

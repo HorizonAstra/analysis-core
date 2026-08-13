@@ -1,0 +1,73 @@
+{
+  "id": "toolchain_report",
+  "version": "0.1.0",
+  "title": "What the pipeline toolchain reports about itself",
+  "summary": "Asks each tool in this domain's environment for its version and writes them out. It computes nothing scientific. It exists so that an environment can be proven to activate on a machine before anything expensive is submitted into it.",
+  "level": 0,
+  "scope": "per_sample",
+  "consumes": [],
+  "kernel": {
+    "language": "shell",
+    "entrypoint": "kernels/report_toolchain.sh",
+    "files": [
+      "kernels/report_toolchain.sh"
+    ],
+    "sha256": {
+      "kernels/report_toolchain.sh": "85e3d83743ec0860e19743bd871ecf815015da905fecb994a4f8e7a38895a48a"
+    },
+    "third_party": [
+      {
+        "name": "biobakery_workflows",
+        "version": "pinned by the lockfile below",
+        "note": "The versions this reports are the answer, so they are not asserted here."
+      }
+    ]
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {},
+    "manifest": "environments/biobakery_workflows.20260724.lock",
+    "manifest_sha256": "7ab12b16a7be9ca1804705294c4eef6013559613a0ebf6fbe57b806cdebfc096",
+    "provenance": "No image. A conda environment pinned by the lockfile above.",
+    "activation": {
+      "kind": "conda_prefix",
+      "path": "environments/biobakery_workflows",
+      "note": "The pipeline's conda environment. Where conda itself lives is a property of the machine and comes from the site.",
+      "ready_when": "bin/metaphlan",
+      "restore_with": "conda create --prefix . --file ../biobakery_workflows.20260724.lock"
+    }
+  },
+  "inputs": [],
+  "outputs": [
+    {
+      "name": "versions",
+      "type": "file",
+      "format": "text",
+      "staged_as": "{output_base}/toolchain.txt",
+      "description": "One line per tool, as that tool reports itself."
+    }
+  ],
+  "parameters": [],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "Reads version strings. Nothing is sampled."
+  },
+  "resources": {
+    "scales_with": "nothing",
+    "bound_by": "trivial",
+    "cores_help": false,
+    "fans_out": false,
+    "basis": "measured",
+    "memory_hint": "Four processes that print a line each."
+  },
+  "invocation": {
+    "style": "positional",
+    "staging": "none",
+    "template": "bash {entrypoint} {output_base}/toolchain.txt"
+  },
+  "notes": "Written to prove conda activation end to end on a real machine without needing study data.",
+  "purpose": "operations"
+}

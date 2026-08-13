@@ -1,0 +1,142 @@
+{
+  "id": "harmonize",
+  "version": "0.1.0",
+  "title": "Sample ingest",
+  "summary": "Turn one Space Ranger output directory into the flat files every capability downstream expects.",
+  "level": 0,
+  "scope": "per_sample",
+  "consumes": [],
+  "kernel": {
+    "language": "r",
+    "entrypoint": "kernels/preprocessing/R/preprocess_harmonize.R",
+    "files": [
+      "kernels/preprocessing/R/preprocess_harmonize.R"
+    ],
+    "sha256": {
+      "kernels/preprocessing/R/preprocess_harmonize.R": "91e21e19b4b2f5b02e49144e6e2f789cfdfa4a68682fa2dd54ec3be65d618d80"
+    },
+    "functions": [],
+    "third_party": [
+      {
+        "name": "R",
+        "version": "4.4.1"
+      },
+      {
+        "name": "Matrix",
+        "version": "1.7.0",
+        "note": "Reads the sparse matrix and densifies it. The dense form is what every kernel downstream expects."
+      },
+      {
+        "name": "data.table",
+        "version": "1.18.4"
+      },
+      {
+        "name": "jsonlite",
+        "version": "2.0.0",
+        "note": "Reads scalefactors_json, which is where the pixels per micron conversion comes from. Every spatial decision in the pipeline rests on that one number."
+      }
+    ]
+  },
+  "environment": {
+    "manifest": null,
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "images": {
+      "r": "tumorspace_r.sif"
+    },
+    "digests": {
+      "tumorspace_r.sif": "07722fde3c28cfece589f4cf3772cd11e7161cc76821234aadb40995ba1c0c77"
+    },
+    "provenance": "Versions read from the built image on randi."
+  },
+  "invocation": {
+    "style": "named",
+    "staging": "directory",
+    "template": "Rscript {entrypoint} --spaceranger-dir {data_dir} --output-dir {output_base} --sample-id {sample_id}"
+  },
+  "inputs": [
+    {
+      "name": "spaceranger_dir",
+      "type": "directory",
+      "required": true,
+      "staged_as": "{data_dir}",
+      "stage_mode": "link",
+      "from_role": [
+        "instrument_run",
+        "."
+      ],
+      "description": "A Space Ranger output directory: filtered_feature_bc_matrix plus spatial/. Linked rather than copied, since it is read once and is the largest thing here."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "matrix",
+      "type": "file",
+      "format": "dense_tsv_no_header",
+      "staged_as": "{output_base}/M.txt",
+      "description": "Spots by features, densified."
+    },
+    {
+      "name": "observations",
+      "type": "file",
+      "format": "tsv_one_column",
+      "staged_as": "{output_base}/barcodes.txt",
+      "description": "Row labels for the matrix."
+    },
+    {
+      "name": "positions",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/barcodes_positions.txt",
+      "description": "Spot coordinates. The two millimetre columns are derived from the scale factors file, not measured, and every spatial decision downstream rests on them."
+    },
+    {
+      "name": "features",
+      "type": "file",
+      "format": "tsv_one_column",
+      "staged_as": "{output_base}/features.txt",
+      "description": "Feature names, with a header."
+    },
+    {
+      "name": "features_alias",
+      "type": "file",
+      "format": "tsv_one_column",
+      "staged_as": "{output_base}/genes.txt",
+      "description": "A second copy of features.txt under the name the differential abundance kernel hardcodes. This capability writes both because that kernel opens genes.txt and nothing reconciles the two names. Downstream contracts no longer need it, since they state the filename their kernel opens and the adapter places the file there, but it is declared because this step does in fact produce it."
+    },
+    {
+      "name": "passing_barcodes",
+      "type": "file",
+      "format": "tsv_one_column",
+      "staged_as": "{output_base}/passing_barcodes.txt",
+      "description": "Barcodes surviving the QC filter, read by the UMI QC step."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "sample_id",
+      "type": "string",
+      "default": "sample",
+      "description": "Label only. Defaults in the kernel to the output directory's name.",
+      "is_sample_name": true
+    }
+  ],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "A format conversion and a filter. No random number is drawn."
+  },
+  "resources": {
+    "scales_with": "spots x features, since the sparse matrix is written out dense",
+    "bound_by": "memory",
+    "cores_help": false,
+    "fans_out": false,
+    "fan_out_over": null,
+    "memory_hint": "The dense matrix is the driver and is far larger than the sparse input it came from.",
+    "basis": "derived_from_algorithm"
+  },
+  "notes": "A second implementation of this step exists for datasets pulled from GEO rather than from Space Ranger. The two do not agree. This one writes six files and stops with an error when the scale factors are missing; the other writes four and, where that file is absent, writes zero into both coordinate columns and continues. A dataset taking the second path reaches the spatial optimisation with every spot stacked at the origin, and nothing raises. Only this path is contracted, because only this path produces what the rest of the pipeline needs.",
+  "for_people": "Turns one Space Ranger output directory into the files every later step reads."
+}

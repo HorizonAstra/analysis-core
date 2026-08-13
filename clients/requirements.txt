@@ -1,0 +1,86 @@
+# Pinned snapshot of the working environment.
+# Regenerate after changing dependencies:  .venv/bin/python3 -m pip freeze > requirements.txt
+# Core direct deps: anthropic, mcp, pandas, numpy, scipy, statsmodels, lifelines,
+#                   scikit-learn, scikit-bio, mlxtend, matplotlib, seaborn
+# Data layer (Parquet/DuckDB acceleration) + the web product (FastAPI browser chat):
+duckdb==1.5.4
+pyarrow==24.0.0
+fastapi==0.138.0
+markdown==3.10.2
+bleach==6.4.0
+# LLM backends: anthropic (above) is the default; google-genai powers the Gemini
+# backend (LLM_PROVIDER=google, lightest model by default).
+google-genai==2.10.0
+
+annotated-types==0.7.0
+anthropic==0.109.1
+anyio==4.13.0
+array-api-compat==1.15.0
+attrs==26.1.0
+autograd==1.8.0
+autograd-gamma==0.5.0
+biom_format==2.1.17
+certifi==2026.5.20
+cffi==2.0.0
+charset-normalizer==3.4.7
+click==8.4.1
+contourpy==1.3.3
+cryptography==48.0.1
+cycler==0.12.1
+decorator==5.3.1
+distro==1.9.0
+docstring_parser==0.18.0
+fonttools==4.63.0
+formulaic==1.2.2
+h11==0.16.0
+h5py==3.16.0
+httpcore==1.0.9
+httpx==0.28.1
+httpx-sse==0.4.3
+idna==3.18
+interface_meta==2.0.1
+jiter==0.15.0
+joblib==1.5.3
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+kiwisolver==1.5.0
+lifelines==0.30.3
+matplotlib==3.11.0
+mcp==1.27.2
+mlxtend==0.25.0
+narwhals==2.22.1
+natsort==8.4.0
+numpy==2.4.6
+packaging==26.2
+pandas==2.3.3
+patsy==1.0.2
+pillow==12.2.0
+pycparser==3.0
+pydantic==2.13.4
+pydantic-settings==2.14.1
+pydantic_core==2.46.4
+PyJWT==2.13.0
+pyparsing==3.3.2
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.2
+python-multipart==0.0.32
+pytz==2026.2
+referencing==0.37.0
+requests==2.34.2
+rpds-py==2026.5.1
+scikit-bio==0.7.3
+scikit-learn==1.9.0
+scipy==1.17.1
+seaborn==0.13.2
+six==1.17.0
+sniffio==1.3.1
+sse-starlette==3.4.4
+starlette==1.3.0
+statsmodels==0.14.6
+threadpoolctl==3.6.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+tzdata==2026.2
+urllib3==2.7.0
+uvicorn==0.49.0
+wrapt==2.2.1

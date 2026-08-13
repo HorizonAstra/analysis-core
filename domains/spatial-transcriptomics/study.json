@@ -1,0 +1,81 @@
+{
+  "_comment": "What this domain's data looks like on disk. Infrastructure reads this to recognise and load it; it does not know the shapes itself, in the same way it does not know what any capability computes.",
+  "label": "Spatial Transcriptomics",
+  "notes": "Tumour samples measured with position kept: which regions a tissue breaks into, and which genes differ between neighbouring regions.",
+  "_datasets_note": "Three shapes, because the same science exists at three stages and the output of one stage is the input of the next. Declared most specific first. A folder is whichever shape it fits best, so a Space Ranger run is not mistaken for a bare tree of directories.",
+  "datasets": [
+    {
+      "id": "spaceranger_run",
+      "label": "A Space Ranger run",
+      "notes": "Raw output from the instrument's own pipeline. The only place the tissue image and its scale factors exist, so anything that draws on tissue has to come back here.",
+      "extensions": [
+        ".csv",
+        ".h5",
+        ".json",
+        ".png"
+      ],
+      "roles": {
+        "counts": [
+          "filtered_feature_bc_matrix"
+        ],
+        "spatial": [
+          "spatial"
+        ]
+      },
+      "requires": [
+        "counts",
+        "spatial"
+      ]
+    },
+    {
+      "id": "harmonized_samples",
+      "label": "Harmonised samples",
+      "notes": "One folder per sample, each holding the densified matrix and its labels. What the spatial capabilities read. Where the instrument's own run was kept for a sample it sits beside them, under instrument_run, and it is the only place the tissue image and its scale factors exist. A sample can carry both: the run is not a stage a sample leaves behind, and its absence means it was never brought here rather than that it was used up.",
+      "extensions": [
+        ".txt",
+        ".tsv"
+      ],
+      "sample_dir": ".",
+      "roles": {
+        "matrix": [
+          "m.txt"
+        ],
+        "observations": [
+          "barcodes.txt"
+        ],
+        "features": [
+          "features.txt"
+        ],
+        "positions": [
+          "barcodes_positions"
+        ],
+        "instrument_run": [
+          "spaceranger"
+        ]
+      },
+      "requires": [
+        "matrix",
+        "observations",
+        "features"
+      ]
+    },
+    {
+      "id": "study",
+      "label": "A study of samples",
+      "notes": "A sample tree with optional root tables: a cohort index and a gene symbol map.",
+      "extensions": [
+        ".csv",
+        ".tsv"
+      ],
+      "sample_dir": "samples",
+      "roles": {
+        "cohort": [
+          "cohort"
+        ],
+        "genes": [
+          "gene"
+        ]
+      }
+    }
+  ]
+}

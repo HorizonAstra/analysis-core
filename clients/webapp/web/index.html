@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Multiomics</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <div class="main-col">
+      <header class="topbar">
+        <div class="bar">
+          <div class="left">
+            <button class="iconbtn" id="menuBtn" aria-label="Menu">
+              <img src="/static/icons/00-hexagon.svg?v=5" width="40" height="40" alt="" />
+            </button>
+            <span class="brand">Multiomics</span>
+            <button class="infobtn" id="infoBtn" aria-label="What this can do" title="What this can do">
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+                <circle cx="12" cy="7.8" r="1.15" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+          <div class="right">
+            <button class="ghost" id="viewBtn" aria-label="Visualizers" title="Visualizers">
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                <rect x="3.5" y="4.5" width="17" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M3.5 14l4.2-3.6 3.1 2.6 3.6-4 6.1 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <circle cx="9" cy="8.6" r="1.2" fill="currentColor"/>
+              </svg>
+              <span>Visualizers</span>
+            </button>
+            <button class="ghost" id="studyBtn" aria-label="Study Selection">
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H19v13H6.5A2.5 2.5 0 0 0 4 19.5zM19 17v3H6.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              </svg>
+              <span id="studyLabel">Studies</span>
+            </button>
+            <button class="ghost" id="panelToggle" aria-label="Toggle results">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M4 6h10M4 12h16M4 18h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <span>Results</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main id="scroll" class="scroll">
+        <div class="wrap thread" id="thread"></div>
+      </main>
+
+      <footer class="composer">
+        <div class="wrap">
+          <form id="form" class="field">
+            <textarea id="input" rows="1" placeholder="Ask about a study…" autocomplete="off"></textarea>
+            <button id="send" type="submit" aria-label="Send" disabled>
+              <svg class="ic-send" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                <path d="M12 19V5M12 5l-6 6M12 5l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <svg class="ic-stop" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/>
+              </svg>
+            </button>
+          </form>
+          <div class="hint">AI can make mistakes. Review the results before relying on them.</div>
+        </div>
+      </footer>
+    </div>
+
+    <aside class="panel" id="panel" aria-label="Results">
+      <div class="resize" id="resize" title="Drag to resize"></div>
+      <div class="panel-body">
+        <!-- Work still going, wherever in the conversation it was started. One
+             place for it, because a long chat scatters the same information
+             across points too far apart to watch. Absent entirely when nothing
+             is running, rather than an empty heading. -->
+        <div class="going" id="going" hidden></div>
+        <div class="tree" id="tree"></div>
+        <div class="viewer" id="viewer" hidden></div>
+      </div>
+    </aside>
+  </div>
+  <div class="backdrop" id="backdrop"></div>
+
+  <!-- user + chats popup (opened by the top-left icon) -->
+  <div class="menu-pop" id="menuPop" hidden>
+    <button class="mp-new" id="mpNew">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>New chat</span>
+    </button>
+    <input class="mp-search" id="mpSearch" placeholder="Search chats" autocomplete="off" />
+    <div class="mp-chats" id="mpChats"></div>
+    <div class="mp-foot">
+      <span class="mp-user" id="mpUser"></span>
+      <button class="mp-logout" id="mpLogout">Sign out</button>
+    </div>
+  </div>
+
+  <!-- studies in scope for this chat (opened by the Studies button) -->
+  <div class="menu-pop study-pop" id="studyPop" hidden>
+    <div class="pop-head">
+      <div class="pop-title">Study Selection</div>
+    </div>
+    <div class="sp-list" id="spList"></div>
+    <div class="sp-foot">
+      <button class="sp-all" id="spAll" type="button">Select all</button>
+      <span class="sp-count" id="spCount"></span>
+    </div>
+  </div>
+
+  <!-- results that can be looked at rather than read (opened by the Visualizers button) -->
+  <div class="menu-pop view-pop" id="viewPop" hidden>
+    <div class="pop-head">
+      <div class="pop-title">Visualizers</div>
+    </div>
+    <div class="vw-list" id="vwList"></div>
+  </div>
+
+  <!-- capabilities (opened by the info button beside the name) -->
+  <div class="info-overlay" id="infoPop" hidden>
+   <div class="info-card">
+    <div class="pop-head">
+      <div class="pop-title">Capabilities</div>
+      <div class="pop-sub">Ask in plain language or in technical terms. Everything listed here is available to you.</div>
+      <button class="ip-close" id="ipClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ip-body" id="ipBody"></div>
+    <div class="pop-foot">Everything an analysis produces is kept, and appears in the Results panel.</div>
+   </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

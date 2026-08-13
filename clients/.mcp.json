@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "analysis-toolkit": {
+      "command": ".venv/bin/python3",
+      "args": ["src/McpServer/mcp_server.py"]
+    }
+  }
+}

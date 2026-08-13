@@ -1,0 +1,56 @@
+{
+  "capability": "bayesspace",
+  "contract_version": "0.1.0",
+  "kernel_sha256": {
+    "workflows/bayesspace/R/run_bayesspace.R": "1575dbf63028a1998bafc9a906a91070afbfce9e4a740462583a63be9e872541"
+  },
+  "third_party": [
+    {
+      "name": "BayesSpace",
+      "version": "1.16.0",
+      "note": "Carries the entire computation. The file listed above configures and calls it, so the version of this package is the scientific pin, not the hash of any file in this repository."
+    },
+    {
+      "name": "harmony",
+      "version": "2.0.5",
+      "note": "Batch integration, used only in joint mode across several samples."
+    },
+    {
+      "name": "mclust",
+      "version": "6.1.2",
+      "note": "Supplies the initialisation the sampler starts from."
+    },
+    {
+      "name": "R",
+      "version": "4.4.1",
+      "note": "The base image version. R's RNG stream is version dependent, so a different R can produce a different chain under the same seed."
+    }
+  ],
+  "parameters": {
+    "q": 8,
+    "n_pcs": 15,
+    "theta": 2,
+    "seed": 42
+  },
+  "profile": "randi",
+  "images": {
+    "r": "tumorspace_r.sif"
+  },
+  "image_digests": {
+    "tumorspace_r.sif": "07722fde3c28cfece589f4cf3772cd11e7161cc76821234aadb40995ba1c0c77"
+  },
+  "reproducible": true,
+  "started": "2026-08-07T15:05:35.786651+00:00",
+  "finished": "2026-08-07T15:07:18.277950+00:00",
+  "resumed_steps": 0,
+  "inputs": {
+    "sample_dir": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data",
+      "sha256": "1ce938c79c568f3ccf02a7bcbc9cf772e06c7837461c8078b57a896258c47fc3"
+    }
+  },
+  "outputs": {
+    "clusters": "8cf99583721a71c15588511558d55c938ceaa8f0d0cdfbfaeec2317fe3d72262",
+    "plot": "49fa4421d406e1ba5e0e6a1aebb2c95fb6a57fd1bb2e845d91bad59bf980cbda"
+  }
+}

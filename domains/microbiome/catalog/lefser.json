@@ -1,0 +1,182 @@
+{
+  "id": "lefser",
+  "version": "0.1.0",
+  "title": "Features that best separate two classes",
+  "summary": "Ranks features by a Kruskal-Wallis test, then scores the survivors by linear discriminant analysis, giving one signed effect size per feature. Two classes only, no covariates and no repeated measures.",
+  "level": 4,
+  "scope": "cross_sample",
+  "consumes": [],
+  "kernel": {
+    "language": "r",
+    "entrypoint": "kernels/r/run_lefser.R",
+    "files": [
+      "kernels/r/run_lefser.R"
+    ],
+    "sha256": {
+      "kernels/r/run_lefser.R": "18818227243335b12ffac00f8b493e55f364402a81acad73fab01ea1b3ba4b26"
+    },
+    "third_party": [
+      {
+        "name": "lefser",
+        "version": "1.20.2",
+        "note": "Carries the whole computation. The file above maps arguments onto it. Its default correction is none, which is the published LEfSe behaviour rather than a choice made here."
+      },
+      {
+        "name": "SummarizedExperiment",
+        "version": "1.40.0",
+        "note": "The container lefser takes its input in."
+      },
+      {
+        "name": "R",
+        "version": "4.5.0"
+      }
+    ]
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "manifest": "environments/r-stats/renv.lock",
+    "manifest_sha256": "2f88db60c49131ba17d3368398fb4b8b3011f554fb7f74a5db9257c3fe81f394",
+    "provenance": "No image. Runs as a subprocess inside the renv project this domain pins, which is the same one maaslin3 uses.",
+    "activation": {
+      "kind": "working_directory",
+      "path": "environments/r-stats",
+      "note": "renv project. Its .Rprofile puts the pinned packages on the library path, and only when R starts here.",
+      "ready_when": "renv/library",
+      "restore_with": "Rscript -e \"renv::restore(prompt = FALSE)\""
+    }
+  },
+  "inputs": [
+    {
+      "name": "features",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/features.tsv",
+      "description": "Samples by features, sample_id in the first column. Relative abundances; the wrapper rescales to per-sample percentages, which is what the LDA expects."
+    },
+    {
+      "name": "metadata",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/metadata.tsv",
+      "description": "Samples by variables, same sample_id index, carrying the class column named below."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "results",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/lefser/lefser_results.tsv",
+      "description": "One row per surviving feature, with its signed LDA score."
+    },
+    {
+      "name": "messages",
+      "type": "file",
+      "format": "text",
+      "required": false,
+      "staged_as": "{output_base}/lefser/lefser_messages.txt",
+      "description": "What lefser announced, including which class it took as the reference. That is what fixes the sign of every score, so it is an output rather than a log."
+    },
+    {
+      "name": "plot",
+      "type": "file",
+      "format": "png",
+      "required": false,
+      "staged_as": "{output_base}/lefser/lefser_plot.png",
+      "description": "Package-generated bar plot of the scores."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "class_col",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "The two-level metadata column to discriminate. Required in practice: the capability has no meaning without it."
+    },
+    {
+      "name": "subclass_col",
+      "type": "string",
+      "default": "",
+      "affects_results": true,
+      "description": "Optional blocking column, e.g. subject, for the paired variant."
+    },
+    {
+      "name": "kruskal",
+      "type": "number",
+      "default": 0.05,
+      "affects_results": true,
+      "description": "Cutoff for the first-pass rank test. Features failing it never reach the LDA."
+    },
+    {
+      "name": "wilcox",
+      "type": "number",
+      "default": 0.05,
+      "affects_results": true,
+      "description": "Cutoff for the subclass test, used only when subclass_col is set."
+    },
+    {
+      "name": "lda",
+      "type": "number",
+      "default": 2.0,
+      "affects_results": true,
+      "description": "Minimum absolute LDA score to report."
+    },
+    {
+      "name": "method",
+      "type": "string",
+      "default": "none",
+      "affects_results": true,
+      "description": "Multiple-testing correction applied inside lefser. The default of none is the published LEfSe behaviour, so a corrected run is a deliberate departure from it."
+    },
+    {
+      "name": "trim_names",
+      "type": "string",
+      "default": "TRUE",
+      "affects_results": false,
+      "description": "Shorten hierarchical feature names for display."
+    },
+    {
+      "name": "terminal_nodes",
+      "type": "string",
+      "default": "FALSE",
+      "affects_results": true,
+      "description": "Restrict to terminal taxonomy nodes. Meaningful only for hierarchical names, where a parent equals the sum of its children and the LDA goes collinear."
+    },
+    {
+      "name": "plot",
+      "type": "string",
+      "default": "TRUE",
+      "affects_results": false,
+      "description": "Draw the bar plot."
+    }
+  ],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "UNVERIFIED. Rank tests and an LDA fit are not sampled, so runs are expected to repeat without a seed. Not measured here."
+  },
+  "resources": {
+    "scales_with": "features",
+    "bound_by": "cpu",
+    "cores_help": false,
+    "fans_out": false,
+    "basis": "derived_from_algorithm",
+    "memory_hint": "One pass per feature, then a single LDA fit. Not measured here."
+  },
+  "interpretation": "The score is a signed LDA effect size, not a p-value, and its sign is relative to whichever class lefser took as the reference. Read the messages output to know which. The default correction is none, so these are unadjusted and must not be set against a false discovery rate from another tool.",
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "Rscript {entrypoint} --data {data_dir}/features.tsv --metadata {data_dir}/metadata.tsv --output {output_base}/lefser --class_col {class_col} --subclass_col {subclass_col} --kruskal {kruskal} --wilcox {wilcox} --lda {lda} --method {method} --trim_names {trim_names} --terminal_nodes {terminal_nodes} --plot {plot}"
+  },
+  "notes": "The Python argument assembly this replaces is compute/tertiary/lefser.py in the toolkit.",
+  "for_people": "Ranks the features that best separate two groups of samples."
+}

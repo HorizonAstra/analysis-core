@@ -1,0 +1,91 @@
+# Study data. Never committed, to any repository, private or otherwise.
+# These are human subject exports held under the terms they were collected
+# under, and a git history keeps a copy even after a file is deleted.
+data/
+
+# Secrets: API keys, the session secret, and the cluster host.
+# The example file is the template and carries placeholders, so it stays.
+.env
+.env.*
+!.env.example
+clients/.env
+
+# Results, and everything derived from a run. Large, regenerable, and often
+# holding study data in another shape.
+clients/outputs/
+outputs/
+.retired/
+
+# Chats, conversations, run registries, and per-user state. One person's
+# transcript is not something another may read, so none of it goes anywhere a
+# second person could reach it.
+clients/.userdata/
+.userdata/
+
+# Built environments. Hundreds of megabytes, and specific to the machine that
+# built them. The manifests that describe them are committed; the trees are not.
+**/environments/
+clients/.venv/
+.venv/
+
+# Reference datasets. Public, large, and installed rather than carried: a site
+# profile names where each one lives (see `references` in infrastructure/sites).
+domains/spatial-transcriptomics/reference/
+
+# Study data by shape, wherever it lands. The rules above name the directories
+# data is supposed to live in; this catches a file that ends up somewhere else,
+# which is the case the directory rules cannot see. Nothing the product needs is
+# one of these formats, so a match is always something that should not be here.
+*.h5
+*.h5ad
+*.loom
+*.rds
+*.rda
+*.RData
+*.mtx
+*.mtx.gz
+*.bam
+*.bai
+*.cram
+*.sam
+*.fastq
+*.fq
+*.fastq.gz
+*.fq.gz
+*.vcf
+*.vcf.gz
+*.bcf
+*.nii
+*.nii.gz
+*.parquet
+*.feather
+*.npy
+*.npz
+*.pkl
+*.pickle
+
+# Container images and archives. Built or downloaded, never carried.
+*.sif
+*.simg
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# Scheduler and run output picked up from a working directory.
+*.log
+slurm-*.out
+*_[0-9]*.out
+*_[0-9]*.err
+
+# Editors and interpreters
+__pycache__/
+*.py[cod]
+.DS_Store
+.ipynb_checkpoints/
+node_modules/
+.vscode/
+.idea/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

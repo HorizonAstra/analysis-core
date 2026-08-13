@@ -1,0 +1,188 @@
+{
+  "id": "cohort_sgp",
+  "version": "0.1.0",
+  "title": "Cohort spatial programs",
+  "summary": "Recurring spatial expression programs across a cohort, tested for association with group while excluding those that track the collection site.",
+  "level": 4,
+  "scope": "cross_sample",
+  "consumes": [
+    "region_finder",
+    "differential_abundance"
+  ],
+  "kernel": {
+    "language": "r",
+    "entrypoint": "kernels/sg_analysis/R/run_cohort_sgp_analysis.R",
+    "files": [
+      "kernels/sg_analysis/R/run_cohort_sgp_analysis.R",
+      "kernels/sg_analysis/R/cohort_ksweep.R",
+      "kernels/sg_analysis/R/cohort_spatial.R"
+    ],
+    "sha256": {
+      "kernels/sg_analysis/R/run_cohort_sgp_analysis.R": "3a0b675e3710292c8e23b83d0595cc37c1c6484b463ae221b5e5f62612f0b980",
+      "kernels/sg_analysis/R/cohort_ksweep.R": "c0792a1849886af47d360d91f17e6cc0699e1033f3542fde782ece6bac85bf72",
+      "kernels/sg_analysis/R/cohort_spatial.R": "01c1cac42471b04880f07d90d5bf73c15855ca3bae082a087b9a74e909986e19"
+    },
+    "functions": [
+      "run_svd",
+      "sv_depth_test",
+      "ksweep",
+      "label_spots"
+    ],
+    "third_party": [
+      {
+        "name": "R",
+        "version": "4.5.0"
+      },
+      {
+        "name": "data.table",
+        "version": "1.18.4"
+      },
+      {
+        "name": "optparse",
+        "version": "1.8.2"
+      },
+      {
+        "name": "LAPACK",
+        "version": "3.12.0",
+        "note": "The decomposition is base R's svd(), which is LAPACK. Recorded because the singular vector signs are a property of the LAPACK build rather than of the data, and every program label downstream is read off the sign and magnitude of those vectors."
+      }
+    ]
+  },
+  "environment": {
+    "manifest": null,
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "images": {
+      "r": "tumorspace_r45.sif"
+    },
+    "digests": {
+      "tumorspace_r45.sif": "53e62e8f06379cdf6d48c54c1a5d4a325f067f0baab6c6315b4030bbaed5e090"
+    },
+    "provenance": "Versions read from the built image on randi. Thread count is pinned because the decomposition is the whole capability and a threaded BLAS can reorder its reductions."
+  },
+  "invocation": {
+    "style": "named",
+    "staging": "directory",
+    "template": "Rscript {entrypoint} --manifest {work_dir}/manifest.tsv --base-dir {data_dir} --output-dir {output_base} --n-load {n_load} --k-min {k_min} --k-max {k_max} --p-site {p_site} --p-group {p_group}"
+  },
+  "inputs": [
+    {
+      "name": "manifest",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{work_dir}/manifest.tsv",
+      "description": "One row per sample: sample_id, canonical_dir, site, group. This is the only place the cohort's structure is stated, and it is what makes the capability cross sample rather than per sample."
+    },
+    {
+      "name": "cohort_dir",
+      "type": "directory",
+      "required": true,
+      "staged_as": "{data_dir}",
+      "stage_mode": "link",
+      "description": "Holds one directory per sample named by the manifest's canonical_dir, each with optimal/ containing that sample's tree, node table and significant features. Linked rather than copied: a cohort is the one input large enough that copying it would cost more than the analysis. It is assembled from many samples rather than produced by one run, which is why it aggregates those capabilities instead of naming an output of either.",
+      "aggregates": [
+        "region_finder",
+        "differential_abundance"
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "name": "sv_depth",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/sv_depth_independent_test.tsv",
+      "description": "Per singular vector: association with group, and association with site. The second is what disqualifies a program."
+    },
+    {
+      "name": "programs",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/sv_ksweep_top_group.tsv",
+      "description": "The candidate programs that survived, with the K at which each peaked."
+    },
+    {
+      "name": "sweep_all",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/sv_ksweep_all_svs.tsv",
+      "description": "Every singular vector at every K. The evidence behind the selection."
+    },
+    {
+      "name": "sweep_per_sample",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/sv_ksweep_persample.tsv",
+      "description": "Each sample's loading on each program, which is what a cohort claim is actually made of."
+    },
+    {
+      "name": "spot_labels",
+      "type": "file",
+      "format": "tsv",
+      "required": false,
+      "staged_as": "{output_base}/spot_sv_labels.tsv",
+      "description": "Every spot in the cohort assigned to a program. Absent when the spatial phase is skipped."
+    },
+    {
+      "name": "loadings",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/svd_u.tsv",
+      "description": "The left singular vectors the labelling reads."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "n_load",
+      "type": "integer",
+      "default": 30,
+      "description": "How many singular vectors to compute and test."
+    },
+    {
+      "name": "k_min",
+      "type": "integer",
+      "default": 5,
+      "description": "Smallest K in the sweep."
+    },
+    {
+      "name": "k_max",
+      "type": "integer",
+      "default": 30,
+      "description": "Largest K in the sweep."
+    },
+    {
+      "name": "p_site",
+      "type": "number",
+      "default": 0.1,
+      "description": "A vector associated with site below this p is excluded as batch. Raising it discards more.",
+      "affects_results": true
+    },
+    {
+      "name": "p_group",
+      "type": "number",
+      "default": 0.1,
+      "description": "A vector associated with group below this p becomes a candidate. This is the discovery threshold.",
+      "affects_results": true
+    }
+  ],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "No random number is drawn anywhere in the three files: the decomposition is exact and every test is a rank statistic. Two runs over the same cohort agree. What it is sensitive to is cohort membership, since the decomposition is over all samples at once, so adding or removing one sample changes every program rather than adding one."
+  },
+  "resources": {
+    "scales_with": "samples x spatial groups x features, as one dense decomposition",
+    "bound_by": "memory",
+    "cores_help": false,
+    "fans_out": false,
+    "fan_out_over": null,
+    "memory_hint": "No figure is declared anywhere in the repository for this step. The driver is one dense matrix over the whole cohort, so memory grows with cohort size rather than with the largest sample.",
+    "basis": "derived_from_algorithm"
+  },
+  "notes": "The only capability whose result is not attributable to a single sample. Everything at levels 1 to 3 can be recomputed for one sample in isolation; this one cannot, because the decomposition is joint. That is also why its inputs are a manifest and a directory rather than a list of files: the set of samples is itself a parameter of the analysis.",
+  "interpretation": "The association with collection site is reported beside the association with group for a reason: a program that tracks the site is an artifact of where samples were collected, not a finding about the group, and it has to be excluded before anything is read from it. A cohort claim rests on each sample's loading on a program rather than on the program's existence.",
+  "for_people": "Finds expression programs that recur across samples, and tests whether one tracks a group."
+}

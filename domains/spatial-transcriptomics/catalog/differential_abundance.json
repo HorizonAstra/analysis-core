@@ -1,0 +1,165 @@
+{
+  "id": "differential_abundance",
+  "version": "0.1.0",
+  "title": "Differential abundance between two groups of spots",
+  "summary": "Which features sit at different levels between a spatial group and its sibling, with a permutation calibrated cutoff.",
+  "level": 2,
+  "scope": "per_sample",
+  "consumes": [
+    "harmonize",
+    "region_finder"
+  ],
+  "kernel": {
+    "language": "julia",
+    "entrypoint": "kernels/tumorspace_core/julia/sg_diff_abundance.jl",
+    "files": [
+      "kernels/tumorspace_core/julia/sg_diff_abundance.jl"
+    ],
+    "sha256": {
+      "kernels/tumorspace_core/julia/sg_diff_abundance.jl": "0e95c5d5ef20db8c9200dc6dafead8a634aa9072fa878c73742e20a579e9fb95"
+    },
+    "functions": [
+      "wilcoxon_test",
+      "sg_diff_abundance"
+    ],
+    "third_party": [
+      {
+        "name": "HypothesisTests.jl",
+        "version": "0.11.4",
+        "note": "Supplies MannWhitneyUTest. The test statistic comes from this package, so its version is part of the scientific surface. Resolved from kernels/tumorspace_core/julia/Manifest.toml."
+      },
+      {
+        "name": "julia",
+        "version": "1.9.4",
+        "note": "Read from the image. Manifest.toml records 1.9.0, so the lockfile and the runtime disagree; the image is what executes. The RNG stream is a language guarantee, so this matters under a fixed seed."
+      }
+    ]
+  },
+  "environment": {
+    "manifest": "kernels/tumorspace_core/julia/Manifest.toml",
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "JULIA_NUM_THREADS": "1",
+      "JULIA_DEPOT_PATH": "{stage_root}/julia_depot:/opt/julia_depot"
+    },
+    "images": {
+      "julia": "julia_1.9_with_gotree.sif"
+    },
+    "digests": {
+      "julia_1.9_with_gotree.sif": "9c98d4e052ae5bf6e43f92b7f4e86dce40ecbf4030cd8b0b31db732d8eeaab45"
+    },
+    "provenance": "Digest read from the build on randi dated 2026-07-02. The recipe cannot regenerate it: build_r_container.sh resolves CRAN against 'latest' rather than a dated snapshot, so this file is currently the only record of the versions below.",
+    "manifest_sha256": "b657f21e7f34766fd477b606e07860c66650a7c28f093843e97559383389a241"
+  },
+  "invocation": {
+    "style": "positional",
+    "staging": "directory",
+    "template": "julia --project=kernels/tumorspace_core/julia {entrypoint} {work_dir} {num_shuffle}"
+  },
+  "inputs": [
+    {
+      "name": "sg_pairs",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{work_dir}/OptimalTree_pruned_node_compare_list.txt",
+      "produced_by": "region_finder",
+      "description": "Which node is contrasted against which sibling set."
+    },
+    {
+      "name": "sg_pair_members",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{work_dir}/OptimalTree_pruned_node_compare_leaves.txt",
+      "produced_by": "region_finder",
+      "description": "Which spots belong to each side of each pair."
+    },
+    {
+      "name": "matrix",
+      "type": "file",
+      "format": "dense_tsv_no_header",
+      "required": true,
+      "staged_as": "{work_dir}/M.txt",
+      "produced_by": "harmonize",
+      "from_role": "matrix",
+      "description": "Spots by features. Any feature space works: genes and cell type proportions are both used in practice."
+    },
+    {
+      "name": "observations",
+      "type": "file",
+      "format": "tsv_one_column",
+      "required": true,
+      "staged_as": "{work_dir}/barcodes.txt",
+      "produced_by": "harmonize",
+      "from_role": "observations",
+      "description": "Row labels for the matrix, header 'barcode'."
+    },
+    {
+      "name": "features",
+      "type": "file",
+      "format": "tsv_one_column",
+      "required": true,
+      "staged_as": "{work_dir}/genes.txt",
+      "produced_by": "harmonize",
+      "from_role": "features",
+      "description": "Column labels for the matrix. Named genes.txt for historical reasons; the cell type run puts cell type names here under the header 'cell_type'."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "results",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{work_dir}/DA_results.txt",
+      "description": "Every feature tested, with both group means, a p value, and a significance label."
+    },
+    {
+      "name": "significant",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{work_dir}/DA_significant.txt",
+      "description": "The subset passing the permutation cutoff. This is the file the cohort layer reads."
+    },
+    {
+      "name": "counts_by_node",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{work_dir}/DA_counts_by_node.txt",
+      "description": "How many features passed per pair."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "num_shuffle",
+      "type": "integer",
+      "default": 20,
+      "description": "Permutations used to calibrate the cutoff. The significance column is written as the literal string '< 1/num_shuffle', and downstream consumers match that string exactly, so changing this value silently breaks them.",
+      "affects_results": true
+    },
+    {
+      "name": "seed",
+      "type": "integer",
+      "env_var": "TUMORSPACE_DA_SEED",
+      "description": "Makes the permutations reproducible. Left unset in production runs.",
+      "affects_results": true
+    }
+  ],
+  "determinism": {
+    "consumes_rng": true,
+    "seed_env": "TUMORSPACE_DA_SEED",
+    "seeded_by_default": false,
+    "note": "Permutations draw from the global RNG. Unseeded runs do not reproduce, so any before and after comparison of a refactor has to set the seed on both sides."
+  },
+  "resources": {
+    "scales_with": "features x pairs x (num_shuffle + 1) rank sum tests",
+    "bound_by": "cpu",
+    "cores_help": false,
+    "fans_out": false,
+    "fan_out_over": null,
+    "memory_hint": "32 GB is what the orchestrator requests. Memory is driven by the matrix, cost by the test count.",
+    "basis": "derived_from_algorithm"
+  },
+  "interpretation": "Significance here is the pipeline's own permutation calibrated cutoff, which is a stricter and different criterion than a false discovery rate. It is reported as the pipeline gave it and is never recomputed, so these values must not be set against a q value from another tool, and a count of significant features is not comparable to a count produced under an FDR.\n\nEvery comparison is a spatial group against the pooled remainder of its own split, within one sample, so a feature significant in two samples is two separate findings rather than a replication.",
+  "for_people": "Finds which genes sit at different levels in one spatial group than in its sibling."
+}

@@ -1,0 +1,27 @@
+{
+  "_comment": "What a study of this domain looks like on disk. Infrastructure reads this to recognise and load one; it does not know the shape itself, in the same way it does not know what any capability computes.",
+  "label": "Microbiome",
+  "notes": "Multi-omic cohorts: taxa abundance, metabolite concentrations, clinical events, often with repeated measures per subject.",
+  "extensions": [
+    ".csv"
+  ],
+  "roles": {
+    "subjects": [
+      "subject"
+    ],
+    "samples": [
+      "sample"
+    ],
+    "metabolomics": [
+      "metabolom",
+      "metabolit"
+    ],
+    "metagenomics": [
+      "metagenom",
+      "clade"
+    ],
+    "events": [
+      "event"
+    ]
+  }
+}

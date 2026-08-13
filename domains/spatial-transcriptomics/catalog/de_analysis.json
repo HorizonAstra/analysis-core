@@ -1,0 +1,172 @@
+{
+  "id": "de_analysis",
+  "version": "0.1.0",
+  "title": "Marker genes for given clusters",
+  "summary": "Which genes are characteristically high in each cluster, where the clusters were defined by something else.",
+  "level": 2,
+  "scope": "per_sample",
+  "consumes": [
+    "bayesspace"
+  ],
+  "kernel": {
+    "language": "r",
+    "entrypoint": "kernels/DE_analysis/R/run_DE_analysis.R",
+    "files": [
+      "kernels/DE_analysis/R/run_DE_analysis.R"
+    ],
+    "sha256": {
+      "kernels/DE_analysis/R/run_DE_analysis.R": "a1a8181eb28a4f2a3b128b7e8111d0dcdfed7b8324cfc5e38f2bd6a2620daa78"
+    },
+    "functions": [],
+    "third_party": [
+      {
+        "name": "Seurat",
+        "version": "5.5.1",
+        "note": "Supplies FindAllMarkers, which is the whole test. Called at package defaults, so every threshold in the result comes from the package rather than from this repository."
+      },
+      {
+        "name": "DESpace",
+        "version": "2.0.0",
+        "note": "Optional spatially variable gene detection. Version 2.0 is why this capability needs its own image."
+      },
+      {
+        "name": "R",
+        "version": "4.5.0",
+        "note": "Bioconductor 3.21. DESpace 2.0 will not run on the 4.4.1 base used by every other R capability here, which is the entire reason for a second image."
+      }
+    ]
+  },
+  "environment": {
+    "manifest": null,
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "images": {
+      "r": "tumorspace_r45.sif"
+    },
+    "digests": {
+      "tumorspace_r45.sif": "53e62e8f06379cdf6d48c54c1a5d4a325f067f0baab6c6315b4030bbaed5e090"
+    },
+    "provenance": "Digest read from the build on randi dated 2026-07-02. The recipe cannot regenerate it: build_r_container.sh resolves CRAN against 'latest' rather than a dated snapshot, so this file is currently the only record of the versions below."
+  },
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "Rscript {entrypoint} --datapath {data_dir} --outdir {output_base} --metapath {work_dir}/clusters.csv --idcol {id_column} --clustercol {cluster_column}"
+  },
+  "inputs": [
+    {
+      "name": "matrix",
+      "type": "file",
+      "format": "dense_tsv_no_header",
+      "required": true,
+      "staged_as": "{data_dir}/M.txt",
+      "produced_by": "harmonize",
+      "from_role": "matrix",
+      "description": "Spots by features, densified."
+    },
+    {
+      "name": "observations",
+      "type": "file",
+      "format": "tsv_one_column",
+      "required": true,
+      "staged_as": "{data_dir}/barcodes.txt",
+      "produced_by": "harmonize",
+      "from_role": "observations",
+      "description": "Row labels for the matrix, in its row order."
+    },
+    {
+      "name": "features",
+      "type": "file",
+      "format": "tsv_one_column",
+      "required": true,
+      "staged_as": "{data_dir}/features.txt",
+      "produced_by": "harmonize",
+      "from_role": "features",
+      "description": "Feature names, in the matrix's column order."
+    },
+    {
+      "name": "positions",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/barcodes_positions.txt",
+      "produced_by": "harmonize",
+      "from_role": "positions",
+      "description": "Spot coordinates, in the row order of the matrix."
+    },
+    {
+      "name": "clusters",
+      "type": "file",
+      "format": "csv",
+      "required": true,
+      "staged_as": "{work_dir}/clusters.csv",
+      "produced_by": "bayesspace",
+      "description": "Per spot table carrying a sample identifier and a cluster label. This is the 'clusters' output of bayesspace."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "markers",
+      "type": "file",
+      "format": "csv",
+      "staged_as": "{output_base}/seurat_cluster_markers_all.csv",
+      "description": "Every marker gene tested per cluster, with its statistics."
+    },
+    {
+      "name": "markers_top",
+      "type": "file",
+      "format": "csv",
+      "staged_as": "{output_base}/seurat_cluster_markers_top50.csv",
+      "description": "The fifty strongest markers per cluster, the same table filtered."
+    },
+    {
+      "name": "spatially_variable",
+      "type": "file",
+      "format": "csv",
+      "required": false,
+      "staged_as": "{output_base}/despace_results.csv",
+      "description": "Genes whose expression varies across the clusters spatially. Produced only when despace is set, since that analysis is a separate and slower pass."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "cluster_column",
+      "type": "string",
+      "default": "spatial.cluster",
+      "description": "Which metadata column holds the cluster label.",
+      "affects_results": true
+    },
+    {
+      "name": "id_column",
+      "type": "string",
+      "default": "sample",
+      "description": "Which metadata column identifies the sample.",
+      "affects_results": true
+    },
+    {
+      "name": "despace",
+      "type": "boolean",
+      "default": false,
+      "description": "Also detect spatially variable genes. The script checks first that every cluster appears in every sample and skips the pass with a message when they do not.",
+      "affects_results": false
+    }
+  ],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "No seed is set anywhere in the script. Marker detection is a deterministic ranking, so this is expected to reproduce, but the claim rests on package internals rather than on anything this repository controls."
+  },
+  "resources": {
+    "scales_with": "spots x genes x clusters",
+    "bound_by": "memory",
+    "cores_help": false,
+    "fans_out": false,
+    "fan_out_over": null,
+    "memory_hint": "The whole expression matrix is held as a Seurat object, so memory follows the matrix rather than the number of clusters.",
+    "basis": "derived_from_algorithm"
+  },
+  "for_people": "Finds which genes mark each cluster out from the others.",
+  "notes": "Took one sample directory until the chain was built. Its reader opens four files by name out of that directory, and the directory an earlier run writes names its files after the catalog rather than after any domain's layout, so nothing here could feed it. It now declares the four files and stages each one to the name the reader opens. The kernel is unchanged and sees exactly what it saw before. The branch in it for raw Space Ranger output is not reachable here and was not before: that path calls a reader this environment does not carry."
+}

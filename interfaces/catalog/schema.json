@@ -1,0 +1,643 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tumorspace/contracts/schema.json",
+  "title": "Capability contract",
+  "description": "A language neutral declaration of one analysis capability. Written as data so that every interface (CLI, MCP tool, workflow engine, HTTP service) can be produced mechanically without touching the computation.",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "title",
+    "kernel",
+    "environment",
+    "inputs",
+    "outputs",
+    "determinism",
+    "resources"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Stable identifier. Names the capability, not the script."
+    },
+    "version": {
+      "type": "string",
+      "description": "Contract version. Bump when the declared surface changes."
+    },
+    "title": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string",
+      "description": "One sentence. What question this answers."
+    },
+    "level": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4,
+      "description": "0 turns raw instrument output into the flat files everything else reads. 1 needs only one sample's data. 2 and 3 need a result from an earlier level. 4 crosses samples, and is the only level whose result does not belong to any single one of them."
+    },
+    "scope": {
+      "enum": [
+        "per_sample",
+        "cross_sample"
+      ],
+      "description": "Whether one invocation reasons about one sample or many."
+    },
+    "consumes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Capability ids whose outputs this one requires."
+    },
+    "kernel": {
+      "type": "object",
+      "required": [
+        "language",
+        "files",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "description": "The computation. Frozen. Changing anything here changes results.",
+      "properties": {
+        "language": {
+          "enum": [
+            "julia",
+            "r",
+            "python",
+            "shell"
+          ],
+          "description": "What runs the entrypoint. Matches stages[].language, which already allowed shell; a capability whose kernel is a shell script was expressible per stage but not on its own."
+        },
+        "entrypoint": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Every file whose content determines the numbers."
+        },
+        "sha256": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Per file digest. The freeze mechanism: a refactor that changes any of these is a change to the science."
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Named entry points inside the kernel, where they exist."
+        },
+        "third_party": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "Packages that carry the math instead of this repository. For these the scientific behaviour is pinned by the image, not by any file listed above."
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": [
+        "images"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pinned_env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Variables that must be fixed for reproducibility, thread counts in particular."
+        },
+        "manifest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Lockfile that resolves this environment, when one exists. Null where the language has none and the image is the pin."
+        },
+        "images": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": "Image per kernel language. A capability spanning two languages names both. Null means the stage needs no container."
+        },
+        "digests": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": "Content digest per image. Null means the build that produced a result cannot be identified."
+        },
+        "provenance": {
+          "type": "string",
+          "description": "Where the pinned versions and digests came from, in words. Matters when the recipe cannot regenerate the image, because then this is the only record of what ran."
+        },
+        "activation": {
+          "type": "object",
+          "description": "How this capability's environment is entered. A container is launched into, an renv or poetry project is entered by running from inside it, a conda environment is activated by prefix, and a virtual environment is entered by putting its bin first on PATH. Where the tooling itself is installed is a property of the machine and is not named here.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "image",
+                "working_directory",
+                "conda_prefix",
+                "venv"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "description": "For working_directory: the directory to run from, relative to the profile's code root."
+            },
+            "note": {
+              "type": "string"
+            },
+            "ready_when": {
+              "type": "string",
+              "description": "A path under `path` that exists only once the environment has been built on this machine. Infrastructure checks that it exists and nothing more, so a domain can say what 'built' means for its own tooling without teaching the runner about renv, conda or poetry."
+            },
+            "restore_with": {
+              "type": "string",
+              "description": "The command that builds it, run from `path`. Printed when the check fails, so a fresh machine is told what to do instead of failing inside the kernel."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "Digest of the file named by `manifest`. A lockfile only anchors a run once its content is fixed; pointing at one anybody may edit records an intention rather than a fact."
+        }
+      }
+    },
+    "invocation": {
+      "type": "object",
+      "required": [
+        "style",
+        "template"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "enum": [
+            "positional",
+            "named"
+          ],
+          "description": "How the kernel expects its arguments today."
+        },
+        "template": {
+          "type": "string",
+          "description": "The literal command, with {placeholders} for staged directories and parameters."
+        },
+        "staging": {
+          "enum": [
+            "directory",
+            "none"
+          ],
+          "description": "directory means the kernel reads fixed filenames from one folder, so an adapter must assemble that folder before invoking it."
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "staged_as"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Logical name an interface exposes."
+          },
+          "type": {
+            "enum": [
+              "directory",
+              "file",
+              "scalar",
+              "text"
+            ],
+            "description": "What the supplied value is. 'file' and 'directory' are paths to something that already exists. 'text' is the content itself, which the runner writes to staged_as before the kernel starts, so a caller can hand over something it composed rather than something it stored first."
+          },
+          "format": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean",
+            "default": true
+          },
+          "staged_as": {
+            "type": "string",
+            "description": "The exact path the kernel opens, relative to its staged directory. This field is what lets a named argument interface sit in front of a kernel that only reads fixed filenames."
+          },
+          "produced_by": {
+            "type": "string",
+            "description": "Capability id that emits this. Together with from_role this is what lets a caller ask for a capability and have whatever it needs run first, rather than working the order out by hand."
+          },
+          "produced_output": {
+            "type": "string",
+            "description": "Which output of that capability, where it is not the one whose name matches this input. Needed wherever a capability emits more than one thing that would fit: the full table and the strongest rows of it are both differential expression results, and only one of them is the right size to draw. '.' means everything that run produced, for an input that is a directory of the producer's work rather than one file out of it."
+          },
+          "from_role": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "The role of a study sample that already holds this, as the domain's own role name, or a path within one for something inside a role that is a directory. '.' means the sample directory itself. Several may be given, tried in order, because the same thing sits in different places depending on how far a sample has been carried. Declared where an input can come straight from the data rather than only from an earlier run: the tissue image exists nowhere else, and a sample that has already been prepared does not need preparing again."
+          },
+          "description": {
+            "type": "string"
+          },
+          "aggregates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For a cross sample capability: the capabilities whose outputs, across every sample, this input is assembled from. Use instead of produced_by when the input is a directory layout gathered from many runs rather than one named output of one run."
+          },
+          "stage_mode": {
+            "enum": [
+              "copy",
+              "link"
+            ],
+            "default": "copy",
+            "description": "How the adapter places this input. Link rather than copy when the input is large and read only, such as a cohort directory; the adapter then binds its real location into the container, since a link out of the staging tree resolves to nothing inside one."
+          },
+          "from_site": {
+            "type": "string",
+            "description": "A reference the machine itself provides, by the name its profile gives it. For something that belongs to no study and is produced by no run, such as a deconvolution reference. Each site says where it keeps one under `references`."
+          }
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "staged_as"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "file",
+              "directory"
+            ]
+          },
+          "format": {
+            "type": "string"
+          },
+          "staged_as": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean",
+            "default": true,
+            "description": "False when the output exists only under some parameter setting. The adapter then notes its absence rather than warning about a broken promise."
+          },
+          "volatile": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Regular expressions matching lines to exclude from this output's digest. For files that stamp themselves with a wall clock time, which would otherwise fail every comparison for a cosmetic reason. Each pattern must be written out: a blanket rule would eventually skip a result."
+          },
+          "returnable": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether this output may leave the machine that produced it. The domain decides, because it knows what the file contains; infrastructure enforces, because a client cannot be trusted to. A per-spot table stays where it is, a ranked list of features travels."
+          },
+          "returnable_note": {
+            "type": "string",
+            "description": "Why an output may not leave, when it may not. Shown to whoever asked for it."
+          },
+          "interpretation": {
+            "type": "string",
+            "description": "How to read this particular output, where that differs from the capability as a whole."
+          },
+          "viewer": {
+            "type": "string",
+            "description": "Names an interactive viewer that can open this output, when one exists. The domain says so because only the domain knows the output is in that viewer's layout; a client then offers it without needing to know which capability produced it."
+          }
+        }
+      }
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "integer",
+              "number",
+              "string",
+              "boolean",
+              "array"
+            ]
+          },
+          "default": {},
+          "env_var": {
+            "type": "string",
+            "description": "Set through the environment rather than an argument."
+          },
+          "description": {
+            "type": "string"
+          },
+          "affects_results": {
+            "type": "boolean",
+            "description": "True when changing it changes the numbers, as opposed to only changing throughput."
+          },
+          "is_sample_name": {
+            "type": "boolean",
+            "description": "True when this parameter is the name of the sample being worked on, whatever the capability calls it. Only the domain knows which of its parameters means that, and something running a capability over a cohort has to set it or every result comes back labelled with the same default. Not a column name that happens to be about samples."
+          }
+        }
+      }
+    },
+    "determinism": {
+      "type": "object",
+      "required": [
+        "consumes_rng"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "consumes_rng": {
+          "type": "boolean"
+        },
+        "seed_env": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Variable that makes a run reproducible."
+        },
+        "seeded_by_default": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        },
+        "seed_mechanism": {
+          "enum": [
+            "env",
+            "r_profile"
+          ],
+          "default": "env",
+          "description": "How a seed reaches the kernel. 'env' sets seed_env to the value. 'r_profile' writes a profile containing set.seed() and points R at it, for scripts that draw their own seeds from R's global generator and read no variable."
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "required": [
+        "scales_with",
+        "bound_by",
+        "cores_help",
+        "fans_out",
+        "basis"
+      ],
+      "additionalProperties": false,
+      "description": "Shape and cost are independent. Shape decides whether a scheduler is needed; cost decides which machine.",
+      "properties": {
+        "scales_with": {
+          "type": "string",
+          "description": "The quantity that drives cost."
+        },
+        "bound_by": {
+          "enum": [
+            "memory",
+            "cpu",
+            "walltime",
+            "trivial",
+            "io"
+          ],
+          "description": "What runs out first. A site maps this to what it asks a scheduler for, so a capability never names a number and a site never names a capability. 'io' is work whose rate is the filesystem's rather than the node's."
+        },
+        "cores_help": {
+          "type": "boolean"
+        },
+        "fans_out": {
+          "type": "boolean",
+          "description": "True when one logical invocation becomes many independent tasks."
+        },
+        "fan_out_over": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "memory_hint": {
+          "type": "string"
+        },
+        "basis": {
+          "enum": [
+            "measured",
+            "derived_from_algorithm",
+            "declared_in_repo",
+            "unknown"
+          ],
+          "description": "Where the cost estimate comes from. Most of this repository provides no measurement, so honest labelling matters."
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "description": "Present when one capability is executed as several kernel invocations. The capability's inputs and outputs stay the external surface; stages describe internal execution, and artifacts passed between them are not part of the contract.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "entrypoint",
+          "template"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "language": {
+            "enum": [
+              "julia",
+              "r",
+              "python",
+              "shell"
+            ]
+          },
+          "entrypoint": {
+            "type": "string"
+          },
+          "template": {
+            "type": "string"
+          },
+          "after": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Stage ids that must complete first. Empty means it starts the chain."
+          },
+          "fan_out_over": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Name of a list parameter this stage repeats across. Inside the template, {run} is the 1 based index, {item} the list element, and {run_dir} a directory private to that iteration. Null means the stage runs once."
+          },
+          "consumes_rng": {
+            "type": "boolean"
+          },
+          "seed_note": {
+            "type": "string"
+          },
+          "bound_by": {
+            "enum": [
+              "memory",
+              "cpu",
+              "walltime",
+              "trivial"
+            ]
+          },
+          "memory_hint": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "image": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Image this stage needs, when it differs from the one implied by its language. Needed where a binary is installed into another language's image."
+          },
+          "when_seeded": {
+            "type": "string",
+            "description": "Extra arguments this stage needs when, and only when, a seed was supplied. For kernels that seed themselves behind a flag and ignore the seed variable entirely. Expanded into the template at {when_seeded}, and empty otherwise, so an unseeded run is unchanged."
+          },
+          "seed_capacity": {
+            "type": "object",
+            "description": "How many fan out values this stage can be given before its index-derived seeds collide. Only meaningful for a stage that computes its own seed from task indices.",
+            "properties": {
+              "fan_out": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "because": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "fan_out",
+              "because"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Anything true of the capability that no other field can carry. Read by people, not by tools."
+    },
+    "interpretation": {
+      "type": "string",
+      "description": "How to read this capability's answer. Which numbers compare across samples and which do not, which identifiers mean nothing in a second sample, which flags come from a test whose values must never be set against a false discovery rate from another tool. The domain owns the mathematics, so it owns the caveats; a surface renders this without knowing which domain wrote it."
+    },
+    "executes_submitted_code": {
+      "type": "boolean",
+      "description": "True when the capability runs code that arrived with the request rather than code this repository pinned. Everything else here is a kernel whose digest is recorded and whose behaviour is described; this says the description cannot cover what it will do. A site may decline to offer any capability carrying this flag."
+    },
+    "purpose": {
+      "enum": [
+        "analysis",
+        "operations"
+      ],
+      "default": "analysis",
+      "description": "What the entry is for. 'analysis' answers a question about data. 'operations' keeps the system honest and computes nothing scientific, so it is offered to a caller but left out of any description of what the system can find out."
+    },
+    "for_people": {
+      "type": "string",
+      "description": "One plain sentence saying what this answers, written for the person asking rather than for the model calling it. The summary beside it is written for the caller and says how the thing works; a reader wants to know what they would learn. Absent, the summary's first sentence stands in, which is honest but usually says more than was asked."
+    }
+  },
+  "anyOf": [
+    {
+      "required": [
+        "invocation"
+      ]
+    },
+    {
+      "required": [
+        "stages"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "capability": "growchain",
+  "contract_version": "0.1.0",
+  "kernel_sha256": {
+    "workflows/tumorspace_core/julia/sg_depth_growchain.jl": "fff298945548959301dbe487a708bed89b62661518d1a957c49f953e066d43e6"
+  },
+  "third_party": [
+    {
+      "name": "julia",
+      "version": "1.9.4",
+      "note": "Read from the image. Manifest.toml records 1.9.0, so the lockfile and the runtime disagree; the image is what executes. The RNG stream is a language guarantee, so this matters under a fixed seed."
+    }
+  ],
+  "parameters": {},
+  "profile": "randi",
+  "images": {
+    "julia": "julia_1.9_with_gotree.sif"
+  },
+  "image_digests": {
+    "julia_1.9_with_gotree.sif": "9c98d4e052ae5bf6e43f92b7f4e86dce40ecbf4030cd8b0b31db732d8eeaab45"
+  },
+  "reproducible": true,
+  "started": "2026-08-07T09:26:38.683874+00:00",
+  "finished": "2026-08-07T09:27:14.439147+00:00",
+  "inputs": {
+    "node_parents": {
+      "path": "/ess/scratch/scratch1/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results/optimal/allnodes_parents.tsv",
+      "sha256": "7aa6c41b49bbe55a1ea5b944b6359bcd16dc4c91a80d87740a16d103276bfa00"
+    },
+    "node_leaves": {
+      "path": "/ess/scratch/scratch1/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results/optimal/allnodes_leaves.tsv",
+      "sha256": "81b4e3d6a79e2c2b9c39fca20a501ad7169a61307709d3ff84cb3960445b2ed7"
+    },
+    "sg_pairs": {
+      "path": "/ess/scratch/scratch1/rijulsareen/output-data/harmonized-small-test/20260713_172050/1N_results/optimal/OptimalTree_pruned_node_compare_list.txt",
+      "sha256": "7b971e4d2176b05a73ff1116b51baf0a00d54a950aff68fb9555b11d19f894ec"
+    },
+    "positions": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/input-data/harmonized-small-test/1N/barcodes_positions.txt",
+      "sha256": "98b2b127c4762dc951e2c5fcf180354a791b8774d2ff06b6a832c3095c100389"
+    }
+  },
+  "outputs": {
+    "depths": "993e81568a80b1ab3f0498eafb0e2d48dd1611c850a54591c8794dad087e495e"
+  },
+  "baseline": {
+    "site": "randi",
+    "recorded": "2026-08-07",
+    "sample": "harmonized-small-test/1N",
+    "note": "Output digests from a run whose inputs and kernel are recorded above. A later run matching these digests computed the same thing."
+  }
+}

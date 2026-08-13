@@ -1,0 +1,34 @@
+# Keep the build context small and keep BUILT trees out — the image restores them from locks,
+# so copying a host-built copy in would both bloat the context and risk shipping macOS binaries
+# into a Linux image.
+
+# built environments (recreated by envs/*/restore.sh inside the image)
+.venv/
+envs/*/.venv/
+envs/*/rlib/
+envs/r-stats/renv/library/
+envs/r-stats/renv/staging/
+envs/r-stats/renv/local/
+envs/r-stats/renv/cache/
+
+# secrets and local state — injected or mounted at runtime, never baked in
+.env
+.env.*
+data/
+outputs/
+.userdata/
+.cache/
+.retired/
+
+# not needed to run
+versioning/
+documentation/
+examples/
+.git/
+.github/
+**/__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+.pytest_cache/
+.ruff_cache/

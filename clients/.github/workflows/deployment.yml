@@ -1,0 +1,27 @@
+name: Analysis Chatbot App
+
+on:
+  push:
+    branches: [ "deploy" ]
+  pull_request:
+    branches: [ "deploy" ]
+
+env:
+  IMAGE_NAME: analysis-chatbot-app
+  IMAGE_TAG: ${{ github.sha }}
+  CONTAINER_REGISTRY: ghcr.io/uchicago-dfi-informatics
+
+jobs:
+  build:
+    runs-on: build-server
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build docker image
+      run: docker build . --file Dockerfile --tag $IMAGE_NAME
+    - name: Push to container registry
+      run: |
+        docker tag $IMAGE_NAME $CONTAINER_REGISTRY/$IMAGE_NAME
+        docker tag $IMAGE_NAME $CONTAINER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
+        docker push $CONTAINER_REGISTRY/$IMAGE_NAME
+        docker push $CONTAINER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG

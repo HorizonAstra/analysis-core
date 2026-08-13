@@ -1,0 +1,47 @@
+{
+  "capability": "growchain",
+  "contract_version": "0.1.0",
+  "kernel_sha256": {
+    "workflows/tumorspace_core/julia/sg_depth_growchain.jl": "fff298945548959301dbe487a708bed89b62661518d1a957c49f953e066d43e6"
+  },
+  "third_party": [
+    {
+      "name": "julia",
+      "version": "1.9.4",
+      "note": "Read from the image. Manifest.toml records 1.9.0, so the lockfile and the runtime disagree; the image is what executes. The RNG stream is a language guarantee, so this matters under a fixed seed."
+    }
+  ],
+  "parameters": {},
+  "profile": "randi",
+  "images": {
+    "julia": "julia_1.9_with_gotree.sif"
+  },
+  "image_digests": {
+    "julia_1.9_with_gotree.sif": "9c98d4e052ae5bf6e43f92b7f4e86dce40ecbf4030cd8b0b31db732d8eeaab45"
+  },
+  "reproducible": true,
+  "started": "2026-08-07T15:35:54.782425+00:00",
+  "finished": "2026-08-07T15:36:28.965520+00:00",
+  "resumed_steps": 0,
+  "inputs": {
+    "node_parents": {
+      "path": "/ess/scratch/scratch1/rijulsareen/cap_out/rf_seed42/node_parents",
+      "sha256": "2856eae5b103ee0577b8fd220a12d8e1857ba9896e0683584370180a7d18e944"
+    },
+    "node_leaves": {
+      "path": "/ess/scratch/scratch1/rijulsareen/cap_out/rf_seed42/node_leaves",
+      "sha256": "7c8dec49f6b03432e09c405da41ecb3cfbf21d1126934a242420116a099cb9f5"
+    },
+    "sg_pairs": {
+      "path": "/ess/scratch/scratch1/rijulsareen/cap_out/rf_seed42/sg_pairs",
+      "sha256": "d6a457807af00aadb4f40cf3d353fc385fc7a167b22e0ac5c24a62f5fe0028e7"
+    },
+    "positions": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data/barcodes_positions.txt",
+      "sha256": "cc78f08e345eba9d793799b9a841408bf5578f368057988eb3dde55f9bd46e4e"
+    }
+  },
+  "outputs": {
+    "depths": "a51fc4d8fb9ab5659edd47fd567d37fa950dcf4fa5ea34e3b5f671052e336dbf"
+  }
+}

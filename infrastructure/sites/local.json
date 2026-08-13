@@ -1,0 +1,11 @@
+{
+  "id": "local",
+  "description": "A workstation with the interpreters installed directly. No container runtime and no module system. The only site profile usable on macOS, since singularity is Linux only and the images are built for x86_64.",
+  "launcher": null,
+  "image_root": null,
+  "preamble": [],
+  "binds": [],
+  "notes": "Nothing here pins the environment, so a run on this profile cannot be compared against one from a container profile. Useful for development and for capabilities whose dependencies are already fixed by a manifest.",
+  "runtime": "none",
+  "artifact_root": "~/.analysis-core/results"
+}

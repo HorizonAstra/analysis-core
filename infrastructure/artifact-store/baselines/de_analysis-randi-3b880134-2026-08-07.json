@@ -1,0 +1,54 @@
+{
+  "capability": "de_analysis",
+  "contract_version": "0.1.0",
+  "kernel_sha256": {
+    "workflows/DE_analysis/R/run_DE_analysis.R": "a1a8181eb28a4f2a3b128b7e8111d0dcdfed7b8324cfc5e38f2bd6a2620daa78"
+  },
+  "third_party": [
+    {
+      "name": "Seurat",
+      "version": "5.5.1",
+      "note": "Supplies FindAllMarkers, which is the whole test. Called at package defaults, so every threshold in the result comes from the package rather than from this repository."
+    },
+    {
+      "name": "DESpace",
+      "version": "2.0.0",
+      "note": "Optional spatially variable gene detection. Version 2.0 is why this capability needs its own image."
+    },
+    {
+      "name": "R",
+      "version": "4.5.0",
+      "note": "Bioconductor 3.21. DESpace 2.0 will not run on the 4.4.1 base used by every other R capability here, which is the entire reason for a second image."
+    }
+  ],
+  "parameters": {
+    "cluster_column": "spatial.cluster",
+    "id_column": "sample",
+    "despace": false
+  },
+  "profile": "randi",
+  "images": {
+    "r": "tumorspace_r45.sif"
+  },
+  "image_digests": {
+    "tumorspace_r45.sif": "53e62e8f06379cdf6d48c54c1a5d4a325f067f0baab6c6315b4030bbaed5e090"
+  },
+  "reproducible": true,
+  "started": "2026-08-07T15:19:20.087471+00:00",
+  "finished": "2026-08-07T15:21:03.489007+00:00",
+  "resumed_steps": 0,
+  "inputs": {
+    "sample_dir": {
+      "path": "/gpfs/data/dfi-cores/rijul/cancer/TumorSpace/benchmarks/GSE213688_GSM6592057/input_data",
+      "sha256": "1ce938c79c568f3ccf02a7bcbc9cf772e06c7837461c8078b57a896258c47fc3"
+    },
+    "clusters": {
+      "path": "/ess/scratch/scratch1/rijulsareen/cap_out/bs_seedA/clusters",
+      "sha256": "8cf99583721a71c15588511558d55c938ceaa8f0d0cdfbfaeec2317fe3d72262"
+    }
+  },
+  "outputs": {
+    "markers": "051f8c3cec9658d52d2123ab89bbe54aca7cabaee9a8735c670907149a8f8715",
+    "markers_top": "88a605f70deb97d9733c67ad040975aecd51c76abb25470cf24b9f2b7ca3be2f"
+  }
+}
