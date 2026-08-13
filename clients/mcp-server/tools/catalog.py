@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import inspect
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Annotated, Any
@@ -34,7 +33,6 @@ for _p in (_TREE / "interfaces" / "catalog", _TREE / "interfaces" / "run",
         sys.path.insert(0, str(_p))
 
 import entry as C
-from datasource.refs import study_parts
 from protocol import JobSpec
 
 from . import scope
@@ -117,7 +115,7 @@ def _tool_for(contract: dict, candidates: list) -> Any:
             parameters=parameters,
             workspace=workspace,
             site=site,
-            fresh=_was_cleared(qualified, inputs, parameters),
+            fresh=scope.was_cleared(qualified, inputs, parameters),
         ))
         scope.also_allow(record.job_id)
         # Already done, because an identical run had already finished. Said
@@ -193,41 +191,6 @@ def describe(contract: dict) -> str:
         desc += "\n\nReading the result: " + contract["interpretation"]
     return desc
 
-
-
-def _was_cleared(qualified: str, inputs: dict, parameters: dict) -> bool:
-    """Whether the person emptied this cell, meaning: do it again.
-
-    The grid names a cell `<subject>::<capability>`, and the subject of a run is
-    the sample it is about. That is read here the same way it is read
-    everywhere: from the references, since `study:<study>/<sample>` names one
-    outright. A run whose inputs are all earlier runs does not say, and rather
-    than reach across processes for the answer, any cleared cell for the same
-    capability counts.
-
-    Erring that way on purpose. Being wrong here costs a recomputation of work
-    that was going to be handed back; being wrong the other way ignores somebody
-    who explicitly asked for the work to be done again, and leaves them with no
-    way to ask at all.
-    """
-    cells = {c for c in os.environ.get("CLEARED_CELLS", "").split(",") if c}
-    if not cells:
-        return False
-    capability = qualified.split("/")[-1]
-    mine = {c for c in cells if c.endswith(f"::{capability}")}
-    if not mine:
-        return False
-    subjects = set()
-    for ref in inputs.values():
-        parts = study_parts(ref)
-        if len(parts) >= 2:
-            subjects.add(parts[1])
-    for key in ("sample", "sample_id"):
-        if parameters.get(key):
-            subjects.add(str(parameters[key]))
-    if not subjects:
-        return True                     # cannot tell whose it is; honour the ask
-    return any(f"{s}::{capability}" in mine for s in subjects)
 
 
 def register(mcp, *, sites, domain_allowed=lambda d: True) -> dict[str, str]:
@@ -386,7 +349,12 @@ def register(mcp, *, sites, domain_allowed=lambda d: True) -> dict[str, str]:
                               "before this conversation, which can be read and fed into "
                               "a further analysis without being run again. Each row "
                               "carries the capability, where it ran, and whether the "
-                              "code that produced it was verified unchanged."))
+                              "code that produced it was verified unchanged. `on` names "
+                              "what the run read: a sample name where the data is kept "
+                              "per sample, and the id of each earlier run it followed. "
+                              "Count from the rows rather than estimating, and if you "
+                              "cannot tell which sample a run was for, say so instead "
+                              "of guessing how many there were."))
     mcp.add_tool(run_result, name="run_result",
                  description=("The outputs of a finished run, read back: a table as its "
                               "columns and first rows, text as its first lines, a figure "

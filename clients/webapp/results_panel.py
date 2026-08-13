@@ -260,8 +260,23 @@ def _run_rows(st, run_ids, prefix: str, label_prefix: str,
     return out
 
 
+def _seen_by(user: str, chat_id: str) -> list:
+    """Which runs a chat is working with, as the versions grid decides it.
+
+    Not "the runs this chat started". Work done on a cluster belongs to the
+    person, not to the conversation they happened to ask in, so a new chat opens
+    onto what they have rather than onto nothing. Which version of each thing is
+    the chat's own choice, and it is made in one place.
+    """
+    try:
+        import versions as _versions
+        return _versions.visible_runs(user, chat_id)
+    except Exception:                  # noqa: BLE001 - the panel must still draw
+        return chats.chat_runs(user, chat_id)
+
+
 def tree(user: str, chat_id: str) -> dict:
-    """Every run this chat produced, newest first, with what each one made."""
+    """Every run this chat is working with, newest first, with what each one made."""
     if access.is_admin(user):
         rows = []
         mine = paths.safe_user(user)
@@ -276,7 +291,7 @@ def tree(user: str, chat_id: str) -> dict:
                               owner=u)
         rows.sort(key=lambda r: r.get("finished") or "", reverse=True)
         return {"topics": rows}
-    return {"topics": _run_rows(_store_for(user), chats.chat_runs(user, chat_id),
+    return {"topics": _run_rows(_store_for(user), _seen_by(user, chat_id),
                                 "", "", user)}
 
 
@@ -410,7 +425,7 @@ def _bundles_for(user: str, kind: str, key: str) -> list:
     # bundle at all.
     import samples
     st = _store_for(user)
-    run_ids = list(reversed(chats.chat_runs(user, key[len(CHAT_KEY):])))
+    run_ids = list(reversed(_seen_by(user, key[len(CHAT_KEY):])))
     # Which sample each bundle is of, from the run that built it rather than by
     # looking inside: a bundle is built one sample at a time, and reading the
     # directory to find out would walk tens of thousands of files to learn a
@@ -488,8 +503,27 @@ def _viewer_kinds(user: str | None = None) -> dict:
                 out[o["viewer"]] = {
                     "label": _titled(render.capability_title(f"{domain}/{entry['id']}")),
                     "domain": domain,
+                    # Which capability builds one. Kept so that a viewer with
+                    # nothing to open can tell "you have not run this" from "you
+                    # have, and it has not reached this machine yet".
+                    "capability": entry["id"],
                 }
     return out
+
+
+def _elsewhere(built: int) -> str:
+    """Why a viewer has nothing to open when the work exists but is not here.
+
+    A result is computed where the work runs and copied back afterwards, so
+    there is a window in which it is finished, listed, and not yet openable.
+    Saying nothing has produced one during that window is wrong in the way that
+    costs the most: it reads as "run it again", and it is an hour of cluster
+    time to learn that the answer was already on its way.
+    """
+    if not built:
+        return ""
+    return (f"{built} result{'' if built == 1 else 's'} finished, still being copied "
+            f"to this machine. This opens once that lands.")
 
 
 def viewers(user: str, chat_id: str) -> dict:
@@ -499,12 +533,28 @@ def viewers(user: str, chat_id: str) -> dict:
     appears only once it works cannot be discovered before then. One that is not
     ready says what would make it ready instead of simply being absent.
 
-    Scoped to the chat, like the panel beside it. A run belongs to the
-    conversation that asked for it.
+    Scoped the same way the panel beside it is: what this chat is working with,
+    which is its own runs and whatever the versions grid selects. Scoped to the
+    runs a chat *started*, every viewer was greyed out in a new conversation
+    while the grid next to it listed nineteen samples ready to open.
     """
     import viewer as _viewer
     can_serve = _viewer.installed()
     rows = tree(user, chat_id)["topics"]
+    # What this chat can see, whether or not it has reached this machine. A row
+    # exists only once a result has been copied back, and a viewer that says
+    # "nothing has produced one yet" about work that finished last week sends
+    # somebody off to run it again.
+    built: dict = {}
+    try:
+        import versions as _versions
+        seen = set(_seen_by(user, chat_id))
+        for (_, capability), entries in _versions.grid(user).items():
+            for v in entries:
+                if v["run"] in seen:
+                    built[capability] = built.get(capability, 0) + 1
+    except Exception:                  # noqa: BLE001 - the list must still draw
+        built = {}
     newest: dict = {}
     for r in rows:                                   # newest first, so first wins
         if r.get("viewer") and r["viewer"] not in newest:
@@ -533,11 +583,12 @@ def viewers(user: str, chat_id: str) -> dict:
             "run": f"{kind}/{CHAT_KEY}{chat_id}" if ready else "",
             "samples": sum(1 for r in rows if r.get("viewer") == kind),
             # The row already names the thing, so this says why it is not
-            # available rather than repeating what it is.
+            # available rather than repeating what it is. Three reasons, and
+            # they lead somewhere different: install it, wait for it, or run it.
             "why": ("" if ready else
-                    ("Nothing in this chat has produced one yet. Ask for it on a "
-                     "sample." if not hit else
-                     "Not installed on this server.")),
+                    "Not installed on this server." if hit else
+                    _elsewhere(built.get(about.get("capability", ""), 0)) or
+                    "Nothing has produced one yet. Ask for it on a sample."),
         })
     return {"viewers": out}
 

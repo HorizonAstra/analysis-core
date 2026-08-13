@@ -73,6 +73,14 @@ ACROSS = ""
 # work here has to be asked for again rather than re-used.
 DATA = "data"
 
+# A domain that declares nothing about its input, so asking one that is not there
+# reads the same as asking one that is.
+class _Nothing:
+    input_label = ""
+
+
+_EMPTY = _Nothing()
+
 
 def _sites() -> list[str]:
     return [s.strip() for s in os.environ.get("ANALYSIS_SITES", "local").split(",")
@@ -152,18 +160,33 @@ def data_grid(user: str) -> dict:
     appear in the grid the day it arrives, with every result cell empty and its
     data cell already answering.
 
-    A study kept in one unnamed version contributes nothing here, so a deployment
-    that never lays data out in versions sees this column stay empty rather than
-    fill up with a choice that is not one.
+    A study with no version layer still appears, as the one version it has. It
+    was left out at first, on the grounds that a single entry is not a choice —
+    but the column is not only a chooser. It is the left end of the row, and what
+    every result to the right of it was computed from. Leaving it blank made the
+    grid start at the first thing anybody ran and say nothing about what went in,
+    which reads as the instrument's output being missing rather than as there
+    being one of it.
+
+    Never waits on a machine to answer. What a cluster holds is a round trip, and
+    on a cold process that is half a minute; the rest of this grid is read from
+    a registry on disk and takes fifty milliseconds. Making the whole card wait
+    on the one column that decorates it is how a panel that was instant becomes a
+    panel people stop opening. The column fills in on the next look instead.
     """
     cells: dict = {}
-    for row in access.accessible_data(user):
-        for version in row.get("versions") or []:
+    for row in access.accessible_data(user, wait=False):
+        # One unnamed version, for a study whose data is not kept in versions.
+        # Named for the study, since that is the only true thing there is to say
+        # about it, and it is what the row is about.
+        kept = row.get("versions") or [{"name": "", "samples": row.get("samples") or []}]
+        for version in kept:
+            named = version["name"]
             for sample in version.get("samples") or []:
                 cells.setdefault((sample, DATA), []).append(
-                    {"identity": f"{row['study']}{AT}{version['name']}",
-                     "study": row["study"], "at": version["name"],
-                     "label": version["name"], "run": "", "runs": []})
+                    {"identity": f"{row['study']}{AT}{named}" if named else row["study"],
+                     "study": row["study"], "at": named,
+                     "label": named or row["study"], "run": "", "runs": []})
     for versions in cells.values():
         versions.sort(key=lambda v: v["at"], reverse=True)
         studies = {v["study"] for v in versions}
@@ -175,6 +198,49 @@ def data_grid(user: str) -> dict:
             if len(studies) > 1:
                 v["label"] = f"{v['study']} · {v['label']}"
     return cells
+
+
+def visible_runs(user: str, chat_id: str) -> list:
+    """Which runs a chat is working with: its own, and the version chosen per cell.
+
+    The one answer to "what is this chat looking at", read by everything that has
+    to know: the model, the results panel, and the viewers. They each used to
+    answer it themselves, all three with "the runs this chat started", which is
+    why a new chat opened onto nothing at all — no results, and every viewer
+    greyed out — while the grid beside it listed nineteen samples of finished
+    work. The work is the user's; the conversation is where it is being talked
+    about, and those are different things.
+
+    Its own runs first and in order, because a conversation follows what it
+    started. Then one run per cell, which is what the grid selects: pinned to an
+    older version where somebody pinned one, and absent where somebody emptied
+    the cell, so emptying a cell hides the result everywhere rather than only
+    from the model.
+    """
+    seen = list(chats.chat_runs(user, chat_id))
+    known = set(seen)
+    for cell in active(user, chat_id).values():
+        run = cell.get("run")
+        if run and run not in known:
+            seen.append(run)
+            known.add(run)
+    return seen
+
+
+def data_label(user: str) -> str:
+    """What to head the data column with, in the words the domain uses.
+
+    Not written here, because "the thing every analysis starts from" has a
+    different name in every domain and this file has no business knowing any of
+    them. Each domain says so beside its own shapes. Only when they agree: two
+    domains on screen at once have no shared word for it, and "Data" is the
+    honest fallback rather than one of them borrowing the other's.
+    """
+    from datasource import domains as _domains
+    said = {(_domains.spec(row.get("domain")) or _EMPTY).input_label
+            for row in access.accessible_data(user, wait=False)}
+    said.discard("")
+    return said.pop() if len(said) == 1 else "Data"
 
 
 def data_pins(user: str, chat_id: str) -> list[str]:
@@ -310,6 +376,7 @@ def panel(user: str, chat_id: str) -> dict:
         # differently in three places, and a name spelled out on both sides is a
         # name that can drift on one of them.
         "data_column": DATA,
+        "data_label": data_label(user),
         "rows": [{"subject": s, "label": s,
                   "cells": {c: cell(s, c) for c in columns}} for s in rows],
         # Named for its members, which is the only honest answer to "what is

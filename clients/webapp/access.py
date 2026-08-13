@@ -60,7 +60,7 @@ def is_admin(user: str) -> bool:
 # engine.py, where they had nothing to do with running a model turn.
 
 
-def _found() -> list[dict]:
+def _found(*, wait: bool = True) -> list[dict]:
     """Every dataset every machine this deployment reaches holds.
 
     Asked of the machines rather than read off this one. Data lives where the
@@ -68,20 +68,24 @@ def _found() -> list[dict]:
     cluster showed an empty product to everyone when this read a local
     filesystem. Each machine answers for itself and the answers are merged, so
     what a person is offered is what could actually be analysed.
+
+    `wait=False` where an answer that is merely late is better than a page that
+    does not come. Deciding what a chat may reach has to wait; decorating a panel
+    does not.
     """
     from executors import reachable
-    return reachable.datasets()
+    return reachable.datasets(wait=wait)
 
 
-def accessible_domains(user: str) -> list[str]:
+def accessible_domains(user: str, *, wait: bool = True) -> list[str]:
     """Every domain this user may reach that actually holds data. The menu a chat's
     domain is chosen from; one element means no choice to make."""
     allow = allowed_domains(user)
-    found = sorted({d["domain"] for d in _found() if d.get("domain")})
+    found = sorted({d["domain"] for d in _found(wait=wait) if d.get("domain")})
     return found if allow is None else [d for d in found if d in allow]
 
 
-def accessible_data(user: str, domains=None) -> list[dict]:
+def accessible_data(user: str, domains=None, *, wait: bool = True) -> list[dict]:
     """Every dataset this user may reach, as the machine holding it described it.
 
     The rows rather than the names, for callers that need what is in a study and
@@ -89,8 +93,9 @@ def accessible_data(user: str, domains=None) -> list[dict]:
     the web process itself is unrestricted.
     """
     allow = allowed_studies(user)
-    domains_ok = set(accessible_domains(user)) if not domains else set(domains)
-    return [d for d in _found()
+    domains_ok = (set(accessible_domains(user, wait=wait)) if not domains
+                  else set(domains))
+    return [d for d in _found(wait=wait)
             if (allow is None or d["study"] in allow)
             and d.get("domain") in domains_ok]
 

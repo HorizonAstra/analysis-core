@@ -115,8 +115,14 @@ def _reads(records: dict, ref, seen: frozenset) -> str:
     return f"{identity(records, record.spec, seen | {earlier})}/{output}"
 
 
-def finished_match(registry, spec) -> JobRecord | None:
+def finished_match(runs, spec) -> JobRecord | None:
     """A completed run that already did exactly this, or None.
+
+    `runs` is either the registry or the records it holds, because the other
+    function in this file takes the records and taking different things was a
+    trap: handed the wrong one, this used to answer "nothing has been done" for
+    every question ever asked, silently and forever, since the failure looks
+    exactly like the ordinary empty answer.
 
     Only completed runs. A failed one has nothing to hand back, and one still
     going is a different question: reusing it would mean returning a handle that
@@ -130,10 +136,12 @@ def finished_match(registry, spec) -> JobRecord | None:
     """
     if getattr(spec, "fresh", False):
         return None
-    try:
-        records = {r.job_id: r for r in registry.all()}
-    except Exception:                    # noqa: BLE001 - reuse is an optimisation
-        return None
+    records = runs if isinstance(runs, dict) else None
+    if records is None:
+        try:
+            records = {r.job_id: r for r in runs.all()}
+        except Exception:                # noqa: BLE001 - reuse is an optimisation
+            return None
     if not records:
         return None
     try:

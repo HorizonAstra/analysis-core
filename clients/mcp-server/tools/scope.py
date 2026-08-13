@@ -34,6 +34,10 @@ _TREE = Path(__file__).resolve().parents[3]
 if str(_TREE / "infrastructure") not in sys.path:
     sys.path.insert(0, str(_TREE / "infrastructure"))
 
+if str(_TREE / "interfaces" / "data") not in sys.path:
+    sys.path.insert(0, str(_TREE / "interfaces" / "data"))
+
+import reference as _reference                                 # noqa: E402
 from datasource.refs import AT, study_parts                    # noqa: E402
 
 # What this server was launched with, read once. Read live instead and each call
@@ -123,6 +127,88 @@ def at_chosen_version(value):
     if not version:
         return value
     return f"study:{parts[0]}{AT}{version}/" + "/".join(parts[1:])
+
+
+def was_cleared(qualified: str, inputs: dict, parameters: dict,
+                subject: str = "") -> bool:
+    """Whether the person emptied this cell, meaning: do it again.
+
+    The grid names a cell `<subject>::<capability>`, and the subject of a run is
+    the sample it is about. A caller that already knows says so; otherwise it is
+    worked out by following what the run reads back to the data.
+
+    Where even that cannot say — work built from several samples, or from a run
+    this account no longer holds — the ask is honoured. Being wrong that way
+    costs a recomputation of work that was going to be handed back; being wrong
+    the other way ignores somebody who explicitly asked for it to be done again
+    and leaves them no way to ask at all.
+
+    Beside the version pins, and for the same reason they are here: a job is
+    built in two places. Emptying a cell used to reach the one that runs a single
+    capability and not the one that runs a chain, so the button worked until
+    somebody asked for something that needed two steps — which is most of the
+    interesting questions.
+    """
+    cells = {c for c in os.environ.get(CLEARED_CELLS, "").split(",") if c}
+    if not cells:
+        return False
+    capability = qualified.split("/")[-1]
+    mine = {c for c in cells if c.endswith(f"::{capability}")}
+    if not mine:
+        return False
+    subjects = set()
+    if subject:
+        subjects.add(str(subject))
+    else:
+        # Followed back through the runs it reads, rather than read off its own
+        # inputs. Most steps name no sample at all — they name the step before —
+        # and giving up there meant every cleared cell of a capability counted
+        # for every sample: emptying one sample's markers recomputed markers for
+        # all nineteen, at seven minutes each.
+        found = _reference.subject(inputs or {}, _run_inputs().get, _role_names())
+        if found:
+            subjects.add(found)
+    for key in ("sample", "sample_id"):
+        if (parameters or {}).get(key):
+            subjects.add(str(parameters[key]))
+    if not subjects:
+        return True                     # cannot tell whose it is; honour the ask
+    return any(f"{s}::{capability}" in mine for s in subjects)
+
+
+def _run_inputs() -> dict:
+    """Every run this account has, as its id -> the references it was given.
+
+    Read from the registry files rather than asked of a machine: the question is
+    what was submitted, and a cluster being unreachable is no reason to be unable
+    to answer it.
+    """
+    from pathlib import Path as _Path
+    out: dict = {}
+    state = _Path(os.environ.get("ANALYSIS_STATE", _Path.home() / ".analysis-core"))
+    for site in (s.strip() for s in
+                 os.environ.get("ANALYSIS_SITES", "local").split(",") if s.strip()):
+        try:
+            import json
+            records = json.loads((state / f"registry-{site}.json").read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(records, dict):
+            continue
+        for run, record in records.items():
+            got = ((record or {}).get("spec") or {}).get("inputs")
+            if isinstance(got, dict):
+                out[run] = got
+    return out
+
+
+def _role_names() -> frozenset:
+    """The role names, so `study:<name>/<role>` is never read as a sample."""
+    try:
+        from datasource import domains as _domains
+        return _domains.role_names()
+    except Exception:                  # noqa: BLE001 - a role read as a sample
+        return frozenset()             # only ever costs a recomputation
 
 
 def data_versions() -> dict:

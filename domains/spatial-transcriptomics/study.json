@@ -2,6 +2,8 @@
   "_comment": "What this domain's data looks like on disk. Infrastructure reads this to recognise and load it; it does not know the shapes itself, in the same way it does not know what any capability computes.",
   "label": "Spatial Transcriptomics",
   "notes": "Tumour samples measured with position kept: which regions a tissue breaks into, and which genes differ between neighbouring regions.",
+  "_input_label_note": "What to call this domain's data where it is shown beside the results computed from it, such as the first column of the versions grid. The word people here use for the thing every analysis starts from, which is more use to them than the word 'data'.",
+  "input_label": "Space Ranger",
   "_datasets_note": "Three shapes, because the same science exists at three stages and the output of one stage is the input of the next. Declared most specific first. A folder is whichever shape it fits best, so a Space Ranger run is not mistaken for a bare tree of directories.",
   "datasets": [
     {

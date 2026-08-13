@@ -33,7 +33,7 @@ PARTS = ("interfaces", "domains", "infrastructure", "clients")
 # are by module rather than by path, since every entry point puts its own
 # dependencies on sys.path, so the mapping has to be by name.
 OWNERS = {
-    "entry": "interfaces", "protocol": "interfaces",
+    "entry": "interfaces", "protocol": "interfaces", "reference": "interfaces",
     "profile": "infrastructure", "registry": "infrastructure", "store": "infrastructure",
     "datasource": "infrastructure", "provenance": "infrastructure",
     "local": "infrastructure", "slurm_ssh": "infrastructure",

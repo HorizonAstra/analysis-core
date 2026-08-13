@@ -78,11 +78,17 @@ class DomainSpec:
     label       human-readable name for the UI.
     notes       one line describing the *data*, shown to the user when they pick a
                 domain. Keep it about the science, not about file layout.
+    input_label what to call this domain's data where it is shown beside the
+                results computed from it. Declared here because only the domain
+                knows it: to the people using this one, the thing every analysis
+                starts from is the Space Ranger run, and calling that column
+                "Data" made them look for a column that was already there.
     """
 
     datasets: tuple[DatasetSpec, ...] = ()
     label: str = ""
     notes: str = field(default="")
+    input_label: str = ""
 
     @classmethod
     def read(cls, path: Path) -> "DomainSpec":
@@ -98,6 +104,7 @@ class DomainSpec:
             datasets=tuple(DatasetSpec.read(x) for x in declared),
             label=d.get("label", ""),
             notes=d.get("notes", ""),
+            input_label=d.get("input_label", ""),
         )
 
     # --- the older single-shape view, for callers that only want the first ---
@@ -126,6 +133,18 @@ DOMAINS: dict[str, DomainSpec] = _load()
 
 def known_domains() -> list[str]:
     return sorted(DOMAINS)
+
+
+def role_names() -> frozenset:
+    """Every role name any domain declares, across every shape.
+
+    `study:NSCLC-Neoadjuvant/counts` and `study:NSCLC-Neoadjuvant/1N` are the
+    same shape, and only these declarations tell them apart. Asked here rather
+    than worked out by each caller, because three of them were working it out
+    and a domain adding a role should not have to remember any of their names.
+    """
+    return frozenset(r for spec in DOMAINS.values()
+                     for dataset in spec.datasets for r in dataset.roles)
 
 
 def spec(domain: str) -> DomainSpec | None:

@@ -181,6 +181,12 @@ def register(mcp, *, sites, domain_allowed=lambda d: True) -> list:
                     workspace=workspace,
                     site=site,
                     after=tuple(ids[q] for q in step.after if q in ids),
+                    # A step whose cell was emptied is computed again rather than
+                    # handed back, exactly as it would be if it had been asked
+                    # for on its own. Only that step: the rest of the chain is
+                    # still re-used, which is the whole point of emptying one.
+                    fresh=scope.was_cleared(step.capability, step.inputs,
+                                            step.parameters, subject=name),
                 )
                 record = executor.submit(spec)
                 # In scope for the rest of this conversation, like anything else

@@ -35,6 +35,7 @@ for _p in ("interfaces/run", "interfaces/catalog", "infrastructure/graph",
 
 import plan as P                                            # noqa: E402
 import reachable as _reachable                              # noqa: E402
+from datasource import domains as _domains                  # noqa: E402
 from datasource import refs as _refs                        # noqa: E402
 from protocol import JobSpec                                # noqa: E402
 
@@ -64,9 +65,13 @@ def _about(executor, run: str, seen: set | None = None) -> tuple:
         named = _refs.study_parts(text)
         if named:
             if len(named) >= 2:
+                # Not a role. Which of the two a name is depends on what the
+                # domain declared, and the same walk everywhere else uses knows.
+                if named[1] in _domains.role_names():
+                    continue
                 return named[0], named[1]
         elif text.startswith("run:"):
-            later.append(text[len("run:"):].strip("/").split("/")[0])
+            later.append(_refs.run_named(text))
     for earlier in later:
         study, sample = _about(executor, earlier, seen)
         if study:

@@ -34,26 +34,30 @@ into the next says `run:...` and means it, rather than repeating a layout.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from . import domains as _domains
 from . import local as _local
 
-# A third kind, beside a study's data and a run's output: something the machine
-# itself provides. A deconvolution reference belongs to no study and is produced
-# by no run, so without this it can only be a path someone types, which means the
-# model cannot reach it and the capability is unreachable on every machine that
-# has it. What each name points at is the site's answer, so a deployment that
-# keeps its references elsewhere says so once in its profile.
-SCHEMES = ("study", "run", "site")
+# What a reference says, kept apart from finding what it points at. An interface,
+# because it is vocabulary: it depends on nothing and every partition speaks it,
+# including the artifact store, which has to give the same answer over ssh under
+# whatever python3 a cluster provides and cannot import any of this.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "interfaces" / "data"))
+from reference import (AT, SCHEMES, looks_like_reference,  # noqa: E402,F401
+                       run_named, split_version, study_parts, subject)
+
+# The third scheme, beside a study's data and a run's output, is something the
+# machine itself provides. A deconvolution reference belongs to no study and is
+# produced by no run, so without it that can only be a path someone types, which
+# means the model cannot reach it and the capability is unreachable on every
+# machine that has it. What each name points at is the site's answer, so a
+# deployment that keeps its references elsewhere says so once in its profile.
 
 
 class Unresolvable(Exception):
     """A reference that names nothing, said in terms of the reference."""
-
-
-def looks_like_reference(value: str) -> bool:
-    return isinstance(value, str) and value.split(":", 1)[0] in SCHEMES
 
 
 def resolve(value, *, data_root: str | None = None,
@@ -108,42 +112,11 @@ def _site(rest: str, references: dict) -> Path:
 # different data look identical to anything comparing what they read — which is
 # exactly how re-use would hand back a result built from data that has since been
 # replaced.
-AT = "@"
-
-
-def _versioned(name: str) -> tuple:
-    """A study name split from the version it asks for, if it asks for one."""
-    study, _, version = name.partition(AT)
-    return study, version
-
-
-def study_parts(reference) -> list:
-    """A `study:` reference, split into the study and whatever it named inside.
-
-    The study name comes back with no version on it, and that is the point of
-    having this at all. A version says which copy of the data to read; it never
-    says what the data is. So everything that asks "which study is this" — does
-    this machine hold it, which sample was that run about, which study to file a
-    result under — gets the same answer whether or not somebody pinned a
-    version, and none of them has to learn that versions exist.
-
-    There were six of these written out by hand, one wherever the question came
-    up, and adding versions broke four of them at once: a reference carrying a
-    version named a study called `NSCLC@2026-08-13`, which no machine holds, so
-    the work was routed to whichever machine was first in the list. Splitting a
-    reference is this file's job, and it is one line, which is exactly why it got
-    written six times.
-
-    Empty for anything that is not a study reference, so a caller can ask without
-    checking first.
-    """
-    text = str(reference or "")
-    if not text.startswith("study:"):
-        return []
-    parts = [p for p in text[len("study:"):].strip("/").split("/") if p]
-    if parts:
-        parts[0] = _versioned(parts[0])[0]
-    return parts
+#
+# Reading that syntax is in `reference.py`, imported above, because reading a
+# reference is string handling and belongs where anything can reach it — the
+# artifact store answers over ssh under whatever python3 a cluster has, and it
+# needs the same answer this file gives.
 
 
 def versions_of(study: str, data_root: str = "") -> list:
@@ -193,7 +166,7 @@ def _study(rest: str, data_root: str) -> Path:
     if not rest:
         raise Unresolvable("study: needs a study name")
     name, _, tail = rest.partition("/")
-    name, version = _versioned(name)
+    name, version = split_version(name)
     found = {k: v for k, v in _local.scan_studies(data_root).items()
              if _local.study_allowed(k)}
     if name not in found:

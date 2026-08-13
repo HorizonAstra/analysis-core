@@ -156,7 +156,7 @@ def warm() -> list[dict]:
     return _survey(",".join(names()))
 
 
-def datasets(built=None, *, fresh: bool = False) -> list[dict]:
+def datasets(built=None, *, fresh: bool = False, wait: bool = True) -> list[dict]:
     """Every dataset every reachable machine holds, asked of each of them.
 
     A reference names no machine, and that is the point: a study exists or it
@@ -173,6 +173,13 @@ def datasets(built=None, *, fresh: bool = False) -> list[dict]:
     vanish between one question and the next, so a short hold is honest; it is
     short so that data added today shows up today. Once the hold expires the
     previous answer is still served, and the new one is fetched behind it.
+
+    `wait=False` for a caller that would rather answer without this than wait for
+    it. The hold makes the usual case free, but the first question on a cold
+    process pays the whole round trip — half a minute against a cluster that is
+    merely slow — and that cost belongs to whoever needs the answer to be right,
+    not to a panel decorating something it already has. Such a caller gets what
+    is held, or nothing, and the asking still happens behind it.
     """
     if built is not None:
         return _merge(built)
@@ -183,6 +190,9 @@ def datasets(built=None, *, fresh: bool = False) -> list[dict]:
             if time.monotonic() - seen[0] >= _TTL:
                 _refresh_later(key)
             return seen[1]
+        if not wait:
+            _refresh_later(key)
+            return []
     return _survey(key)
 
 

@@ -52,13 +52,35 @@ def _slug(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", str(s)).strip("-") or "unnamed"
 
 
-def _leaf_names(output: dict, prefix: str = "") -> list[str]:
+# Tools that enumerate what exists rather than return a result. Nothing is carded
+# from one, and nothing in one is claimed by the chat.
+#
+# A card says "here is a thing you asked for, open it". Asking what results exist
+# is not asking to open any of them, and treating a listing like a result put a
+# card in the conversation for every output of every run it named — a hundred of
+# them above the answer, none of them asked for. Reading one back is the moment
+# something has been looked at, and that is when it is worth showing.
+_LISTINGS = frozenset({"list_runs"})
+
+
+def _leaf_names(output, prefix: str = "") -> list[str]:
     """The openable things inside one output.
 
     A capability whose result is a directory is carded as its contents, because
     a folder is not something a reader can look at, and a card named for the
     folder opens nothing.
+
+    An output arrives described two ways, and both are read here. Reading one run
+    back describes each output in full — its name, whether it is a directory,
+    what is inside. Listing many runs names them and stops there, because a
+    listing is not the place to walk every result's contents. Handling only the
+    first shape crashed the whole turn on the second: `"bundle"` is a string, and
+    a string has no name to ask it for.
     """
+    if isinstance(output, str):
+        return [prefix + output] if output else []
+    if not isinstance(output, dict):
+        return []
     name = prefix + (output.get("name") or "")
     if output.get("kind") != "directory":
         return [name] if name else []
@@ -361,6 +383,22 @@ class Engine:
                                               "data": ",".join(data or [])})
 
     @staticmethod
+    def _visible_runs(user: str, chat_id: str) -> list[str]:
+        """Which runs this chat may see, as the versions grid decides it.
+
+        Without this the model was told there were no runs at all in any new
+        chat, and said so: it reported that nothing had been prepared while
+        ninety five finished runs sat in the store. The work was never lost —
+        asking for it again handed it straight back — but being told your own
+        finished work does not exist is not something to work around.
+        """
+        try:
+            import versions as _versions
+            return _versions.visible_runs(user, chat_id)
+        except Exception:              # noqa: BLE001 - scope must not fail on this
+            return list(chats.chat_runs(user, chat_id))
+
+    @staticmethod
     def _data_pins(user: str, chat_id: str) -> list[str]:
         """Which version of its data each sample in this chat is read from.
 
@@ -514,7 +552,7 @@ class Engine:
                 if b["type"] == "image":                 # not persisted (size)
                     yield {"type": "image", "src": f"data:{b['mime_type']};base64,{b['data']}"}
 
-            for r in self._parse_runs(blocks):
+            for r in (() if tc["name"] in _LISTINGS else self._parse_runs(blocks)):
                 if r["run"] not in rec_runs:
                     rec_runs.append(r["run"])
                 if r.get("state") and not r.get("outputs"):
@@ -588,7 +626,7 @@ class Engine:
                 scope = self.scope_for(user, chat_id)
                 await self._apply_scope(session, scope,
                                         self.domains_for(user, chat_id),
-                                        chats.chat_runs(user, chat_id),
+                                        self._visible_runs(user, chat_id),
                                         self._cleared_cells(user, chat_id),
                                         self._data_pins(user, chat_id))
                 system = (self.system_prompt(user, chat_id) + render.scope_note(scope)
@@ -645,7 +683,15 @@ class Engine:
                 yield {"type": "done"}
             except Exception as e:  # noqa: BLE001 - surface any failure as a clean event
                 print(f"[error] {type(e).__name__}: {e}", flush=True)
-                m = render.redact(extract_error_message(e) or "Something went wrong while running that analysis.")
+                # What actually failed, and not only in the log. A turn that ends
+                # in "something went wrong" leaves the person with nothing to say
+                # to anyone and nothing to search for, and the one line that would
+                # have explained it goes to a terminal they may not be looking at.
+                # The type and message, never the traceback.
+                said = extract_error_message(e)
+                if not said:
+                    said = f"Something went wrong while running that analysis. ({type(e).__name__}: {e})".strip()
+                m = render.redact(said)
                 rec_msgs.append({"role": "error", "text": m})
                 yield {"type": "error", "message": m}
             finally:

@@ -799,6 +799,10 @@ const POPS = [["#studyBtn", "#studyPop"], ["#infoBtn", "#infoPop"],
 // Closing skips whatever is not on the page. This runs on every document click,
 // so one missing control here would break every click in the app.
 function closePops() {
+  // The version menu lives inside one of these, so hiding the card would leave
+  // it in the page with its watcher still registered, waiting to close a menu
+  // nobody can see and then reappearing on top of the next one.
+  closeVersionMenu();
   for (const [b, p] of POPS) {
     const pop = $(p), btn = $(b);
     if (pop) pop.hidden = true;
@@ -937,13 +941,19 @@ function viewerRow(v) {
   const say = () => {
     if (!v.ready) { why.textContent = v.why || ""; return; }
     const n = picked().length;
-    why.textContent = choices.length > 1 && n < choices.length
-      ? `Opens ${n} of ${choices.length} samples`
-      : `${v.samples} sample${v.samples === 1 ? "" : "s"} prepared in this chat`;
+    // Nothing ticked is a real state and it is said, rather than prevented by
+    // leaving a sample on that nobody asked for. What must not happen is opening
+    // a viewer with nothing in it, so that is what is stopped, at the button.
+    open.disabled = n === 0;
+    why.textContent = n === 0
+      ? "No samples ticked, so there is nothing to open"
+      : (choices.length > 1 && n < choices.length
+        ? `Opens ${n} of ${choices.length} samples`
+        : `${v.samples} sample${v.samples === 1 ? "" : "s"} prepared in this chat`);
   };
   say();
   open.addEventListener("click", () => {
-    if (!v.ready) return;
+    if (!v.ready || !picked().length) return;
     closePops();
     // Only when it is a narrowing. Naming every sample would say the same thing
     // as naming none, in a longer URL.
@@ -970,7 +980,8 @@ function viewerRow(v) {
   pick.append(chev, pickName, count);
   const tally = () => {
     const n = picked().length;
-    count.textContent = n === choices.length ? `all ${n}` : `${n} of ${choices.length}`;
+    count.textContent = n === 0 ? "none"
+      : n === choices.length ? `all ${n}` : `${n} of ${choices.length}`;
   };
   tally();
 
@@ -1004,10 +1015,7 @@ function viewerRow(v) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "vw-bulk-btn"; b.textContent = text;
     b.addEventListener("click", () => {
-      // Never all-off. An empty selection opens a viewer with nothing in it,
-      // which reads as broken rather than as an empty choice, so None leaves
-      // the first one on as somewhere to start.
-      boxes.forEach((c, i) => { c.checked = want || i === 0; });
+      boxes.forEach((c) => { c.checked = want; });
       changed();
     });
     bulk.appendChild(b);
@@ -1046,13 +1054,39 @@ async function renderVersions() {
 }
 
 async function pickVersion(picked) {
+  // A version is chosen for one conversation, so there has to be one to choose
+  // it for. A new chat exists only on screen until its first message, which is
+  // exactly what this card sees when the app has just been opened, and the
+  // choice was refused. Created here the same way sending a message creates it,
+  // rather than making somebody send something before the grid will work.
+  let id = currentChatId;
+  if (!id) { try { id = await ensureChatExists(); } catch { id = null; } }
+  if (!id) { versionsNote("This needs a chat to belong to."); return; }
+
+  let got = null, ok = false;
   try {
-    verData = await (await fetch("/api/versions", {
+    const res = await fetch("/api/versions", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: currentChatId, picked }),
-    })).json();
-  } catch { return; }
+      body: JSON.stringify({ chat_id: id, picked }),
+    });
+    ok = res.ok;
+    got = await res.json();
+  } catch { got = null; }
+  // Whatever came back is only drawn if it is a grid. A refusal is a small
+  // problem — one choice did not register — and drawing it as the answer turned
+  // it into a large one: the body has no columns, so a screen full of real
+  // results redrew as "nothing has finished yet".
+  if (!ok || !got || !got.columns) {
+    versionsNote((got && got.error) || "That could not be saved just now.");
+    return;
+  }
+  verData = got;
   drawVersions();
+}
+
+function versionsNote(text) {
+  const foot = $("#verFoot");
+  if (foot) foot.textContent = text;
 }
 
 function drawVersions() {
@@ -1066,6 +1100,7 @@ function drawVersions() {
     return;
   }
   body.innerHTML = "";
+  body.appendChild(everyCellBar());
   const table = document.createElement("table");
   table.className = "ver-grid";
 
@@ -1074,7 +1109,12 @@ function drawVersions() {
   for (const c of cols) {
     const th = document.createElement("th");
     const name = document.createElement("div");
-    name.className = "ver-col"; name.textContent = capTitle(c);
+    // The data column is named by the domain that owns the data — "Space Ranger"
+    // rather than "Data" — because that is what the people reading this call the
+    // thing every analysis starts from.
+    name.className = "ver-col";
+    name.textContent = c === verDataColumn()
+      ? ((verData && verData.data_label) || "Data") : capTitle(c);
     // Setting one capability across every sample at once. The common move by
     // far: a parameter is reconsidered for the study, not for one sample.
     const all = document.createElement("button");
@@ -1132,6 +1172,55 @@ function verDataColumn() {
   return (verData && verData.data_column) || "";
 }
 
+// Every cell there is, as [subject, column, cell]. Both sections, because the
+// rows that span samples are cells like any other and a control that said "all"
+// while quietly meaning "all except those" would be worse than not having one.
+function everyCell() {
+  const out = [];
+  for (const r of [...(verData.rows || []), ...(verData.across || [])]) {
+    for (const c of Object.keys(r.cells || {})) {
+      if (r.cells[c] && r.cells[c].versions.length) out.push([r.subject, c, r.cells[c]]);
+    }
+  }
+  return out;
+}
+
+// Setting the whole grid at once. The per-column control next to each heading is
+// the common move — one parameter reconsidered for the study — and this is the
+// other one: starting over, either by following everything that has landed or by
+// emptying it all so the next question is answered from scratch.
+function everyCellBar() {
+  const bar = el("ver-bulk");
+  const say = document.createElement("span");
+  say.className = "ver-bulk-say"; say.textContent = "Every cell:";
+  bar.appendChild(say);
+
+  const act = (text, title, value) => {
+    const b = document.createElement("button");
+    b.className = "ver-bulk-btn"; b.type = "button"; b.textContent = text;
+    b.title = title;
+    b.addEventListener("click", () => {
+      const picked = {};
+      for (const [subject, c, cell] of everyCell()) {
+        // Data is on disk or it is not, so there is nothing to empty. Skipped
+        // rather than sent, since sending it would record a cleared cell that
+        // nothing acts on and that the column has no way to show.
+        if (value === "" && cell.clearable === false) continue;
+        picked[`${subject}::${c}`] = value;
+      }
+      pickVersion(picked);
+    });
+    bar.appendChild(b);
+  };
+  act("All latest", "Point every cell at the newest version it has, including "
+                  + "any that were emptied", null);
+  act("Clear all", "Empty every result cell, so the next time any of this is "
+                 + "asked for it is computed again rather than re-used. The data "
+                 + "column keeps its version, since data is not something that "
+                 + "can be run again.", "");
+  return bar;
+}
+
 // A version of a result is named by when it was submitted, and a version of data
 // is named by whoever laid the folder out. So a name is shown as a date only when
 // it is one, and otherwise shown as what it says.
@@ -1165,6 +1254,11 @@ function versionCell(subject, capability, cell) {
   return td;
 }
 
+// The click that closes the open version menu, while one is open. Kept so it can
+// be taken off again: a watcher per menu, left registered, would close the next
+// menu on the click that opened it.
+let verMenuAway = null;
+
 function openVersionMenu(td, subject, capability, cell) {
   closeVersionMenu();
   const menu = el("ver-menu");
@@ -1197,11 +1291,21 @@ function openVersionMenu(td, subject, capability, cell) {
     menu.appendChild(clear);
   }
   td.appendChild(menu);
-  setTimeout(() => document.addEventListener("click", closeVersionMenu, { once: true }), 0);
+  // Watched from the document in the capture phase, because the popover card
+  // stops clicks from bubbling out to it. Listening the ordinary way meant no
+  // click inside the card ever reached this, so the only way to close the menu
+  // was to choose something — and looking at the options and deciding to change
+  // nothing is the most common reason to open it.
+  verMenuAway = (e) => { if (!e.target.closest(".ver-menu")) closeVersionMenu(); };
+  setTimeout(() => document.addEventListener("click", verMenuAway, true), 0);
 }
 
 function closeVersionMenu() {
   for (const m of document.querySelectorAll(".ver-menu")) m.remove();
+  if (verMenuAway) {
+    document.removeEventListener("click", verMenuAway, true);
+    verMenuAway = null;
+  }
 }
 
 function initPops() {

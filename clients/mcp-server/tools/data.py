@@ -71,6 +71,12 @@ def register(mcp, *, sites) -> list[str]:
 
         An earlier run's output is named the same way, as `run:<id>/<output>`,
         which is how one analysis is fed into the next.
+
+        This describes data, and only data. It does not know what has been
+        computed from it, so a study appearing here in its raw form is not
+        evidence that nothing has been run on it — results are held separately
+        and are listed separately. Do not conclude from this answer that a study
+        is unanalysed; ask for the runs as well.
         """
         rows = [r for r in _across(sites)
                 if D.study_allowed(r["study"]) and D.domain_allowed(r["domain"])]
@@ -86,5 +92,8 @@ def register(mcp, *, sites) -> list[str]:
                  description=("What study data is available, and the reference for "
                               "each part of it. Call this before any analysis: a "
                               "capability input takes one of these references, and "
-                              "an earlier run's output is named run:<id>/<output>."))
+                              "an earlier run's output is named run:<id>/<output>. "
+                              "Data only: it cannot say what has already been "
+                              "computed, so pair it with the run listing before "
+                              "describing what a study does or does not have."))
     return ["list_data"]

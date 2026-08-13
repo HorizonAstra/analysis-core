@@ -315,10 +315,16 @@ def main() -> int:
     # reads. The source then sits outside the staging tree, so the container
     # needs it bound or the link resolves to nothing inside.
     linked: list = []
+    # What each input was named as, kept beside what it resolved to. Only when it
+    # was a reference: a literal path is already the path, and an inline text
+    # input is its own content, which does not belong in a provenance record.
+    asked: dict = {}
     for i in contract["inputs"]:
         supplied = getattr(args, i["name"], None)
         if supplied is None:
             continue
+        if _refs.looks_like_reference(supplied):
+            asked[i["name"]] = str(supplied)
         if i.get("type") == "text":
             # The value is the content rather than a path to it. Writing it out
             # here and then treating it as any other file is what makes the rest
@@ -770,7 +776,13 @@ def main() -> int:
         # covers only this invocation, and the skipped steps ran earlier under
         # an identity that was checked to be identical.
         "resumed_steps": skipped,
-        "inputs": {name: {"path": str(src), "sha256": digest(src)}
+        # What was asked for as well as what it turned out to be. A path is one
+        # machine's answer to a reference and cannot be turned back into it: it
+        # cannot say which study, which version, or which earlier run, so
+        # anything reading a finished run had to guess those from directory
+        # names. Recording the reference costs a string and settles it.
+        "inputs": {name: ({"ref": asked[name]} if name in asked else {})
+                   | {"path": str(src), "sha256": digest(src)}
                    for name, src, _ in staging},
         "outputs": produced,
         # Which output digests were taken over a filtered file, and what was

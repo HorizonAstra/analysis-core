@@ -44,6 +44,13 @@ _TREE = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_TREE / "interfaces" / "catalog"))
 import entry as C
 
+# How a reference is read, and which sample a piece of work is about. An
+# interface, because it is vocabulary rather than machinery: it depends on
+# nothing, every partition speaks it, and this file has to speak it over ssh
+# under whatever python3 a cluster provides, with no data layer to import.
+sys.path.insert(0, str(_TREE / "interfaces" / "data"))
+import reference as _reference
+
 MANIFEST = "run_manifest.json"
 
 
@@ -54,6 +61,9 @@ def _slug(s: str) -> str:
 class ArtifactStore:
     def __init__(self, root: str | Path):
         self.root = Path(os.path.expandvars(str(root))).expanduser()
+        # What each run read, remembered while one listing runs. A chain asks for
+        # the run below it, and a listing walks every step of every chain.
+        self._read_cache: dict = {}
 
     # --- writing ----------------------------------------------------------
     def new_run(self, capability: str, workspace: str = "default",
@@ -120,6 +130,70 @@ class ArtifactStore:
                 seen.append(name)
         return seen[:4]
 
+    def _reads(self, run: str):
+        """What one finished run was given, by its id, or None if it is not here.
+
+        Cached for the length of a listing, because a chain asks for the run
+        below it and a listing walks the whole chain for every step of it.
+        """
+        if run in self._read_cache:
+            return self._read_cache[run]
+        found = None
+        for path, m in self._manifests():
+            if path.parent.name == run:
+                found = self._referenced(m)
+                break
+        self._read_cache[run] = found
+        return found
+
+    def _referenced(self, manifest: dict) -> dict:
+        """A run's inputs as references, however the manifest recorded them.
+
+        Runs made since the manifest carried the reference say what they read
+        outright. Older ones recorded only the path it resolved to, so the
+        reference is reconstructed: a path inside this store is an earlier run,
+        and anything else is data, whose enclosing folder is the sample where
+        data is kept per sample. Reconstructed rather than given up on, because
+        the results that exist now are the ones people are asking about.
+        """
+        out = {}
+        for name, spec in (manifest.get("inputs") or {}).items():
+            spec = spec or {}
+            if spec.get("ref"):
+                out[name] = spec["ref"]
+                continue
+            path = str(spec.get("path") or "").rstrip("/")
+            if not path:
+                continue
+            inside = self._within_root(path)
+            out[name] = (f"run:{inside}" if inside else
+                         f"study:_/{path.rsplit('/', 2)[-2]}" if "/" in path else path)
+        return out
+
+    def _within_root(self, path: str) -> str:
+        """The run a path belongs to, when the path is one of this store's own."""
+        try:
+            rel = Path(path).resolve().relative_to(self.root.resolve())
+        except (ValueError, OSError):
+            return ""
+        # <workspace>/<domain>/<capability>/<run>/<output...>
+        return rel.parts[3] if len(rel.parts) >= 4 else ""
+
+    def _sample(self, manifest: dict) -> str:
+        """Which sample a run is about, following what it read back to the data.
+
+        Only the first stage of a chain is handed anything that names a sample;
+        every stage after it names the stage before. So a listing that reads only
+        its own inputs can say which sample a harmonise was for and not which
+        sample a tree came from, which is the half that matters — and a reader
+        given that listing counts by guessing.
+
+        The walk itself is not written here. It is the same question the results
+        panel and the recompute decision ask, and it used to have a different
+        answer in each of them.
+        """
+        return _reference.subject(self._referenced(manifest), self._reads)
+
     def runs(self, workspace: str | None = None, capability: str | None = None,
              limit: int = 50) -> list[dict]:
         """What has been run, newest first."""
@@ -132,6 +206,11 @@ class ArtifactStore:
             out.append({
                 "run": path.parent.name,
                 "capability": cap,
+                # Which sample, said outright. `on` names everything it read and
+                # leaves the sample buried among run ids for a reader to pick
+                # out, which is a guess, and a reader that guesses reports "at
+                # least a couple of samples" for work covering nineteen.
+                "sample": self._sample(m),
                 "on": self._on(m),
                 "version": m.get("contract_version"),
                 "site": m.get("profile"),

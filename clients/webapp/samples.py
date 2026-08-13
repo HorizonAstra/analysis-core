@@ -53,10 +53,12 @@ from pathlib import Path
 import paths
 
 _TREE = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
-if str(_TREE / "infrastructure") not in sys.path:
-    sys.path.insert(0, str(_TREE / "infrastructure"))
+for _p in ("infrastructure", "interfaces/data"):
+    if str(_TREE / _p) not in sys.path:
+        sys.path.insert(0, str(_TREE / _p))
 
-from datasource import refs as _refs                           # noqa: E402
+import reference as _reference                                 # noqa: E402
+from datasource import domains as _domains                     # noqa: E402
 
 # How long a user's registry is held before it is read again. A registry only
 # changes when a run is submitted or polled, and the panel that asks this is
@@ -71,32 +73,14 @@ def _sites() -> list[str]:
             if s.strip()]
 
 
-_ROLES: set | None = None
+def _roles() -> frozenset:
+    """Every role name any domain declares, so a role is never read as a sample.
 
-
-def _roles() -> set:
-    """Every role name any domain declares, read from the domains themselves.
-
-    `study:NSCLC-Neoadjuvant/counts` and `study:NSCLC-Neoadjuvant/1N` are the
-    same shape, and only the declarations tell them apart. Read rather than
-    listed here, so a domain that adds a role does not have to remember this
-    file exists.
-
-    Read once. These are files that ship with the tree and do not change while
-    the server is up.
+    Asked of the domains rather than worked out here. This file used to read the
+    declarations itself, which is one more copy of a question the data layer
+    already answers.
     """
-    global _ROLES
-    if _ROLES is None:
-        found = set()
-        for path in sorted(_TREE.glob("domains/*/study.json")):
-            try:
-                spec = json.loads(path.read_text())
-            except (OSError, ValueError):
-                continue
-            for shape in (spec.get("datasets") or [spec]):
-                found.update((shape.get("roles") or {}).keys())
-        _ROLES = found
-    return _ROLES
+    return _domains.role_names()
 
 
 def _specs(user: str) -> dict:
@@ -130,63 +114,10 @@ def _specs(user: str) -> dict:
     return out
 
 
-def _named_by(ref: str) -> str:
-    """The sample a `study:` reference names, or "" for anything else.
-
-    `study:<study>/<sample>` and everything under it name one. `study:<study>`
-    alone names a whole study, and `study:<study>/<role>` names a role of one,
-    and neither is a sample.
-    """
-    parts = _refs.study_parts(ref)
-    if len(parts) < 2:
-        return ""
-    return "" if parts[1] in _roles() else parts[1]
-
-
 def of(user: str, run: str) -> str:
     """Which sample a run is about, or "" when it is not about exactly one."""
-    return _resolve(run, _specs(user), {}, set())
-
-
-def _resolve(run: str, specs: dict, memo: dict, walking: set) -> str:
-    """The sample of one run, following what it was made from.
-
-    `memo` holds runs already worked out and `walking` holds the ones being
-    worked out right now. The two are different things and conflating them is a
-    bug: four of a capability's five inputs commonly name the same harmonize
-    run, and a single "already visited" set would answer the first of them with
-    the sample and the rest with nothing, making the result depend on the order
-    a dictionary happened to be in.
-
-    `walking` exists only to stop a cycle. One cannot arise from legitimate use,
-    since a run's inputs are submitted before the run exists, but a hand-edited
-    registry is not worth hanging the panel over.
-    """
-    if run in memo:
-        return memo[run]
-    if run in walking:
-        return ""
-    inputs = specs.get(run)
-    if inputs is None:
-        return ""                      # not this user's, or aged out of the registry
-    walking.add(run)
-    found = set()
-    for ref in inputs.values():
-        if not isinstance(ref, str):
-            continue
-        if ref.startswith("run:"):
-            earlier = ref[len("run:"):].strip("/").split("/")[0]
-            name = _resolve(earlier, specs, memo, walking)
-        else:
-            name = _named_by(ref)
-        if name:
-            found.add(name)
-        if len(found) > 1:
-            break                      # built from more than one, so about neither
-    walking.discard(run)
-    answer = found.pop() if len(found) == 1 else ""
-    memo[run] = answer
-    return answer
+    specs = _specs(user)
+    return _reference.subject(specs.get(run) or {}, specs.get, _roles())
 
 
 def by_run(user: str, run_ids) -> dict:
@@ -196,5 +127,9 @@ def by_run(user: str, run_ids) -> dict:
     one memo across all of them, so the walk back through earlier runs is done
     once: a study's worth of runs all lead back to the same few harmonize runs.
     """
-    specs, memo = _specs(user), {}
-    return {run: _resolve(run, specs, memo, set()) for run in run_ids}
+    specs, roles, memo = _specs(user), _roles(), {}
+    for run in run_ids:
+        if run not in memo:
+            memo[run] = _reference.subject(specs.get(run) or {}, specs.get,
+                                           roles, memo)
+    return {run: memo[run] for run in run_ids}
