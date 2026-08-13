@@ -46,6 +46,7 @@ _OUTER_DOMAINS = os.environ.get("ALLOWED_DOMAINS")
 #
 # Unset means unrestricted, which is a person at a terminal with one store and
 # no conversations. Set and empty means nothing yet, which is a new chat.
+CLEARED_CELLS = "CLEARED_CELLS"
 ALLOWED_RUNS = "ALLOWED_RUNS"
 
 
@@ -110,6 +111,11 @@ def register(mcp) -> list[str]:
             description="Comma separated run ids this conversation has produced. "
                         "Always sent, empty for a conversation that has produced "
                         "none, since empty and absent mean different things.")] = "",
+        cleared: Annotated[str, Field(
+            description="Comma separated <subject>::<capability> cells the person "
+                        "has emptied in the versions grid. Work matching one of "
+                        "these is computed again rather than re-used, because "
+                        "emptying a cell is how somebody asks for that.")] = "",
     ) -> str:
         """Narrow this server to the studies a conversation is about.
 
@@ -117,6 +123,11 @@ def register(mcp) -> list[str]:
         """
         os.environ[ALLOWED_RUNS] = ",".join(
             sorted({r.strip() for r in runs.split(",") if r.strip()}))
+        # Sent every turn like runs, and for the same reason: a cell that was
+        # cleared and then filled again has to stop being cleared, and only a
+        # value that is always sent can say so.
+        os.environ[CLEARED_CELLS] = ",".join(
+            sorted({c.strip() for c in cleared.split(",") if c.strip()}))
         outer_s, outer_d = _outer(_OUTER_STUDIES), _outer(_OUTER_DOMAINS)
         now_s = _narrow(studies, outer_s)
         if studies.strip() or outer_s is not None:

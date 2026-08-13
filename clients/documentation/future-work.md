@@ -24,7 +24,7 @@ meant to grow into. Nothing here is wired yet.
   a golden-output test catches and a type checker never would.
 - A **capability smoke test** in CI: start the built image and assert the tool inventory is
   exactly what is expected. The startup gating makes "silently fewer tools" a real failure
-  mode, and `python src/capabilities.py --require-all` is the check for it.
+  mode, and `./mo capabilities --require-all` is the check for it.
 
 ## Provenance and user-facing outputs
 - Richer cross-study provenance views (an artifact graph across workspaces). *(Seeded:

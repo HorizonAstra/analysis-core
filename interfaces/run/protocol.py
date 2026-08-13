@@ -99,6 +99,20 @@ class JobSpec:
     # caller that names its own destination is how results end up scattered
     # across whatever directory someone happened to be in.
     workspace: str = "default"
+    # Do this even if it has been done. A site is allowed to hand back a finished
+    # run whose every input, parameter and pinned digest matches, because that
+    # run is the answer; this is how a caller says it wants the work performed
+    # anyway.
+    #
+    # It exists because "I already have that" and "I want it computed again" are
+    # different requests that are otherwise indistinguishable. Someone who
+    # suspects a stored result, or who has changed a kernel without the entry
+    # recording it, is asking the second, and there was no way to say so.
+    #
+    # It does not make a new answer. Identical work produces identical output,
+    # so what comes back is the same result recorded twice — and if it is not,
+    # that difference is the finding.
+    fresh: bool = False
     # Filled in by the executor once the store has allocated a directory, so a
     # record can be read back later. Never supplied by a caller.
     output_path: str | None = None

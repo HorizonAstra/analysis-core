@@ -3,13 +3,13 @@
 A multi-user web chat that drives the analysis toolkit over the API: login, multiple
 chats per user, a per-chat results panel, and per-user study access. A self-contained
 unit (a future separate repo): a thin FastAPI backend plus a no-build-step frontend that
-reuses the engine in `../src`.
+reuses the engine in `..`.
 
 ## Run
 
 ```bash
-cp examples/.env.example .env   # set GEMINI_API_KEY once (server-side; never sent to browser)
-./mo web                 # from the repo root: sets up if needed, opens :8000
+cp ../.env.example ../.env   # set the API key once (server-side; never sent to browser)
+cd .. && ./mo web            # from clients/: sets up if needed, opens :8000
 ```
 
 Or, run-anywhere container (one command): `docker compose up --build`.
@@ -22,7 +22,7 @@ Seeded accounts (no sign-up yet): `aml@bsd.uchicago.edu`/`aml`,
 
 - **Dev (your laptop):** `./mo web`. Add `DEV_RELOAD=1` to
   auto-restart on Python edits, `PORT=8080` to change the port. Convenience, not hardened.
-- **Prod (admin, one command):** put a production `.env` in the repo root (a stable
+- **Prod (admin, one command):** put a production `.env` in `clients/` (a stable
   `SESSION_SECRET`, and `COOKIE_SECURE=1` since you serve over HTTPS), then:
 
   ```bash

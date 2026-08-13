@@ -17,6 +17,7 @@ own login-node rule requires.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shlex
 import subprocess
@@ -35,6 +36,18 @@ import entry as C
 import profile as P
 
 from registry import JobRegistry
+import failure as _failure
+import reuse as _reuse
+
+# What the scheduler says when it has nothing to add. Reported as nothing rather
+# than repeated, because "Reason: None" reads as an answer and is not one.
+_NO_REASON = {"", "none", "unknown"}
+
+
+def _note(reason: str) -> str:
+    """The scheduler's own reason, when it has one worth saying."""
+    reason = (reason or "").strip()
+    return "" if reason.lower() in _NO_REASON else reason
 
 RENDER = _TREE / "infrastructure" / "render-targets" / "render.py"
 
@@ -80,6 +93,9 @@ class SlurmSshExecutor(Executor):
         self._built: dict[str, bool] = {}
         self._reachable: bool | None = None
         self._datasets: list | None = None
+        # Capabilities whose catalog entry has been checked against the far
+        # side this session. One check each, not one per submission.
+        self._agreed: set = set()
 
     # --- talking to the far side ------------------------------------------
     # Every one of these closes its standard input, and none of them can afford
@@ -97,6 +113,75 @@ class SlurmSshExecutor(Executor):
             raise RuntimeError(f"ssh to {self.ssh_host} failed ({proc.returncode}): "
                                f"{(proc.stderr or proc.stdout).strip()[-400:]}")
         return proc.stdout
+
+    def _tail(self, log_path: str | None) -> str:
+        """The end of a run's log, read on the machine that holds it.
+
+        Never raises. This is called while reporting a failure, and an ssh that
+        times out here would replace the reason for the failure with a complaint
+        about not reading the reason.
+
+        `tail` rather than `cat`, on the far side rather than here, so a log that
+        ran to gigabytes costs its last page over the network and not all of it.
+        """
+        if not log_path:
+            return ""
+        try:
+            return self._ssh(f"tail -c {_failure.TAIL_BYTES} {shlex.quote(log_path)} 2>/dev/null || true")
+        except (RuntimeError, subprocess.SubprocessError, OSError):
+            return ""
+
+    def _agree(self, capability: str, contract: Path) -> None:
+        """Refuse to submit when the two sides hold different catalog entries.
+
+        The entry is the contract: it names the kernel, pins it by digest, lists
+        the inputs and their flags, and is what the job script is rendered from.
+        The client renders the script from its copy; the far side runs its own
+        copy of the runner against its own copy of the entry. When the two
+        differ, the job queues, waits, starts, and fails minutes later for a
+        reason that has nothing to do with the science — which is what happened
+        twice to tree_bundle after the entry changed here and not there.
+
+        Compared by digest of the bytes, so any difference at all is caught, and
+        the answer is remembered per capability because a chain submits several
+        in a row and they mostly share a domain.
+
+        An unreachable or unreadable far copy is not a refusal. This is a guard
+        against the two sides disagreeing, not a second liveness check, and a
+        site that cannot answer will fail the submission a moment later anyway
+        with an error about the thing that was actually wrong.
+        """
+        if capability in self._agreed:
+            return
+        mine = hashlib.sha256(contract.read_bytes()).hexdigest()
+        domain, cap = capability.split("/", 1)
+        # Both of these reach the far side — working out the install root expands
+        # the site's ${...} over there — so both are inside the same guard. With
+        # only the digest read covered, an unreachable host was reported as a
+        # contract disagreement, which is a confident answer to a question that
+        # was never asked.
+        try:
+            remote = f"{self._install_root()}/domains/{domain}/catalog/{cap}.json"
+            out = self._ssh(f"sha256sum {shlex.quote(remote)} 2>/dev/null "
+                            f"|| shasum -a 256 {shlex.quote(remote)} 2>/dev/null "
+                            f"|| echo missing").strip()
+        except (RuntimeError, subprocess.SubprocessError, OSError):
+            self._agreed.add(capability)
+            return
+        theirs = out.split()[0] if out and out != "missing" else ""
+        if not theirs:
+            raise RuntimeError(
+                f"{self.site} has no catalog entry for {capability} at {remote}. "
+                f"The installed copy there is out of date: sync the tree to "
+                f"{self._install_root()} and try again.")
+        if theirs != mine:
+            raise RuntimeError(
+                f"{capability} is not the same on both sides. This client has "
+                f"{mine[:12]} and {self.site} has {theirs[:12]}. The entry names "
+                f"the kernel and pins it, so submitting would run something other "
+                f"than what was asked for. Sync the tree to "
+                f"{self._install_root()} and try again.")
+        self._agreed.add(capability)
 
     def available(self) -> bool:
         """Whether the far side answers, asked once and remembered.
@@ -222,6 +307,14 @@ class SlurmSshExecutor(Executor):
 
     # --- the four operations ----------------------------------------------
     def submit(self, spec: JobSpec) -> JobRecord:
+        # Already done? A run's identity is what decides what it produces,
+        # so an identical one that finished is this one's answer. Checked here
+        # rather than in each caller because every caller wants it and the
+        # check needs the registry, which is this executor's.
+        done = _reuse.finished_match(self.registry, spec)
+        if done is not None:
+            return done
+
         domain, cap = spec.capability.split("/", 1)
         # Decided here so the store over there names the run with it, leaving one
         # identifier for a caller, a directory, and anything asking about either.
@@ -249,6 +342,7 @@ class SlurmSshExecutor(Executor):
         contract = _TREE / "domains" / domain / "catalog" / f"{cap}.json"
         if not contract.is_file():
             raise FileNotFoundError(f"no catalog entry for {spec.capability}")
+        self._agree(spec.capability, contract)
 
         script = subprocess.run(
             [sys.executable, str(RENDER), str(contract), "--as", "slurm",
@@ -293,11 +387,25 @@ class SlurmSshExecutor(Executor):
         if rec.state.terminal:
             return rec
 
+        # State, and beside it the two things the scheduler knows that a log
+        # cannot say: what it exited with, and why the scheduler itself ended it.
+        # OUT_OF_MEMORY and TIMEOUT are whole answers, and a traceback printed
+        # underneath one of them is a consequence rather than a cause.
         out = self._ssh(f"sacct -j {shlex.quote(rec.native_id)} "
-                        f"--format=State --noheader --parsable2 | head -1")
-        raw = out.strip().split()[0] if out.strip() else ""
+                        f"--format=State,ExitCode,Reason --noheader --parsable2 | head -1")
+        fields = (out.strip().split("|") + ["", "", ""])[:3] if out.strip() else ["", "", ""]
+        raw = fields[0].strip().split()[0] if fields[0].strip() else ""
         rec.state = _STATES.get(raw.replace("+", ""), JobState.UNKNOWN)
-        rec.detail = raw or "no scheduler record yet"
+        if rec.state is JobState.FAILED:
+            # Read the log on the machine that has it. One ssh, on failure only,
+            # once: the record is terminal from here and poll returns early on a
+            # terminal record. Without this the whole report was the word
+            # "FAILED" and a path on a cluster, and what read it next was a model
+            # that could reach neither — so it guessed, repeatedly.
+            rec.detail = _failure.described(
+                raw, fields[1].strip(), _note(fields[2]), self._tail(rec.log_path))
+        else:
+            rec.detail = raw or "no scheduler record yet"
         rec.updated_at = _now()
         self.registry.put(rec)
         return rec

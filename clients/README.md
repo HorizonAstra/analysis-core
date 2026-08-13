@@ -68,7 +68,7 @@ The user-facing surface: a multi-user web chat (login, multiple chats, a results
 that drives the toolkit over the API. The model key stays server-side.
 
 ```bash
-cp examples/.env.example .env   # add your GEMINI_API_KEY (set once; never sent to the browser)
+cp .env.example .env   # add your API key (set once; never sent to the browser)
 ./mo web                 # sets up on first run, then opens http://127.0.0.1:8000
 ```
 
@@ -104,7 +104,7 @@ The config file lives at:
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
 A copy-pasteable template is in
-[examples/claude_desktop_config.example.json](examples/claude_desktop_config.example.json). Restart Claude
+[claude_desktop_config.example.json](claude_desktop_config.example.json). Restart Claude
 Desktop afterward. (This is exactly what `./mo desktop` writes for you on macOS; the actual
 file Claude Desktop reads is the one above, not anything in the repo. No API key goes in
 it. Desktop uses your own Claude account, which is why it's the cheap dev path.)

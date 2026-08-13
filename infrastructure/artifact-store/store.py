@@ -213,6 +213,36 @@ class ArtifactStore:
     _LINE = 2000                      # characters of one line of text
     _INSIDE = 3                       # lines shown per file when listing a directory
 
+    @classmethod
+    def _format(cls, declared: dict, name: str) -> str:
+        """The entry's word for what an output is, or the filename's."""
+        return (declared.get("format") or Path(name).suffix.lstrip(".")).lower()
+
+    @classmethod
+    def kind_of(cls, declared: dict, name: str) -> str:
+        """What an output is, from what the domain declared. Nothing is opened.
+
+        Public, and the only place this decision is made. A caller that wants to
+        draw a list needs the kind without paying to read every file, and the
+        obvious way to give it one is to let it check the same two tables — which
+        is two implementations of "what is a .tsv", and they drift the first time
+        a format is added to one of them.
+
+        `_one` calls this too, and may then disagree with it after actually
+        reading: a file the entry called a table can turn out to be unreadable
+        bytes. That is not a second opinion about the same question. This answers
+        what the output was declared to be, which is what a list needs; `_one`
+        answers what it turned out to be, which needs the file.
+        """
+        if (declared.get("type") or "").lower() == "directory":
+            return "directory"
+        fmt = cls._format(declared, name)
+        if fmt in cls._IMAGES:
+            return "image"
+        if fmt in cls._TABLES:
+            return "table"
+        return "text"
+
     def preview(self, run: str, name: str | None = None, rows: int = 20) -> list[dict]:
         """The returnable outputs of a run, with enough of each one to read.
 
@@ -259,8 +289,8 @@ class ArtifactStore:
         out["bytes"] = size
 
         # The entry's word first, the filename only when it said nothing.
-        fmt = (declared.get("format") or path.suffix.lstrip(".")).lower()
-        if fmt in self._IMAGES:
+        fmt = self._format(declared, path.name)
+        if self.kind_of(declared, path.name) == "image":
             # Handed back as a reference. A client that can show an image goes
             # and gets it; one that cannot should not be made to carry it.
             return {**out, "kind": "image"}

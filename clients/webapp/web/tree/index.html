@@ -183,6 +183,12 @@
                 picker.selectAll("option").data(names).enter()
                       .append("option").attr("value", String).text(String);
                 picker.on("change", function () { show(this.value); });
+                // Which tree, kept across a change of sample: someone comparing
+                // regions between samples is still comparing regions.
+                d3.select("#leaves").on("change", function () {
+                    view = this.value;
+                    show(d3.select("#sample").property("value"));
+                });
                 show(names[0]);
             });
         }
@@ -192,17 +198,36 @@
         // which nodes are spatial groups, what is expressed where — is exactly
         // that. Both parsers are in the bundle, so a plain Newick file still
         // opens if a bundle holds one.
+        // Which tree is on screen: one leaf per spot, or one leaf per spatial
+        // group. Two files built by the same run, so switching is a fetch and
+        // not a job on a cluster.
+        var view = "spots";
+        var FILE = { spots: "tree.xml", regions: "tree-regions.xml" };
+
         function show(name) {
             var base = "data/" + encodeURIComponent(name) + "/";
-            var file = base + "tree.xml";
+            var file = base + FILE[view];
             d3.select("#linkTree").attr("href", file)
-              .attr("download", name + ".xml");
+              .attr("download", name + (view === "regions" ? "-regions" : "") + ".xml");
             d3.select("#phyd3").text("Loading...");
             // d3 hands a one argument callback the document, or null when the
             // request failed. There is no error to inspect, so the message says
             // what is true either way.
             d3.xml(file, function (xml) {
                 if (!xml) {
+                    // A bundle built before there were two trees has only the
+                    // one. Said in those terms and put back to the tree that is
+                    // there, rather than leaving an empty page under a control
+                    // that looks like it worked.
+                    if (view === "regions") {
+                        view = "spots";
+                        d3.select("#leaves").property("value", "spots");
+                        trouble("This bundle was built before the regions view " +
+                                "existed, so it holds the tree of spots only. " +
+                                "Build it again to get both.");
+                        setTimeout(function () { show(name); }, 1600);
+                        return;
+                    }
                     d3.text(base + "tree.nwk", function (text) {
                         if (!text) {
                             trouble("The tree for " + name + " could not be read. " +
@@ -228,6 +253,13 @@
     <div class="controls container-fluid">
         <p class="group">Sample</p>
         <select id="sample" class="form-control"></select>
+
+        <p class="group">Leaves</p>
+        <select id="leaves" class="form-control"
+                title="One leaf per spot, or one leaf per spatial group. The regions tree keeps the run's distances, with everything between the groups lifted away.">
+            <option value="spots" selected="selected">Spots</option>
+            <option value="regions">Spatial groups</option>
+        </select>
 
         <div class="divider"></div>
         <p class="group">Drawing</p>

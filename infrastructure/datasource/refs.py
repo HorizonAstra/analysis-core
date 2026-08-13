@@ -14,6 +14,7 @@ know anything.
 
     study:<name>/<role>              a role the domain declared, in one study
     study:<name>/<sample>            one sample of a study
+    study:<name>@<version>/<sample>  that sample, in one version of the data
     study:<name>/<sample>/<role>     a role within one sample
     study:<name>/<sample>/<role>/x   something inside a role that is a folder
     run:<id>/<output>                an output of an earlier run
@@ -95,6 +96,84 @@ def _site(rest: str, references: dict) -> Path:
     return _within(root, deeper, f"site:{rest}") if deeper else root.resolve()
 
 
+# How a reference names one version of a study's data:
+#
+#     study:NSCLC-Neoadjuvant/1N                 the newest version
+#     study:NSCLC-Neoadjuvant@2026-08-13/1N      that one
+#
+# In the reference rather than beside it, and that is the whole point. A
+# reference is resolved by the machine that does the work, and it is also what a
+# run records as having read. Put the version anywhere else and two things break
+# at once: the far side cannot know which data to open, and two runs over
+# different data look identical to anything comparing what they read — which is
+# exactly how re-use would hand back a result built from data that has since been
+# replaced.
+AT = "@"
+
+
+def _versioned(name: str) -> tuple:
+    """A study name split from the version it asks for, if it asks for one."""
+    study, _, version = name.partition(AT)
+    return study, version
+
+
+def versions_of(directory: str, domain: str = "") -> list:
+    """Every version of a study's data, newest name first.
+
+    A version is a directory directly under the study holding the study's own
+    layout. A study with none is a study with one version that was never named,
+    which is what every study looked like before this existed and what most look
+    like now — so that case resolves to the study directory itself and nothing
+    has to be migrated for anything to keep working.
+
+    Told apart by asking the domain, not by looking for a marker file. A version
+    wraps the study's own layout, so a version is a directory that is itself
+    recognisable as that study — it has the roles the domain declares, or the
+    samples. A directory that merely contains directories is not enough: a plain
+    study's `samples/` folder contains plenty and is part of the study rather
+    than a version of it, and treating it as one would offer `@samples` as
+    something to pin.
+    """
+    root = Path(directory)
+    try:
+        inside = sorted((p for p in root.iterdir() if p.is_dir()), reverse=True)
+    except OSError:
+        return []
+    return [p.name for p in inside if _looks_like_version(p, domain)]
+
+
+def _looks_like_version(path: Path, domain: str) -> bool:
+    """Whether a directory under a study is a version of it rather than part of it."""
+    if path.name.startswith(".") or not domain:
+        return False
+    try:
+        if _domains.match_roles(str(path), domain):
+            return True
+        return bool(_domains.sample_dirs(str(path), domain))
+    except Exception:                      # noqa: BLE001 - unrecognisable is not a version
+        return False
+
+
+def _at_version(directory: str, name: str, version: str, domain: str = "") -> str:
+    """The study directory for the version asked for, or for the newest.
+
+    An unversioned study ignores this entirely, which is how a tree that has
+    never been laid out in versions keeps resolving exactly as it did.
+
+    Asking for no version asks for the newest, which for a versioned study is a
+    directory deeper. Returning the study itself there would look for the roles
+    one level above where they are and report a study that holds nothing.
+    """
+    found = versions_of(directory, domain)
+    if not version:
+        return str(Path(directory) / found[0]) if found else directory
+    if version not in found:
+        raise Unresolvable(
+            f"{name} has no version '{version}'. It has: "
+            f"{', '.join(found) or 'no versions, so name it without @'}")
+    return str(Path(directory) / version)
+
+
 def _study(rest: str, data_root: str) -> Path:
     """`<study>`, `<study>/<role>`, `<study>/<sample>`, `<study>/<sample>/<role>`.
 
@@ -110,12 +189,14 @@ def _study(rest: str, data_root: str) -> Path:
     if not rest:
         raise Unresolvable("study: needs a study name")
     name, _, tail = rest.partition("/")
+    name, version = _versioned(name)
     found = {k: v for k, v in _local.scan_studies(data_root).items()
              if _local.study_allowed(k)}
     if name not in found:
         raise Unresolvable(
             f"no study called {name}. Available: {', '.join(sorted(found)) or 'none'}")
     directory, domain = found[name]["dir"], found[name]["domain"]
+    directory = _at_version(directory, name, version, domain)
     if not tail:
         return Path(directory).resolve()
 

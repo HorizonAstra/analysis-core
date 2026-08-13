@@ -101,3 +101,29 @@ class JobRegistry:
 
     def all(self) -> list[JobRecord]:
         return list(self._load_all().values())
+
+    def forget(self, job_ids) -> int:
+        """Drop these runs from the record. Returns how many were dropped.
+
+        For work that has been retired: its outputs have been moved out of the
+        results tree on purpose, and a registry that still lists it is claiming
+        something that is not there. That is not merely untidy. A finished run
+        is what re-use hands back instead of doing the work again, so a retired
+        one left here is offered as the answer to a question whose answer has
+        been put away, and the caller gets a handle to nothing.
+
+        The record is not lost by this. A run's manifest is retired alongside
+        its outputs, and the manifest is the account of what happened; this file
+        is the list of what can still be reached.
+        """
+        wanted = set(job_ids)
+        if not wanted:
+            return 0
+        with self._exclusive():
+            recs = self._load_all()
+            gone = [j for j in wanted if j in recs]
+            for j in gone:
+                del recs[j]
+            if gone:
+                self._write_all(recs)
+            return len(gone)

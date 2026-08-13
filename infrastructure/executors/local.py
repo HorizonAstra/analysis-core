@@ -35,8 +35,26 @@ from store import ArtifactStore
 import profile as P
 
 from registry import JobRegistry
+import failure as _failure
 
 RUNNER = _TREE / "infrastructure" / "runner" / "run.py"
+
+
+def _read_tail(path) -> str:
+    """The end of a log file, or "" when there is nothing to read.
+
+    Never raises. This runs while reporting a failure, and a second failure here
+    would replace the reason with a stack trace about not finding the reason.
+    """
+    if not path:
+        return ""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            fh.seek(max(0, fh.tell() - _failure.TAIL_BYTES))
+            return fh.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
 
 # How far back to look for a run when answering whether this machine holds it.
 # Deep enough to cover a cohort's worth of work, since the answer is used to
@@ -110,6 +128,20 @@ class LocalExecutor(Executor):
         return "".join(lines)
 
     def submit(self, spec: JobSpec) -> JobRecord:
+        # Deliberately no re-use here, unlike the remote executor. Re-use hands
+        # back a run somebody may have started in another conversation, and the
+        # rule for that is about what the work costs.
+        #
+        # Work on a cluster is queued, slow, and asked for on purpose, and there
+        # is a bounded amount of it: a study has so many samples and a pipeline
+        # so many stages. Repeating it wastes an afternoon, so it is shared.
+        #
+        # Work here is seconds long and unbounded — one conversation can ask for
+        # fifty variations of a chart, and each one is a thing somebody wanted at
+        # the time rather than a result to keep. Sharing those between
+        # conversations would grow without limit and would leak one chat's
+        # exploration into another's, for a saving measured in seconds.
+
         # The handle is decided first so the store can name the run with it. A
         # caller holding the handle can then ask the store directly, rather than
         # every reader needing to translate one id into the other.
@@ -170,7 +202,14 @@ class LocalExecutor(Executor):
         if status.exists():
             code = status.read_text().strip()
             rec.state = JobState.COMPLETED if code == "0" else JobState.FAILED
-            rec.detail = f"exit {code}" + ("" if code == "0" else f", see {rec.log_path}")
+            # On failure, say what the log says rather than where the log is.
+            # A path is only an answer to somebody holding a shell on the right
+            # machine, and the thing that most often reads this is not.
+            #
+            # Read once: the record is terminal from here, and poll returns
+            # early on a terminal record without reaching this line again.
+            rec.detail = f"exit {code}" + (
+                "" if code == "0" else f"\n{_failure.reason(_read_tail(rec.log_path))}".rstrip())
         else:
             rec.detail = "running"
         rec.updated_at = _now()

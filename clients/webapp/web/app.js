@@ -794,7 +794,8 @@ function initMenu() {
 // ── study scope + capabilities popups ───────────────────────────────────────
 // Two separate controls on purpose: capabilities describes the product and sits by the
 // name; study scope changes what this chat can reach and sits by Results.
-const POPS = [["#studyBtn", "#studyPop"], ["#infoBtn", "#infoPop"], ["#viewBtn", "#viewPop"]];
+const POPS = [["#studyBtn", "#studyPop"], ["#infoBtn", "#infoPop"],
+              ["#viewBtn", "#viewPop"], ["#verBtn", "#verPop"]];
 // Closing skips whatever is not on the page. This runs on every document click,
 // so one missing control here would break every click in the app.
 function closePops() {
@@ -911,22 +912,283 @@ async function renderViewers() {
     list.innerHTML = `<div class="vw-empty">Nothing here can be opened this way.</div>`;
     return;
   }
-  list.innerHTML = d.viewers.map((v) => `
-    <button class="vw-item" type="button" ${v.ready ? "" : "disabled"} data-run="${escapeHtml(v.run)}">
-      <span class="vw-name">${escapeHtml(v.label)}</span>
-      ${v.ready && v.samples
-        ? `<span class="vw-why">${v.samples} sample${v.samples === 1 ? "" : "s"} prepared in this chat</span>`
-        : v.why ? `<span class="vw-why">${escapeHtml(v.why)}</span>` : ""}
-    </button>`).join("");
-  for (const b of list.querySelectorAll(".vw-item[data-run]:not([disabled])"))
-    b.addEventListener("click", () => { closePops(); openViewer(b.dataset.run); });
+  list.innerHTML = "";
+  for (const v of d.viewers) list.appendChild(viewerRow(v));
+}
+
+// Which samples are chosen for each viewer, kept for as long as the page is
+// open. Reopening the menu to check something should not quietly undo a choice
+// made a moment ago. Absent means all of them, which is what a first look means.
+const viewerPick = {};
+
+function viewerRow(v) {
+  const row = el("vw-row");
+  const chosen = viewerPick[v.viewer];
+  const choices = v.choices || [];
+  const picked = () => (viewerPick[v.viewer] || choices);
+
+  const open = document.createElement("button");
+  open.className = "vw-item"; open.type = "button";
+  if (!v.ready) open.disabled = true;
+  const name = document.createElement("span"); name.className = "vw-name";
+  name.textContent = v.label;
+  const why = document.createElement("span"); why.className = "vw-why";
+  open.append(name, why);
+  const say = () => {
+    if (!v.ready) { why.textContent = v.why || ""; return; }
+    const n = picked().length;
+    why.textContent = choices.length > 1 && n < choices.length
+      ? `Opens ${n} of ${choices.length} samples`
+      : `${v.samples} sample${v.samples === 1 ? "" : "s"} prepared in this chat`;
+  };
+  say();
+  open.addEventListener("click", () => {
+    if (!v.ready) return;
+    closePops();
+    // Only when it is a narrowing. Naming every sample would say the same thing
+    // as naming none, in a longer URL.
+    const n = picked();
+    openViewer(n.length && n.length < choices.length
+      ? `${v.run}~${n.join(",")}` : v.run);
+  });
+  row.appendChild(open);
+
+  // Nothing to choose between when there is one sample, and nothing to choose
+  // at all when the viewer has nothing to open. Either way the control would be
+  // a second thing to read that could not change the outcome.
+  if (!v.ready || choices.length < 2) return row;
+
+  const pick = document.createElement("button");
+  pick.className = "vw-pick"; pick.type = "button";
+  pick.setAttribute("aria-expanded", "false");
+  const chev = document.createElement("span");
+  chev.className = "vw-pick-chev"; chev.innerHTML = ICON.chev;
+  const pickName = document.createElement("span");
+  pickName.className = "vw-pick-name"; pickName.textContent = "Choose Samples";
+  const count = document.createElement("span");
+  count.className = "vw-pick-count";
+  pick.append(chev, pickName, count);
+  const tally = () => {
+    const n = picked().length;
+    count.textContent = n === choices.length ? `all ${n}` : `${n} of ${choices.length}`;
+  };
+  tally();
+
+  const box = el("vw-samples");
+  box.hidden = true;
+  const hint = el("vw-hint");
+  hint.textContent = "Tick the samples to open. A viewer loads every one you give it, "
+                   + "so fewer open faster.";
+  const bulk = el("vw-bulk");
+  const checks = el("vw-checks");
+  const boxes = [];
+  const changed = () => {
+    const on = boxes.filter((c) => c.checked).map((c) => c.value);
+    // All of them is the same as no choice at all, and storing it as a choice
+    // would freeze the list as it is now: a sample prepared later would arrive
+    // unticked, for no reason the person could see.
+    if (on.length === choices.length) delete viewerPick[v.viewer];
+    else viewerPick[v.viewer] = on;
+    tally(); say();
+  };
+  for (const s of choices) {
+    const label = document.createElement("label"); label.className = "vw-check";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = s;
+    cb.checked = !chosen || chosen.includes(s);
+    cb.addEventListener("change", changed);
+    const text = document.createElement("span"); text.textContent = s;
+    label.append(cb, text); checks.appendChild(label); boxes.push(cb);
+  }
+  for (const [text, want] of [["All", true], ["None", false]]) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "vw-bulk-btn"; b.textContent = text;
+    b.addEventListener("click", () => {
+      // Never all-off. An empty selection opens a viewer with nothing in it,
+      // which reads as broken rather than as an empty choice, so None leaves
+      // the first one on as somewhere to start.
+      boxes.forEach((c, i) => { c.checked = want || i === 0; });
+      changed();
+    });
+    bulk.appendChild(b);
+  }
+  box.append(hint, bulk, checks);
+  pick.addEventListener("click", () => {
+    box.hidden = !box.hidden;
+    pick.setAttribute("aria-expanded", String(!box.hidden));
+    pick.classList.toggle("open", !box.hidden);
+  });
+  row.append(pick, box);
+  return row;
+}
+
+// ── versions ────────────────────────────────────────────────────────────────
+// A grid of what exists: samples down, capabilities across, one cell per pair.
+// User-scoped rather than chat-scoped, unlike the results panel — this answers
+// "what do I have", which is a question about the data and not about the
+// conversation, and it is where work done in another chat is found.
+//
+// A cell shows an ordinal and nothing else. The version list is one click away
+// because that is where the reason to choose lives; putting a timestamp on the
+// cell would spend the widest column on the least useful fact.
+let verData = null;
+
+function capTitle(name) {
+  return name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+async function renderVersions() {
+  const body = $("#verBody");
+  body.innerHTML = `<div class="vw-empty">Looking…</div>`;
+  try { verData = await (await fetch(`/api/versions?chat_id=${enc(currentChatId || "")}`)).json(); }
+  catch { body.innerHTML = `<div class="vw-empty">These could not be loaded just now.</div>`; return; }
+  drawVersions();
+}
+
+async function pickVersion(picked) {
+  try {
+    verData = await (await fetch("/api/versions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: currentChatId, picked }),
+    })).json();
+  } catch { return; }
+  drawVersions();
+}
+
+function drawVersions() {
+  const body = $("#verBody"), foot = $("#verFoot");
+  const cols = (verData && verData.columns) || [];
+  const rows = (verData && verData.rows) || [];
+  if (!cols.length) {
+    body.innerHTML = '<div class="vw-empty">Nothing has finished yet. ' +
+      'Once an analysis lands it appears here with its versions.</div>';
+    foot.textContent = "";
+    return;
+  }
+  body.innerHTML = "";
+  const table = document.createElement("table");
+  table.className = "ver-grid";
+
+  const head = document.createElement("tr");
+  head.appendChild(document.createElement("th"));
+  for (const c of cols) {
+    const th = document.createElement("th");
+    const name = document.createElement("div");
+    name.className = "ver-col"; name.textContent = capTitle(c);
+    // Setting one capability across every sample at once. The common move by
+    // far: a parameter is reconsidered for the study, not for one sample.
+    const all = document.createElement("button");
+    all.className = "ver-all"; all.type = "button"; all.textContent = "all newest";
+    all.title = `Point every sample's ${capTitle(c)} at its newest version`;
+    all.addEventListener("click", () => {
+      const picked = {};
+      for (const r of rows) if (r.cells[c] && r.cells[c].versions.length) picked[`${r.subject}::${c}`] = null;
+      pickVersion(picked);
+    });
+    th.append(name, all);
+    head.appendChild(th);
+  }
+  table.appendChild(head);
+
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const label = document.createElement("th");
+    label.className = "ver-row"; label.textContent = r.label;
+    tr.appendChild(label);
+    for (const c of cols) tr.appendChild(versionCell(r.subject, c, r.cells[c]));
+    table.appendChild(tr);
+  }
+  body.appendChild(table);
+
+  for (const a of (verData.across || [])) {
+    const note = el("ver-section");
+    note.textContent = "Across samples";
+    body.appendChild(note);
+    const t2 = document.createElement("table");
+    t2.className = "ver-grid";
+    const tr = document.createElement("tr");
+    const label = document.createElement("th");
+    label.className = "ver-row"; label.textContent = a.label;
+    tr.appendChild(label);
+    for (const c of Object.keys(a.cells)) tr.appendChild(versionCell(a.subject, c, a.cells[c]));
+    t2.appendChild(tr);
+    body.appendChild(t2);
+  }
+
+  const filled = rows.reduce((n, r) => n + cols.filter((c) => r.cells[c] && r.cells[c].versions.length).length, 0);
+  const choices = rows.reduce((n, r) => n + cols.filter((c) => r.cells[c] && r.cells[c].versions.length > 1).length, 0);
+  foot.textContent = `${filled} result${filled === 1 ? "" : "s"}, ` +
+    `${choices === 0 ? "none with more than one version" :
+       choices + " with more than one version"}.`;
+}
+
+function versionCell(subject, capability, cell) {
+  const td = document.createElement("td");
+  td.className = "ver-cell";
+  if (!cell || !cell.versions.length) { td.textContent = "—"; td.classList.add("ver-none"); return td; }
+  if (cell.cleared) {
+    const b = document.createElement("button");
+    b.className = "ver-pill ver-cleared"; b.type = "button"; b.textContent = "empty";
+    b.title = "Cleared on purpose. Asking for this again runs it fresh.";
+    b.addEventListener("click", () => openVersionMenu(td, subject, capability, cell));
+    td.appendChild(b);
+    return td;
+  }
+  const active = cell.versions.find((v) => v.identity === cell.active) || cell.versions[0];
+  const b = document.createElement("button");
+  b.className = "ver-pill" + (active.identity === cell.newest ? "" : " ver-old");
+  b.type = "button";
+  b.textContent = "v" + active.ordinal + (cell.versions.length > 1 ? " ▾" : "");
+  b.title = [capTitle(capability), active.label, active.identity === cell.newest ? "" : "not the newest",
+             active.runs > 1 ? `${active.runs} runs produced this same result` : ""]
+    .filter(Boolean).join(" · ");
+  b.addEventListener("click", () => openVersionMenu(td, subject, capability, cell));
+  td.appendChild(b);
+  return td;
+}
+
+function openVersionMenu(td, subject, capability, cell) {
+  closeVersionMenu();
+  const menu = el("ver-menu");
+  const head = el("ver-menu-head");
+  head.textContent = `${subject || "across samples"} · ${capTitle(capability)}`;
+  menu.appendChild(head);
+  for (const v of cell.versions) {
+    const b = document.createElement("button");
+    b.className = "ver-opt" + (v.identity === cell.active ? " on" : "");
+    b.type = "button";
+    const n = document.createElement("span"); n.className = "ver-opt-n"; n.textContent = "v" + v.ordinal;
+    const t = document.createElement("span"); t.className = "ver-opt-t";
+    t.textContent = v.label || new Date(v.at).toLocaleString();
+    const w = document.createElement("span"); w.className = "ver-opt-w";
+    w.textContent = v.identity === cell.newest ? "newest" : new Date(v.at).toLocaleDateString();
+    b.append(n, t, w);
+    b.addEventListener("click", () => { closeVersionMenu(); pickVersion({ [`${subject}::${capability}`]: v.identity }); });
+    menu.appendChild(b);
+  }
+  const clear = document.createElement("button");
+  clear.className = "ver-opt ver-clear" + (cell.cleared ? " on" : "");
+  clear.type = "button";
+  clear.textContent = "Clear — run this fresh next time";
+  clear.title = "Nothing is selected for this cell. Asking for it again computes it "
+              + "again instead of handing back what is already there.";
+  clear.addEventListener("click", () => { closeVersionMenu(); pickVersion({ [`${subject}::${capability}`]: "" }); });
+  menu.appendChild(clear);
+  td.appendChild(menu);
+  setTimeout(() => document.addEventListener("click", closeVersionMenu, { once: true }), 0);
+}
+
+function closeVersionMenu() {
+  for (const m of document.querySelectorAll(".ver-menu")) m.remove();
 }
 
 function initPops() {
   initPopover("#studyBtn", "#studyPop", () => { anchorStudyPop(); renderStudyPop(); });
   initPopover("#infoBtn", "#infoPop", renderCaps, ".info-card");
+  initPopover("#verBtn", "#verPop", renderVersions, ".ver-card");
   initPopover("#viewBtn", "#viewPop", renderViewers);
   $("#ipClose").addEventListener("click", closePops);
+  $("#verClose")?.addEventListener("click", closePops);
   document.addEventListener("click", closePops);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePops(); });
   $("#spAll").addEventListener("click", () => applyStudies(studies.slice()));
@@ -1098,6 +1360,62 @@ async function refreshGoing() {
   clearTimeout(goingTimer);
   goingTimer = setTimeout(refreshGoing, running.length ? 4000 : 20000);
 }
+// One run, as a folder of the things it produced. Built on its own so it can be
+// dropped straight into the panel or inside a sample, without the two cases
+// being two copies of the same code.
+function runFolder(t) {
+  const folder = document.createElement("div");
+  folder.className = "folder" + (expanded.has(t.key) ? " open" : "");
+  const row = document.createElement("button"); row.className = "folder-row";
+  row.innerHTML = `${ICON.chev}<span class="ico">${ICON.folder}</span><span class="name">${escapeHtml(t.label)}</span><span class="count">${t.items.length}</span>`;
+  // Where it ran and when, on hover rather than on screen. A row per run is
+  // already the answer to "what did I do"; the rest is for the moment someone
+  // asks whether they can rely on it, and that moment is rare enough that it
+  // should not cost every row a second line.
+  const when = t.finished ? new Date(t.finished).toLocaleString() : "";
+  row.title = [t.label, when && `finished ${when}`, t.site && `ran on ${t.site}`,
+               t.reproducible === false && "not reproducible",
+               t.verified === false && "the pinned code had changed when this ran"]
+    .filter(Boolean).join(" · ");
+  // Said out loud only when it is not fine. Silence is the normal case.
+  if (t.verified === false || t.reproducible === false) {
+    const flag = el("folder-flag");
+    flag.textContent = "!";
+    flag.title = t.verified === false
+      ? "The pinned code had changed when this ran, so it may not match the recorded version."
+      : "This run is not reproducible: the same inputs may not give the same answer.";
+    row.appendChild(flag);
+  }
+  row.addEventListener("click", () => { const open = folder.classList.toggle("open"); if (open) expanded.add(t.key); else expanded.delete(t.key); });
+  const items = document.createElement("div"); items.className = "items";
+  // Something to open in a viewer, when the domain said one can open it.
+  if (t.viewer) {
+    const v = document.createElement("button"); v.className = "item item-view";
+    v.innerHTML = `<span class="ico">${ICON.image}</span><span class="name">Open in viewer</span>`;
+    v.addEventListener("click", () => openViewer(`${t.viewer}/${t.key}`));
+    items.appendChild(v);
+  }
+  for (const it of t.items) {
+    const b = document.createElement("button"); b.className = "item";
+    b.innerHTML = `<span class="ico">${iconForFmt(it)}</span><span class="name">${escapeHtml(formatName(it.name))}</span>`;
+    b.title = it.description || formatName(it.name);
+    b.addEventListener("click", () => openItem(it.ref, it.name));
+    items.appendChild(b);
+  }
+  // Named, not hidden. An analysis that produced something which cannot leave
+  // the machine it ran on has still produced it, and a user who is not told
+  // that concludes it produced nothing.
+  for (const name of (t.stays || [])) {
+    const s = document.createElement("div"); s.className = "item item-stays";
+    s.innerHTML = `<span class="ico">${ICON.doc}</span><span class="name"></span>`;
+    s.querySelector(".name").textContent = formatName(name);
+    s.title = "This stays on the machine it was computed on and cannot be downloaded.";
+    items.appendChild(s);
+  }
+  folder.appendChild(row); folder.appendChild(items);
+  return folder;
+}
+
 function renderTree() {
   tree.innerHTML = "";
   const topics = resultsData.topics || [];
@@ -1106,56 +1424,43 @@ function renderTree() {
       '<div class="te-sub">Ask for an analysis, and the results you want to keep (tables, figures, summaries) will appear here.</div></div>';
     return;
   }
-  for (const t of topics) {
-    const folder = document.createElement("div");
-    folder.className = "folder" + (expanded.has(t.key) ? " open" : "");
+  // Nearly every capability works on one sample, so a study's worth of work is
+  // a flat list of sixty rows in which finding one means reading all of them.
+  // Filed under the sample instead, it is nineteen rows and the one being worked
+  // on is the one that opens.
+  //
+  // Only when there is more than one sample to tell apart. A single sample
+  // grouped under itself is a level of nesting that hides the results and
+  // distinguishes nothing.
+  const named = topics.filter((t) => t.sample);
+  const order = [...new Set(named.map((t) => t.sample))];   // newest run first
+  if (order.length < 2) { for (const t of topics) tree.appendChild(runFolder(t)); return; }
+
+  // A run about no single sample — a cohort analysis, submitted code, a chart —
+  // stays at the top level. Better an honest mixture of levels than a group
+  // named for a thing these runs have in common only by not being it.
+  for (const t of topics) if (!t.sample) tree.appendChild(runFolder(t));
+
+  for (const name of order) {
+    const mine = named.filter((t) => t.sample === name);
+    const key = "sample:" + name;
+    // Open the sample holding the newest run, closed for the rest. Folding away
+    // eighteen samples is the point; folding away the one just worked on is not.
+    if (!expanded.size && name === named[0].sample) expanded.add(key);
+    const group = document.createElement("div");
+    group.className = "folder group" + (expanded.has(key) ? " open" : "");
     const row = document.createElement("button"); row.className = "folder-row";
-    row.innerHTML = `${ICON.chev}<span class="ico">${ICON.folder}</span><span class="name">${escapeHtml(t.label)}</span><span class="count">${t.items.length}</span>`;
-    // Where it ran and when, on hover rather than on screen. A row per run is
-    // already the answer to "what did I do"; the rest is for the moment someone
-    // asks whether they can rely on it, and that moment is rare enough that it
-    // should not cost every row a second line.
-    const when = t.finished ? new Date(t.finished).toLocaleString() : "";
-    row.title = [t.label, when && `finished ${when}`, t.site && `ran on ${t.site}`,
-                 t.reproducible === false && "not reproducible",
-                 t.verified === false && "the pinned code had changed when this ran"]
-      .filter(Boolean).join(" · ");
-    // Said out loud only when it is not fine. Silence is the normal case.
-    if (t.verified === false || t.reproducible === false) {
-      const flag = el("folder-flag");
-      flag.textContent = "!";
-      flag.title = t.verified === false
-        ? "The pinned code had changed when this ran, so it may not match the recorded version."
-        : "This run is not reproducible: the same inputs may not give the same answer.";
-      row.appendChild(flag);
-    }
-    row.addEventListener("click", () => { const open = folder.classList.toggle("open"); if (open) expanded.add(t.key); else expanded.delete(t.key); });
-    const items = document.createElement("div"); items.className = "items";
-    // Something to open in a viewer, when the domain said one can open it.
-    if (t.viewer) {
-      const v = document.createElement("button"); v.className = "item item-view";
-      v.innerHTML = `<span class="ico">${ICON.image}</span><span class="name">Open in viewer</span>`;
-      v.addEventListener("click", () => openViewer(`${t.viewer}/${t.key}`));
-      items.appendChild(v);
-    }
-    for (const it of t.items) {
-      const b = document.createElement("button"); b.className = "item";
-      b.innerHTML = `<span class="ico">${iconForFmt(it)}</span><span class="name">${escapeHtml(formatName(it.name))}</span>`;
-      b.title = it.description || formatName(it.name);
-      b.addEventListener("click", () => openItem(it.ref, it.name));
-      items.appendChild(b);
-    }
-    // Named, not hidden. An analysis that produced something which cannot leave
-    // the machine it ran on has still produced it, and a user who is not told
-    // that concludes it produced nothing.
-    for (const name of (t.stays || [])) {
-      const s = document.createElement("div"); s.className = "item item-stays";
-      s.innerHTML = `<span class="ico">${ICON.doc}</span><span class="name"></span>`;
-      s.querySelector(".name").textContent = formatName(name);
-      s.title = "This stays on the machine it was computed on and cannot be downloaded.";
-      items.appendChild(s);
-    }
-    folder.appendChild(row); folder.appendChild(items); tree.appendChild(folder);
+    row.innerHTML = `${ICON.chev}<span class="ico">${ICON.folder}</span>` +
+                    `<span class="name"></span><span class="count">${mine.length}</span>`;
+    row.querySelector(".name").textContent = name;
+    row.title = `Sample ${name} · ${mine.length} ${mine.length === 1 ? "result" : "results"}`;
+    row.addEventListener("click", () => {
+      const open = group.classList.toggle("open");
+      if (open) expanded.add(key); else expanded.delete(key);
+    });
+    const inner = document.createElement("div"); inner.className = "items";
+    for (const t of mine) inner.appendChild(runFolder(t));
+    group.appendChild(row); group.appendChild(inner); tree.appendChild(group);
   }
 }
 // `ref` locates the artifact (its workspace); the folder it sits in is a subject

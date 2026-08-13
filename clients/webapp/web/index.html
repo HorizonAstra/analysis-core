@@ -34,6 +34,15 @@
               </svg>
               <span>Visualizers</span>
             </button>
+            <button class="ghost" id="verBtn" aria-label="Versions" title="Versions">
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                <path d="M4 5.5h16M4 12h16M4 18.5h16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                <circle cx="8.5" cy="5.5" r="2.1" fill="var(--paper, #fff)" stroke="currentColor" stroke-width="1.7"/>
+                <circle cx="15" cy="12" r="2.1" fill="var(--paper, #fff)" stroke="currentColor" stroke-width="1.7"/>
+                <circle cx="10.5" cy="18.5" r="2.1" fill="var(--paper, #fff)" stroke="currentColor" stroke-width="1.7"/>
+              </svg>
+              <span>Versions</span>
+            </button>
             <button class="ghost" id="studyBtn" aria-label="Study Selection">
               <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
                 <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H19v13H6.5A2.5 2.5 0 0 0 4 19.5zM19 17v3H6.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -122,6 +131,26 @@
   </div>
 
   <!-- capabilities (opened by the info button beside the name) -->
+  <!-- which version of each result is in play. User-scoped, unlike the results
+       panel: this answers "what do I have", which is about the data rather than
+       about this conversation. -->
+  <div class="info-overlay" id="verPop" hidden>
+   <div class="info-card ver-card">
+    <div class="pop-head">
+      <div class="pop-title">Versions</div>
+      <div class="pop-sub">Every result you have, and which one this chat is working with.
+        Newest is used unless you pick another. Clear a cell to run something fresh.</div>
+      <button class="ip-close" id="verClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ver-body" id="verBody"></div>
+    <div class="pop-foot" id="verFoot"></div>
+   </div>
+  </div>
+
   <div class="info-overlay" id="infoPop" hidden>
    <div class="info-card">
     <div class="pop-head">

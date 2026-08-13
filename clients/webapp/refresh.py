@@ -27,11 +27,14 @@ import paths
 import render
 
 _TREE = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
-for _p in ("interfaces/run", "interfaces/catalog", "infrastructure/graph"):
+for _p in ("interfaces/run", "interfaces/catalog", "infrastructure/graph",
+           "infrastructure/sites", "infrastructure/executors",
+           "infrastructure/artifact-store"):
     if str(_TREE / _p) not in sys.path:
         sys.path.insert(0, str(_TREE / _p))
 
 import plan as P                                            # noqa: E402
+import reachable as _reachable                              # noqa: E402
 from protocol import JobSpec                                # noqa: E402
 
 
@@ -148,8 +151,20 @@ def _version(qualified: str) -> str:
 
 
 def _holds(executor, study: str, sample: str) -> set:
-    """What that sample holds, asked of the machine that holds it."""
-    for row in executor.datasets():
+    """What that sample holds, from the survey the product already keeps.
+
+    This used to ask the executor directly, which for a cluster is a walk of the
+    whole study tree over ssh — twenty-six seconds — and it was asked once per
+    finished run. A conversation with a cohort's worth of work behind it spent
+    minutes in ssh before the model said anything.
+
+    `reachable` already holds that survey behind a timed cache that serves the
+    previous answer immediately and fetches the new one on a thread. Going to the
+    executor stepped straight past all of it. So the fix is to ask the thing that
+    already knows rather than to build a second cache in front of the same
+    question: two caches over one fact is how they end up disagreeing.
+    """
+    for row in _reachable.datasets():
         if row.get("study") == study:
             return P.holdings(row, sample)
     return set()

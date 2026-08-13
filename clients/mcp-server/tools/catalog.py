@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Annotated, Any
@@ -106,15 +107,35 @@ def _tool_for(contract: dict, candidates: list) -> Any:
         names = {i["name"] for i in contract["inputs"]}
         inputs = {k: v for k, v in given.items() if k in names}
         site, executor = _where(candidates, inputs.values())
+        parameters = {k: v for k, v in given.items() if k not in names}
         record = executor.submit(JobSpec(
             capability=qualified,
             version=contract["version"],
             inputs=inputs,
-            parameters={k: v for k, v in given.items() if k not in names},
+            parameters=parameters,
             workspace=workspace,
             site=site,
+            fresh=_was_cleared(qualified, inputs, parameters),
         ))
         scope.also_allow(record.job_id)
+        # Already done, because an identical run had already finished. Said
+        # plainly rather than dressed up as a submission: the note below tells
+        # the reader to leave it running and come back, which is exactly the
+        # wrong thing to say about a result that is sitting there.
+        if record.state.value == "completed":
+            return json.dumps({
+                "run": record.job_id,
+                "state": "completed",
+                "capability": qualified,
+                "site": site,
+                "note": ("This had already been done, so nothing was run. Same "
+                         "inputs, same parameters, same pinned code, so the "
+                         "result is the same result. It is available now — read "
+                         "it and answer. Do not say it is running and do not "
+                         "offer to come back later. If the person needs it "
+                         "computed again rather than re-used, say so plainly "
+                         "and ask, because re-running it changes nothing."),
+            }, indent=2)
         return json.dumps({
             "run": record.job_id,
             "state": record.state.value,
@@ -169,6 +190,44 @@ def describe(contract: dict) -> str:
     if contract.get("interpretation"):
         desc += "\n\nReading the result: " + contract["interpretation"]
     return desc
+
+
+
+def _was_cleared(qualified: str, inputs: dict, parameters: dict) -> bool:
+    """Whether the person emptied this cell, meaning: do it again.
+
+    The grid names a cell `<subject>::<capability>`, and the subject of a run is
+    the sample it is about. That is read here the same way it is read
+    everywhere: from the references, since `study:<study>/<sample>` names one
+    outright. A run whose inputs are all earlier runs does not say, and rather
+    than reach across processes for the answer, any cleared cell for the same
+    capability counts.
+
+    Erring that way on purpose. Being wrong here costs a recomputation of work
+    that was going to be handed back; being wrong the other way ignores somebody
+    who explicitly asked for the work to be done again, and leaves them with no
+    way to ask at all.
+    """
+    cells = {c for c in os.environ.get("CLEARED_CELLS", "").split(",") if c}
+    if not cells:
+        return False
+    capability = qualified.split("/")[-1]
+    mine = {c for c in cells if c.endswith(f"::{capability}")}
+    if not mine:
+        return False
+    subjects = set()
+    for ref in inputs.values():
+        text = str(ref)
+        if text.startswith("study:"):
+            parts = text[len("study:"):].strip("/").split("/")
+            if len(parts) >= 2:
+                subjects.add(parts[1])
+    for key in ("sample", "sample_id"):
+        if parameters.get(key):
+            subjects.add(str(parameters[key]))
+    if not subjects:
+        return True                     # cannot tell whose it is; honour the ask
+    return any(f"{s}::{capability}" in mine for s in subjects)
 
 
 def register(mcp, *, sites, domain_allowed=lambda d: True) -> dict[str, str]:

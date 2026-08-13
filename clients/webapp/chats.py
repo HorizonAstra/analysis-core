@@ -151,6 +151,68 @@ def add_runs(user: str, cid: str, run_ids) -> None:
         _save(user, data)
 
 
+def drop_runs(user: str, cid: str, run_ids) -> int:
+    """Forget that this chat started these runs. Returns how many were dropped.
+
+    For work that has been retired: the results are gone from the store on
+    purpose, and a chat that still lists them asks for them on every refresh.
+    That is not a harmless stale entry — a run the store cannot find is taken
+    for one that finished elsewhere and has not been copied back yet, so the
+    panel starts a transfer for it, the transfer fails because there is nothing
+    to transfer, and it is tried again the next time anybody looks.
+
+    Only the record of the run is dropped. Whatever it produced was moved rather
+    than deleted, and putting the id back here is enough to see it again.
+    """
+    wanted = set(run_ids)
+    if not wanted:
+        return 0
+    with _LOCK:
+        data = _load(user)
+        c = _find(data, cid)
+        if not c:
+            return 0
+        before = len(c.get("runs", []))
+        c["runs"] = [r for r in c.get("runs", []) if r["run"] not in wanted]
+        dropped = before - len(c["runs"])
+        if dropped:
+            c["updated_at"] = _now()
+            _save(user, data)
+        return dropped
+
+
+def set_versions(user: str, cid: str, picked: dict) -> int:
+    """Record which version of each thing this conversation is working with.
+
+    Against the chat rather than the user, for the same reason the results panel
+    is: two conversations about the same study can be looking at different
+    versions on purpose, and changing what is on screen in one of them must not
+    silently change somebody's answer in the other.
+
+    A key absent means nothing was chosen, which resolves to the newest. A key
+    present with an empty value means cleared on purpose, which resolves to
+    nothing. Those are different states and both are worth keeping: the first is
+    a default and the second is a decision.
+    """
+    if not picked:
+        return 0
+    with _LOCK:
+        data = _load(user)
+        c = _find(data, cid)
+        if not c:
+            return 0
+        have = dict(c.get("versions") or {})
+        for key, identity in picked.items():
+            if identity is None:
+                have.pop(key, None)        # back to "newest, nobody said otherwise"
+            else:
+                have[key] = identity
+        c["versions"] = have
+        c["updated_at"] = _now()
+        _save(user, data)
+        return len(picked)
+
+
 def truncate_messages(user: str, cid: str, index: int) -> list[dict]:
     """Drop the message at `index` and everything after it.
 

@@ -17,7 +17,7 @@
       "kernels/phyd3/build_tree.py"
     ],
     "sha256": {
-      "kernels/phyd3/build_tree.py": "2ec36527069d9c41e99b2b7ea971ddc211dfe040c701f894ebc103a0e588e1ba"
+      "kernels/phyd3/build_tree.py": "224cfc3d01df9698ddeb37da60ce3ffa9a329012545df8b0f39b63c59063e3d7"
     },
     "third_party": []
   },
@@ -96,6 +96,16 @@
       "produced_by": "slab",
       "produced_output": "scores",
       "description": "How widespread each feature's local bias is across the tissue. Decides which genes are worth a column of the heat map. Without it the genes that vary most across the spots are shown instead, and the legend says which was used."
+    },
+    {
+      "name": "slab_barcodes",
+      "type": "file",
+      "format": "tsv",
+      "required": false,
+      "staged_as": "{data_dir}/SLAB_barcodes.txt",
+      "produced_by": "slab",
+      "produced_output": "scores",
+      "description": "Which spots carry each feature's local bias. This is what lets a spatial group say what fraction of it carries one, which a per-sample score cannot."
     }
   ],
   "outputs": [
@@ -125,13 +135,6 @@
       "default": 30,
       "affects_results": false,
       "description": "How many genes get a column of the heat map."
-    },
-    {
-      "name": "regions_only",
-      "type": "boolean",
-      "default": false,
-      "affects_results": false,
-      "description": "Reduce the tree to the spatial groups alone, lifting away the spots between them and summing their branches. Off by default, because the tree the run reported is the tree worth drawing and a reduced one is a different tree."
     }
   ],
   "determinism": {
@@ -152,8 +155,9 @@
   "invocation": {
     "style": "named",
     "staging": "none",
-    "template": "python3 {entrypoint} --tree {data_dir}/tree.nw --node-info {data_dir}/node_info.tsv --groups {data_dir}/sg_pairs.tsv --matrix {data_dir}/M.txt --features {data_dir}/features.txt --observations {data_dir}/barcodes.txt --slab {data_dir}/SLAB_scores.txt --genes {genes} --out {output_base} --sample {sample} --regions-only {regions_only}"
+    "template": "python3 {entrypoint} --tree {data_dir}/tree.nw --node-info {data_dir}/node_info.tsv --groups {data_dir}/sg_pairs.tsv --matrix {data_dir}/M.txt --features {data_dir}/features.txt --observations {data_dir}/barcodes.txt --slab {data_dir}/SLAB_scores.txt --slab-barcodes {data_dir}/SLAB_barcodes.txt --genes {genes} --out {output_base} --sample {sample}"
   },
   "notes": "The viewer this feeds is GPL v3 and vendored into the web client, unlike the spatial one, whose licence is academic and non-transferable. So this bundle can be shown to anyone a deployment serves without a per-copy licence question.",
-  "for_people": "Draws the tissue as a tree of spots, marks the regions the analysis found, and shows what is expressed where beside it."
+  "for_people": "Draws the tissue as a tree of spots, marks the regions the analysis found, and shows what is expressed where beside it.",
+  "_source": "/Users/rijul/Desktop/repos/work/analysis-core/domains/spatial-transcriptomics/catalog/tree_bundle.json"
 }

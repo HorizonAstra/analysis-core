@@ -58,9 +58,44 @@ class SafeJSONResponse(JSONResponse):
         return super().render(_finite(content))
 
 
+def _warm() -> None:
+    """Ask the machines what they hold and what they can run, before anyone does.
+
+    Both answers are ssh round trips and both are cached once taken. Left until
+    the first request, the person who happens to open the page first pays twenty
+    seconds for everybody, and pays it again after every restart.
+
+    On a thread and never fatal. A machine being unreachable at start-up is
+    ordinary — a laptop off the VPN, a cluster in maintenance — and the app works
+    without it, so this warms what it can and says nothing when it cannot.
+    """
+    try:
+        import reachable
+        reachable.warm()                   # what each machine holds
+        for _site, ex in reachable.sites().items():
+            try:
+                ex.available()             # and whether it answers at all
+            except Exception:              # noqa: BLE001 - one machine, not all of them
+                continue
+        # And which capabilities can run where, which is the expensive one: an
+        # environment probe per capability per site. The executors are cached, so
+        # doing it here means the probes are already answered when the first
+        # person opens the page.
+        import offered
+        for who in list(access.ACCESS) or [""]:
+            try:
+                offered.for_user(who)
+            except Exception:              # noqa: BLE001 - one user, not all of them
+                continue
+    except Exception as e:                 # noqa: BLE001 - never delay start-up
+        print(f"[warm] {type(e).__name__}: {e}", flush=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await engine.start()
+    import threading
+    threading.Thread(target=_warm, daemon=True).start()
     try:
         yield
     finally:
@@ -358,6 +393,40 @@ async def capabilities(user: str = Depends(current_user)):
     """
     import offered
     return SafeJSONResponse(offered.for_user(user))
+
+
+@app.get("/api/versions")
+async def versions_grid(chat_id: str = "", user: str = Depends(current_user)):
+    """Every version of everything this user has, and which one is in play here.
+
+    User-scoped on purpose, unlike the results panel beside it. The panel answers
+    "what did this conversation produce", which is why opening a new chat shows
+    nothing. This answers "what do I have", which is a question about the data
+    and not about the conversation, and it is the surface where cluster work done
+    in another chat is found.
+    """
+    import versions as _versions
+    return SafeJSONResponse(_versions.panel(user, chat_id))
+
+
+@app.post("/api/versions")
+async def versions_set(request: Request, user: str = Depends(current_user)):
+    """Choose versions. `{"chat_id": ..., "picked": {"<subject>::<capability>": id}}`
+
+    An identity selects that version, `""` clears the cell on purpose, and `null`
+    goes back to following the newest. Three states rather than two, because "I
+    have not chosen" and "I chose nothing" lead to different behaviour: the first
+    tracks new work as it lands, the second waits to be told.
+    """
+    body = await request.json()
+    chat_id = str(body.get("chat_id") or "")
+    picked = body.get("picked") or {}
+    if not chat_id or not isinstance(picked, dict):
+        return JSONResponse({"error": "chat_id and picked are required"},
+                            status_code=400)
+    n = chats.set_versions(user, chat_id, picked)
+    import versions as _versions
+    return SafeJSONResponse({"set": n, **_versions.panel(user, chat_id)})
 
 
 @app.get("/api/viewers")

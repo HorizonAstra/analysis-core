@@ -277,6 +277,12 @@ body:not(.panel-open) .panel { margin-right: calc(-1 * var(--panel-w) - 2px); op
 .folder.open > .folder-row .chev { transform: rotate(90deg); }
 .folder-row .count { margin-left: auto; color: var(--muted); font-size: 11px; }
 .folder:not(.open) > .items { display: none; }     /* reliable collapse */
+/* a sample, holding the runs that are about it. Indentation carries the nesting,
+   as it does for items, so a run reads the same whether it sits under a sample
+   or on its own. */
+.group > .items > .folder > .folder-row { padding-left: 21px; }
+.group > .items > .folder .item { padding-left: 44px; }
+.group > .folder-row .name { color: var(--ink); }
 .item { padding-left: 30px; font-size: 13px; color: var(--ink-soft); }
 .item:hover { color: var(--ink); }
 .item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -490,6 +496,83 @@ body:not(.panel-open) .panel { margin-right: calc(-1 * var(--panel-w) - 2px); op
 .vw-why { font-size: 12.4px; line-height: 1.45; color: var(--ink-soft); font-weight: 400; }
 .vw-item[disabled] .vw-why { color: var(--muted); }
 .vw-empty { font-size: 13px; color: var(--ink-soft); padding: 8px 10px; }
+
+/* the version grid: what exists, and which one is in play */
+.ver-card { max-width: 78rem; }
+.ver-body { overflow: auto; max-height: 62vh; margin-top: 10px; }
+.ver-grid { border-collapse: separate; border-spacing: 0; font-size: 12.8px; }
+.ver-grid th, .ver-grid td { padding: 4px 8px; text-align: left; white-space: nowrap; }
+.ver-grid tr th:first-child, .ver-grid tr td:first-child { position: sticky; left: 0; background: var(--paper); }
+.ver-grid tr:first-child th { position: sticky; top: 0; background: var(--paper); z-index: 2;
+  border-bottom: 1px solid var(--hairline); vertical-align: bottom; }
+.ver-grid tr:first-child th:first-child { z-index: 3; }
+.ver-col { font-weight: 600; font-size: 12.4px; }
+.ver-all { display: block; margin-top: 2px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 400; color: var(--muted); padding: 0; }
+.ver-all:hover { color: var(--hover); }
+.ver-row { font-weight: 500; color: var(--ink); border-right: 1px solid var(--hairline); }
+.ver-cell { position: relative; }
+.ver-none { color: var(--muted); }
+.ver-pill { border: 1px solid var(--hairline); background: none; cursor: pointer; font: inherit;
+  font-size: 12px; color: var(--ink-soft); padding: 1px 8px; border-radius: 999px;
+  font-variant-numeric: tabular-nums; transition: color .14s, border-color .14s; }
+.ver-pill:hover { color: var(--hover); border-color: currentColor; }
+/* Not the newest, and said quietly rather than shouted: a deliberate choice is
+   not a warning, it just should not be invisible. */
+.ver-old { border-style: dashed; color: var(--ink); }
+.ver-cleared { color: var(--muted); border-style: dotted; }
+.ver-section { font-size: 12.5px; font-weight: 600; color: var(--muted);
+  margin: 16px 0 4px; padding-top: 10px; border-top: 1px solid var(--hairline); }
+.ver-menu { position: absolute; top: 100%; left: 4px; z-index: 20; min-width: 17rem;
+  background: var(--paper); border: 1px solid var(--hairline); border-radius: 10px;
+  box-shadow: 0 8px 26px rgba(0,0,0,.13); padding: 5px; }
+.ver-menu-head { font-size: 11.5px; color: var(--muted); padding: 3px 8px 5px; }
+.ver-opt { display: flex; align-items: baseline; gap: 8px; width: 100%; border: 0;
+  background: none; cursor: pointer; font: inherit; font-size: 12.6px; text-align: left;
+  padding: 4px 8px; border-radius: 7px; color: var(--ink-soft); }
+.ver-opt:hover { background: var(--tint); color: var(--ink); }
+.ver-opt.on { color: var(--ink); font-weight: 600; }
+.ver-opt-n { flex: 0 0 1.8rem; font-variant-numeric: tabular-nums; }
+.ver-opt-t { flex: 1 1 auto; white-space: normal; }
+.ver-opt-w { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+.ver-clear { margin-top: 3px; border-top: 1px solid var(--hairline); border-radius: 0 0 7px 7px;
+  padding-top: 7px; font-size: 12.2px; }
+
+/* choosing which samples a viewer opens on */
+.vw-row { display: flex; flex-direction: column; }
+.vw-pick {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  border: 0; background: none; cursor: pointer; font: inherit; text-align: left;
+  padding: 3px 10px 5px 12px; margin: -2px 0 0; border-radius: 7px;
+  color: var(--muted); font-size: 12.4px; transition: color .14s, background .12s;
+}
+.vw-pick:hover { color: var(--hover); background: var(--tint); }
+.vw-pick-chev { flex: 0 0 12px; display: grid; place-items: center;
+  transition: transform .16s var(--reveal); }
+.vw-pick.open .vw-pick-chev { transform: rotate(90deg); }
+.vw-pick-count { margin-left: auto; font-variant-numeric: tabular-nums; }
+.vw-samples { padding: 2px 6px 8px 12px; }
+.vw-hint { font-size: 12.2px; line-height: 1.5; color: var(--muted); padding: 2px 4px 7px; }
+.vw-bulk { display: flex; gap: 6px; padding: 0 4px 6px; }
+.vw-bulk-btn {
+  border: 1px solid var(--hairline); background: none; cursor: pointer; font: inherit;
+  font-size: 12px; color: var(--ink-soft); padding: 2px 9px; border-radius: 999px;
+  transition: color .14s, border-color .14s;
+}
+.vw-bulk-btn:hover { color: var(--hover); border-color: currentColor; }
+/* Tall enough to be worth scrolling, short enough that the menu never runs off
+   the screen: nineteen samples is a list, not a page. */
+.vw-checks {
+  max-height: 232px; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 1px 4px;
+  padding: 1px 4px;
+}
+.vw-check {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 12.8px; color: var(--ink-soft); padding: 3px 5px; border-radius: 6px;
+}
+.vw-check:hover { background: var(--tint); color: var(--ink); }
+.vw-check input { accent-color: var(--accent); cursor: pointer; margin: 0; }
 .sp-list { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; min-height: 36px; }
 .sp-item { display: flex; align-items: center; gap: 9px; border: 0; background: none; cursor: pointer;
   font: inherit; font-size: 13.5px; color: var(--ink-soft); text-align: left; width: 100%;

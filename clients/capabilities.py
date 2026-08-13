@@ -25,19 +25,28 @@ from pathlib import Path
 _TREE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_TREE / "clients" / "mcp-server"))
 
-import mcp_server as S                                          # noqa: E402
+import mcp_server                                               # noqa: E402,F401
 from tools import catalog as K                                  # noqa: E402
 
+# Imported for its side effect as much as for itself: importing the server is
+# what puts the interfaces and infrastructure directories on the path, so the
+# two agree on which module is which rather than each building its own idea of
+# the tree.
 sys.path.insert(0, str(_TREE / "interfaces" / "catalog"))
 import entry as C                                               # noqa: E402
+import reachable as R                                           # noqa: E402
 
 
 def survey() -> dict:
-    """Every capability, against every site this deployment can reach."""
+    """Every capability, against every site this deployment can reach.
+
+    Which machines exist, and how to reach one, is asked of `reachable` — the
+    same module the server itself asks. This used to build its own executors out
+    of a profile and a store, which meant two answers to "what can this
+    deployment reach" and only one of them maintained.
+    """
     sites, unreachable = {}, []
-    for site in S._sites():
-        executor = S._executor(site, S.ArtifactStore(
-            S.P.load_profile(site).get("artifact_root") or (S.STATE / "results")))
+    for site, executor in R.sites().items():
         (sites.setdefault(site, executor) if executor.available()
          else unreachable.append(site))
 

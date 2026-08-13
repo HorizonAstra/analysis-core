@@ -16,6 +16,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
+# The client is one partition of a larger tree, and some of what setup installs
+# belongs to the others: a domain owns the environments its analyses run in, and
+# infrastructure owns the data layer. Named once here, because a client reaching
+# into a sibling partition by counting `..` is how a move turns into a silent
+# breakage rather than one edit.
+TREE="$(cd "$ROOT/.." && pwd)"
+
 PY=".venv/bin/python3"
 BOLD=$'\033[1m'; DIM=$'\033[2m'; OFF=$'\033[0m'
 
@@ -79,7 +86,12 @@ need_key() {
   echo "$provider"
 }
 
-studies_line() { ls data/ 2>/dev/null | grep -v README | tr '\n' ' ' || echo "(none yet)"; }
+# Where study data actually is. DATA_ROOT is what every other part of the product
+# reads, so this reads the same thing: `data/` beside the client is only the
+# default, and a deployment that points elsewhere was being told it had no
+# studies while the app was busy analysing them.
+data_root() { echo "${DATA_ROOT:-$ROOT/data}"; }
+studies_line() { ls "$(data_root)" 2>/dev/null | grep -v README | tr '\n' ' ' || echo "(none yet)"; }
 
 # ── commands ────────────────────────────────────────────────────────────────
 cmd_setup() {
@@ -99,28 +111,32 @@ cmd_setup() {
   echo "[3/5] Creating data/ and outputs/..."
   # outputs/ is the whole provenance trail. There is no separate results/ tree: whether an
   # artifact was "presented" is a flag on its manifest, so one place holds everything.
-  mkdir -p data outputs
+  mkdir -p "$(data_root)" outputs
 
   echo "[4/5] Restoring the external analysis environments..."
   # The bioBakery tools (MaAsLin 3, LEfSe, HAllA) run as external programs in their own
   # pinned environments. Without them the toolkit still works, it just offers fewer tools —
   # so this is attempted, reported, and never fatal. restore.sh installs from locks only.
+  # These live with the domain whose analyses need them, not with the client.
+  local envs="$TREE/domains/microbiome/environments"
   if command -v Rscript >/dev/null 2>&1; then
-    bash envs/r-stats/restore.sh >/dev/null 2>&1 \
-      && echo "      r-stats  ready" || echo "      r-stats  FAILED ${DIM}(see: bash envs/r-stats/restore.sh)${OFF}"
-    bash envs/halla/restore.sh >/dev/null 2>&1 \
-      && echo "      halla    ready" || echo "      halla    FAILED ${DIM}(see: bash envs/halla/restore.sh)${OFF}"
+    bash "$envs/r-stats/restore.sh" >/dev/null 2>&1 \
+      && echo "      r-stats  ready" || echo "      r-stats  FAILED ${DIM}(see: bash $envs/r-stats/restore.sh)${OFF}"
+    bash "$envs/restore.sh" >/dev/null 2>&1 \
+      && echo "      halla    ready" || echo "      halla    FAILED ${DIM}(see: bash $envs/restore.sh)${OFF}"
   else
     echo "      skipped ${DIM}(no R found; install R to enable the bioBakery stats tools)${OFF}"
   fi
 
   echo "[5/5] Warming the data cache for any studies already present..."
-  PYTHONPATH="$ROOT/src" "$PY" -m datasource.ingest --all --data-root "$ROOT/data" || true
+  # `datasource` is a package under infrastructure/, so its parent goes on the
+  # path rather than the directory itself. Same rule the server follows.
+  PYTHONPATH="$TREE/infrastructure" "$PY" -m datasource.ingest --all --data-root "$(data_root)" || true
 
   echo
   echo "${BOLD}Done.${OFF} Next:"
-  echo "  1. Put study folders in  data/"
-  echo "  2. Copy examples/.env.example to .env and add your API key"
+  echo "  1. Put study folders in  $(data_root)"
+  echo "  2. Copy .env.example to .env and add your API key"
   echo "  3. ./mo web"
   echo
   echo "  ${DIM}./mo capabilities  shows which analysis tools are actually available${OFF}"
@@ -130,14 +146,14 @@ cmd_setup() {
 
 cmd_capabilities() {
   have_venv || die "not set up yet. Run: ./mo setup"
-  PYTHONPATH="$ROOT/src" "$PY" "$ROOT/src/capabilities.py" --tools "$@"
+  "$PY" "$ROOT/capabilities.py" "$@"
 }
 
 cmd_web() {
   have_venv || { echo "First run, setting up..."; cmd_setup; }
   "$PY" -c "import fastapi, uvicorn" 2>/dev/null \
     || die "web dependencies missing. Run: ./mo setup"
-  [ -f .env ] || die "no .env found. Copy it first:  cp examples/.env.example .env"
+  [ -f .env ] || die "no .env found. Copy it first:  cp .env.example .env"
   load_env
   local provider; provider="$(need_key google)"
   local port="${PORT:-8000}"
@@ -164,18 +180,18 @@ cmd_cli() {
   echo "  Provider: $provider    Model: $model"
   echo "  Studies:  $(studies_line)"
   echo
-  exec "$PY" src/chat_client.py
+  exec "$PY" chat_client.py
 }
 
 cmd_desktop() {
   need_venv
   local dir="$HOME/Library/Application Support/Claude"
   local cfg="$dir/claude_desktop_config.json"
-  local server="$ROOT/src/McpServer/mcp_server.py"
+  local server="$ROOT/mcp-server/mcp_server.py"
 
   [ -d "$HOME/Library/Application Support" ] || die \
     "this writes the macOS Claude Desktop config. On Windows or Linux, copy
-       examples/claude_desktop_config.example.json into your own config and fix the paths."
+       claude_desktop_config.example.json into your own config and fix the paths."
 
   mkdir -p "$dir"
   if [ -f "$cfg" ]; then
@@ -228,7 +244,7 @@ cmd_docker() {
   # Apptainer/Singularity for an HPC with no Docker. Compose is just one way to hand it a
   # port, secrets, a read-only data mount and a writable /state.
   command -v docker >/dev/null || die "docker is not installed"
-  [ -f .env ] || die "no .env found. Copy it first:  cp examples/.env.example .env"
+  [ -f .env ] || die "no .env found. Copy it first:  cp .env.example .env"
   exec docker compose up --build
 }
 
@@ -251,10 +267,10 @@ cmd_status() {
     echo "  .env       found ${DIM}(provider: $provider, key: $key)${OFF}"
     [ "$key" = "missing" ] && echo "             ${DIM}add the key for '$provider' to .env${OFF}"
   else
-    echo "  .env       missing ${DIM}(cp examples/.env.example .env)${OFF}"
+    echo "  .env       missing ${DIM}(cp .env.example .env)${OFF}"
   fi
-  local n; n="$(ls data/ 2>/dev/null | grep -cv README || true)"
-  echo "  studies    ${n:-0} in data/  ${DIM}$(studies_line)${OFF}"
+  local n; n="$(ls "$(data_root)" 2>/dev/null | grep -cv README || true)"
+  echo "  studies    ${n:-0} in $(data_root)  ${DIM}$(studies_line)${OFF}"
   if [ -f "$HOME/Library/Application Support/Claude/claude_desktop_config.json" ] \
      && grep -q "analysis-toolkit" "$HOME/Library/Application Support/Claude/claude_desktop_config.json" 2>/dev/null; then
     echo "  desktop    registered"

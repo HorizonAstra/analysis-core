@@ -84,13 +84,13 @@ It is a program we invoke, not a library we import — same reasoning as MaAsLin
 project. It also wants rpy2, seaborn and jenkspy, none of which the toolkit needs, so
 isolating it means a HAllA upgrade can never move the toolkit's numpy. And it is not pure
 Python: it calls R through rpy2 and imports `XICOR` and `eva` at module load, so its env
-carries a **private** R library (`envs/halla/rlib`) that cannot collide with r-stats.
+carries a **private** R library (`domains/microbiome/environments/rlib`) that cannot collide with r-stats.
 
 ## Capabilities
 
 ```
-./mo capabilities                      # what is available, and why not
-python src/capabilities.py --require-all   # non-zero unless every SOFTWARE capability is present
+./mo capabilities                       # what is available, and why not
+./mo capabilities --require-all         # non-zero unless every capability can run somewhere
 ```
 
 The image build runs the second form. Without it, a layer that half-failed ships as an

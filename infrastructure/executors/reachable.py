@@ -69,8 +69,32 @@ def owner() -> str:
     return os.environ.get("ANALYSIS_OWNER", "").strip()
 
 
+# Executors, kept for a moment rather than rebuilt on every question. An
+# executor caches what its machine can run and what it holds, and those answers
+# are the expensive ones: each is an ssh, and listing what this deployment can do
+# asks per capability per site. Rebuilding the executor each time threw the cache
+# away before it could be used twice, so the capabilities listing cost twenty
+# seconds of round trips on a cold process and did it again on the next one.
+#
+# Keyed by site and by who is asking, because both decide what an executor is
+# pointed at. Short, because the things behind it are a machine being reachable
+# and an environment being built, and both can change while a process is up.
+_BUILT: dict[tuple, tuple[float, object]] = {}
+_BUILT_SECONDS = 300.0
+
+
 def executor(site: str):
     """One machine, as something that can be asked to run work and to answer."""
+    key = (site, str(state_dir()), owner(), os.environ.get("ANALYSIS_RESULTS", ""))
+    hit = _BUILT.get(key)
+    if hit and (time.monotonic() - hit[0]) < _BUILT_SECONDS:
+        return hit[1]
+    built = _build(site)
+    _BUILT[key] = (time.monotonic(), built)
+    return built
+
+
+def _build(site: str):
     profile = P.load_profile(site)
     registry = JobRegistry(state_dir() / f"registry-{site}.json")
     if is_remote(profile):

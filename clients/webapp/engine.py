@@ -327,7 +327,8 @@ class Engine:
 
     async def _apply_scope(self, session, scope: list[str],
                            domains: list[str] | None = None,
-                           runs: list[str] | None = None) -> None:
+                           runs: list[str] | None = None,
+                           cleared: list[str] | None = None) -> None:
         """Point the user's running MCP server at this chat's studies.
 
         The user's own boundary is not this: each user gets their own server,
@@ -349,9 +350,32 @@ class Engine:
                 "ENABLE_SCOPE_TOOL is set for it.")
         # Runs are sent every turn including when there are none, because a chat
         # that has produced nothing has to mean nothing rather than everything.
+        # Cleared cells go with the runs, and for the same reason: a cell that
+        # was emptied and then chosen again has to stop being empty, and only a
+        # value sent every turn can say so.
         await session.call_tool(_SCOPE_TOOL, {"studies": ",".join(scope),
                                               "domains": ",".join(domains or []),
-                                              "runs": ",".join(runs or [])})
+                                              "runs": ",".join(runs or []),
+                                              "cleared": ",".join(cleared or [])})
+
+    @staticmethod
+    def _cleared_cells(user: str, chat_id: str) -> list[str]:
+        """Which cells of the versions grid this chat has emptied on purpose.
+
+        Emptying a cell is the only way somebody can ask for work to be done
+        again when nothing about the request has changed, so it has to reach the
+        thing that decides whether to re-use a finished run. It travels with the
+        scope, which is already sent every turn.
+
+        Absent and empty are different and both are kept: a cell nobody has
+        touched follows the newest result, and a cell that was emptied waits to
+        be filled. Only the second is sent.
+        """
+        try:
+            return sorted(k for k, v in (chats.get_chat(user, chat_id) or {})
+                          .get("versions", {}).items() if v == "")
+        except Exception:              # noqa: BLE001 - scope must not fail on this
+            return []
 
     def _user_of(self, session) -> str:
         return next((u for u, s in self._sessions.items() if s["session"] is session), "")
@@ -544,7 +568,8 @@ class Engine:
                 scope = self.scope_for(user, chat_id)
                 await self._apply_scope(session, scope,
                                         self.domains_for(user, chat_id),
-                                        chats.chat_runs(user, chat_id))
+                                        chats.chat_runs(user, chat_id),
+                                        self._cleared_cells(user, chat_id))
                 system = (self.system_prompt(user, chat_id) + render.scope_note(scope)
                           + self._outcomes_note(user, chat_id))
                 for _ in range(_MAX_STEPS):
