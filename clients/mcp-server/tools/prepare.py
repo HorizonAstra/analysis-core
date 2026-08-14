@@ -114,7 +114,10 @@ def register(mcp, *, sites, domain_allowed=lambda d: True) -> list:
                         "steps you want to set rather than leave at their "
                         "defaults, for example {\"bayesspace\": {\"q\": 10}}. "
                         "Anything not named here runs with the defaults its "
-                        "entry declares.")] = "",
+                        "entry declares. Only the parameters an entry declares "
+                        "can be set. Inputs are worked out and filled in for "
+                        "you, so naming one here is refused rather than "
+                        "guessed at.")] = "",
         workspace: Annotated[str, Field(
             description="Which workspace to file the results under, so they can "
                         "be found again. Use one per study or per line of work.",

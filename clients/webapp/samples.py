@@ -53,7 +53,7 @@ from pathlib import Path
 import paths
 
 _TREE = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
-for _p in ("infrastructure", "interfaces/data"):
+for _p in ("infrastructure", "interfaces/naming"):
     if str(_TREE / _p) not in sys.path:
         sys.path.insert(0, str(_TREE / _p))
 

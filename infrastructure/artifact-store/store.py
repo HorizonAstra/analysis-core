@@ -48,7 +48,7 @@ import entry as C
 # interface, because it is vocabulary rather than machinery: it depends on
 # nothing, every partition speaks it, and this file has to speak it over ssh
 # under whatever python3 a cluster provides, with no data layer to import.
-sys.path.insert(0, str(_TREE / "interfaces" / "data"))
+sys.path.insert(0, str(_TREE / "interfaces" / "naming"))
 import reference as _reference
 
 MANIFEST = "run_manifest.json"

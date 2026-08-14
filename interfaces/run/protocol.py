@@ -118,6 +118,21 @@ class JobSpec:
     output_path: str | None = None
     scratch_path: str | None = None
 
+    def __post_init__(self) -> None:
+        # Every executor writes inputs and then parameters into one `--name`
+        # flag namespace, so a parameter sharing an input's name overwrites it
+        # and the run reads something other than what was asked for. Checked on
+        # the spec rather than in each executor because it is a property of the
+        # request: a spec that cannot be submitted correctly anywhere should not
+        # be constructible. Callers that know the contract reject this earlier
+        # and say more; this is what catches everything else.
+        both = sorted(set(self.inputs) & set(self.parameters or {}))
+        if both:
+            raise ValueError(
+                f"{self.capability}: {', '.join(both)} given as both an input and a "
+                f"parameter. On the command line the parameter would replace the "
+                f"input, so the run would not read what was asked for.")
+
 
 @dataclass
 class JobRecord:

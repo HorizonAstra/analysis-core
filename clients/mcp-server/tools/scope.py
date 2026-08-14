@@ -34,8 +34,8 @@ _TREE = Path(__file__).resolve().parents[3]
 if str(_TREE / "infrastructure") not in sys.path:
     sys.path.insert(0, str(_TREE / "infrastructure"))
 
-if str(_TREE / "interfaces" / "data") not in sys.path:
-    sys.path.insert(0, str(_TREE / "interfaces" / "data"))
+if str(_TREE / "interfaces" / "naming") not in sys.path:
+    sys.path.insert(0, str(_TREE / "interfaces" / "naming"))
 
 import reference as _reference                                 # noqa: E402
 from datasource.refs import AT, study_parts                    # noqa: E402

@@ -102,6 +102,36 @@ def _from_site(spec) -> str | None:
     return f"site:{spec}" if spec else None
 
 
+def _asked_for(contract, given: dict) -> dict:
+    """The parameters of one step, from what a caller asked for.
+
+    A caller names parameters in free text, so what arrives here is whatever it
+    chose to write rather than anything the contract vouched for. Two kinds of
+    name are wrong, and they fail differently.
+
+    A name the contract does not declare at all is dropped. The entry already
+    carries a default for everything it takes, so the step still runs, correctly,
+    with the value the catalog chose.
+
+    A name that belongs to an *input* is refused. It cannot be quietly dropped,
+    because a caller writing one believes it has chosen that input, and it cannot
+    be passed on, because inputs and parameters are written into one flag
+    namespace on the command line: the later one wins, so a parameter sharing an
+    input's name silently replaces the reference the plan resolved. That is how
+    `ref_dir` went from `site:tumorspace` to a bare relative path, which resolved
+    against whatever directory the job happened to start in and did not exist.
+    An input is chosen by naming a reference, and this says so in those terms.
+    """
+    declared = {p["name"] for p in contract.get("parameters", [])}
+    clashes = sorted((set(given) & {i["name"] for i in contract["inputs"]}) - declared)
+    if clashes:
+        raise Impossible(
+            f"{', '.join(clashes)} is an input of {C.qualified_id(contract)}, not a "
+            f"parameter. An input is chosen by naming a reference for it, and this "
+            f"one is already filled in. It takes: {', '.join(sorted(declared)) or 'no parameters'}.")
+    return {k: v for k, v in given.items() if k in declared}
+
+
 def _from_role(spec, study: str, sample: str, holds: set) -> str | None:
     """The reference a role gives, or None when the sample does not hold it.
 
@@ -183,7 +213,7 @@ def plan(target: str, *, study: str, sample: str, holds: set,
         for p in contract.get("parameters", []):
             if p.get("is_sample_name"):
                 step.parameters[p["name"]] = sample
-        step.parameters.update(parameters.get(qualified, {}))
+        step.parameters.update(_asked_for(contract, parameters.get(qualified, {})))
         step.after = sorted(set(step.after))
         steps.append(step)
 
@@ -226,7 +256,7 @@ def compose(target: str, *, study: str, sample: str, holds: set, have: dict,
     for p in contract.get("parameters", []):
         if p.get("is_sample_name"):
             step.parameters[p["name"]] = sample
-    step.parameters.update(parameters.get(target, {}))
+    step.parameters.update(_asked_for(contract, parameters.get(target, {})))
     return step
 
 

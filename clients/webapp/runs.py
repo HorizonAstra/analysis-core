@@ -160,15 +160,27 @@ def live(user: str, chat_runs: list[str] | None = None) -> list[dict]:
             try:
                 if not executor.available():
                     continue
-                for record in executor.list_jobs():
-                    if record.state.value not in LIVE:
-                        continue
+                live = [r for r in executor.list_jobs() if r.state.value in LIVE]
+                # One question about all of them where the site can answer that
+                # way. Asked one at a time this is a round trip per run, and a
+                # study's worth of runs takes longer to ask about than the
+                # refresh interval, so the sweeps overlap and stack up.
+                many = getattr(executor, "poll_many", None)
+                if many is not None:
                     try:
-                        record = executor.poll(record.job_id)
-                    except Exception:      # noqa: BLE001 - a stale handle is not fatal
-                        pass
-                    if record.state.value in LIVE:
-                        found.append(_describe(record, site))
+                        live = many([r.job_id for r in live])
+                    except Exception:      # noqa: BLE001 - fall back to one by one
+                        many = None
+                if many is None:
+                    fresh = []
+                    for record in live:
+                        try:
+                            fresh.append(executor.poll(record.job_id))
+                        except Exception:  # noqa: BLE001 - a stale handle is not fatal
+                            fresh.append(record)
+                    live = fresh
+                found.extend(_describe(r, site) for r in live
+                             if r.state.value in LIVE)
             except Exception:              # noqa: BLE001 - an unreachable site is not fatal
                 continue
         found.sort(key=lambda r: r.get("started") or "", reverse=True)
@@ -228,6 +240,30 @@ _FETCHED: set[str] = set()
 _FETCH_GUARD = threading.Lock()
 
 
+def _absent(store, run: str) -> list | None:
+    """Which of a run's outputs are not on this machine yet.
+
+    `None` when the run is not here at all, and an empty list when it is here in
+    full, so the caller can tell "fetch everything" from "fetch nothing".
+
+    Asked of the manifest rather than of the directory. The directory is made,
+    and the manifest written into it, before the first output is fetched, so its
+    existence is no evidence that anything is in it. Two ordinary things leave
+    one half filled: a transfer interrupted part way, and a record written by
+    hand. Both used to be permanent, because the question asked was whether the
+    directory was there rather than whether the results were, and once it was
+    there nothing looked again. A run that is half here is now simply a run with
+    outputs still to fetch, and the next ask finishes it.
+
+    What the domain said must stay on its machine does not count as absent. It is
+    not coming, and counting it would refetch the whole run on every ask.
+    """
+    if not store.find(run):
+        return None
+    return [name for name, path in store.outputs(run).items()
+            if not os.path.exists(path)]
+
+
 def bring_back(user: str, run: str) -> bool:
     """Copy a finished run's results onto this machine, if they are not here.
 
@@ -241,7 +277,8 @@ def bring_back(user: str, run: str) -> bool:
     panel names it rather than showing it.
     """
     store = artifacts.ArtifactStore(paths.user_outputs_root(user))
-    if store.find(run):
+    absent = _absent(store, run)
+    if absent == []:
         return True
     with _FETCH_GUARD:
         if run in _FETCHED:
@@ -267,6 +304,8 @@ def bring_back(user: str, run: str) -> bool:
             (outdir / artifacts.MANIFEST).write_text(
                 json.dumps(executor.manifest(run), indent=2))
             for name in result.outputs:
+                if absent is not None and name not in absent:
+                    continue          # already here; a retry only fills the gaps
                 executor.fetch(run, name, str(outdir / name))
             return True
     except Exception as e:                    # noqa: BLE001 - reported, not raised

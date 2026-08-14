@@ -44,7 +44,7 @@ from . import local as _local
 # because it is vocabulary: it depends on nothing and every partition speaks it,
 # including the artifact store, which has to give the same answer over ssh under
 # whatever python3 a cluster provides and cannot import any of this.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "interfaces" / "data"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "interfaces" / "naming"))
 from reference import (AT, SCHEMES, looks_like_reference,  # noqa: E402,F401
                        run_named, split_version, study_parts, subject)
 
