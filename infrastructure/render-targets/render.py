@@ -107,11 +107,7 @@ def as_mcp(c: dict) -> str:
     required: list = []
 
     for i in c["inputs"]:
-        props[i["name"]] = {
-            "type": "string",
-            "description": i.get("description", "") +
-            (f" Produced by '{i['produced_by']}'." if i.get("produced_by") else ""),
-        }
+        props[i["name"]] = {"type": "string", "description": C.input_note(i)}
         if i.get("required", True):
             required.append(i["name"])
 
@@ -121,25 +117,15 @@ def as_mcp(c: dict) -> str:
             entry["default"] = p["default"]
         props[p["name"]] = entry
 
-    props["workspace"] = {"type": "string", "default": "default", "description":
-        "Which workspace to file the result under, so it can be found again. The store "
-        "decides where on disk it goes."}
-
-    desc = c.get("summary", c["title"])
-    if c["determinism"]["consumes_rng"] and not c["determinism"].get("seeded_by_default"):
-        desc += " Results vary between runs unless a seed is supplied."
-    # A model reading this tool is exactly who the caveats were written for, and
-    # carrying them here is the reason interpretation sits in the catalog rather
-    # than in whichever client happened to be written first.
-    if c.get("interpretation"):
-        desc += "\n\nReading the result: " + c["interpretation"]
+    props["workspace"] = {"type": "string", "default": "default",
+                          "description": C.WORKSPACE_NOTE}
 
     tool = {
         # Qualified, because two domains can offer the same analysis and both of
         # ours do. A dot would be read as a namespace by some hosts and rejected
         # by others, so the separator is an underscore.
         "name": f"{_domain_of(c)}_{c['id']}",
-        "description": desc,
+        "description": C.describe(c),
         "inputSchema": {
             "type": "object",
             "properties": props,

@@ -76,6 +76,72 @@ def qualified_id(contract: dict, path: str | Path | None = None) -> str:
     return f"{domain(contract, path)}/{contract['id']}"
 
 
+# How an entry describes itself to whoever is choosing whether to call it.
+#
+# Every surface has to answer this, and two of ours answered it separately. The
+# rendered MCP schema and the tool the server actually serves are both built from
+# the same entry by two functions that had drifted: the live one told the caller
+# an input is a reference and how to write one, and said whether a capability
+# reasons about one sample or the set; the rendered one said neither. A caller
+# reading the render was told less than a caller talking to the server, and
+# nothing compared them, because the check asks whether the render *runs*.
+#
+# So it belongs here, in the vocabulary both partitions already import, and each
+# surface arranges the text rather than composing it.
+
+# What one invocation reasons about. Worth saying out loud: without it a caller
+# cannot tell whether an answer describes one sample or the set, and asking a
+# per-sample capability a question about a cohort produces an answer that looks
+# right and means something else.
+SCOPE = {
+    "per_sample": "Runs on one sample. The answer is about that sample and no other, "
+                  "so comparing two samples means running it on each.",
+    "cross_sample": "Reasons across samples in one go. The answer belongs to the set "
+                    "rather than to any single sample in it.",
+}
+
+
+# The one argument every capability takes that no entry declares. Not a
+# destination — the store decides where a result lives, and a caller naming its
+# own is how results end up scattered — so it is a shelf to find the result on
+# again. Here for the same reason as the rest: both surfaces invented their own
+# sentence for it, and they said different things.
+WORKSPACE_NOTE = ("Which workspace to file the result under, so it can be found "
+                  "again. Use one per study or per line of work; the store "
+                  "decides where on disk it goes.")
+
+
+def input_note(spec: dict) -> str:
+    """What a caller is told about one input, including how to name it."""
+    note = spec.get("description", "")
+    if spec.get("produced_by"):
+        note += f" Produced by '{spec['produced_by']}'."
+    if spec.get("type") != "text":
+        # Said on every input rather than once in a brief, because this is the
+        # moment the value is chosen. A caller that builds a path here is a
+        # caller that can hand one machine's path to another machine.
+        note += (" A reference: study:<study>/<role> from list_data, or "
+                 "run:<id>/<output> from an earlier run. Not a file path.")
+    return note
+
+
+def describe(contract: dict) -> str:
+    """What a caller is told a capability is, and how to read its answer."""
+    desc = contract.get("summary", contract["title"])
+    reasons_about = SCOPE.get(contract.get("scope", ""))
+    if reasons_about:
+        desc += " " + reasons_about
+    det = contract["determinism"]
+    if det["consumes_rng"] and not det.get("seeded_by_default"):
+        desc += " Results vary between runs unless a seed is supplied."
+    # A model reading this tool is exactly who the caveats were written for, and
+    # carrying them here is the reason interpretation sits in the catalog rather
+    # than in whichever client happened to be written first.
+    if contract.get("interpretation"):
+        desc += "\n\nReading the result: " + contract["interpretation"]
+    return desc
+
+
 def resolve_ref(ref: str, within: str) -> str:
     """A reference to another capability, made absolute.
 

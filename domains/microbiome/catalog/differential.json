@@ -1,0 +1,165 @@
+{
+  "id": "differential",
+  "version": "0.1.0",
+  "title": "Differential abundance between cohorts",
+  "summary": "Which features sit at different levels between cohorts of samples, with one Benjamini-Hochberg correction across every comparison shown. Fits one model per feature and reads every pairwise contrast off it, so more than two cohorts costs one fit rather than one per pair. Runs once over the whole cohort, not per sample.",
+  "scope": "cross_sample",
+  "kernel": {
+    "language": "python",
+    "entrypoint": "kernels/python/run_differential.py",
+    "files": [
+      "kernels/python/run_differential.py",
+      "kernels/python/differential.py",
+      "../statistics/kernels/primitives/mixed_models.py",
+      "../statistics/kernels/primitives/multiple_testing.py",
+      "../statistics/kernels/workflows/inputs.py"
+    ],
+    "sha256": {
+      "kernels/python/run_differential.py": "ab559ccf56aabe38ec6cdd0019855e455afecfc0cea0afddf1b724af221c39c9",
+      "kernels/python/differential.py": "26d79c432995c568f3847d4e9a2a27ec314f97f9a97303e9256b246bc1c3855f",
+      "../statistics/kernels/primitives/mixed_models.py": "d2e6f1d5e97f995725f711944d12838f83db8735c69890892e73bf85778ae52e",
+      "../statistics/kernels/primitives/multiple_testing.py": "cf13d537179dc045fd834b0c73d5483f1dea29055d93027d5f2b9aa8f7536f0b",
+      "../statistics/kernels/workflows/inputs.py": "75e1bda82347a16869b2cda07325fd023452e1ce995ba4912535c929ad42fcb2"
+    },
+    "functions": [
+      "differential_abundance"
+    ],
+    "third_party": [
+      {
+        "name": "statsmodels",
+        "version": "unpinned",
+        "note": "Supplies the mixed-model and OLS fits, through the statistics domain's shared engine."
+      },
+      {
+        "name": "patsy",
+        "version": "unpinned",
+        "note": "Builds the design matrix the fit is given."
+      },
+      {
+        "name": "scipy",
+        "version": "unpinned",
+        "note": "Supplies the two-sample tests for welch and wilcoxon."
+      },
+      {
+        "name": "pandas",
+        "version": "unpinned"
+      }
+    ]
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "manifest": "../statistics/environments/requirements.txt",
+    "manifest_sha256": "ab853b8109e0e7173b99f8a4e684af6dcb04defb35537d4c7bd9f18e72431eb7",
+    "provenance": "No image. Runs in the statistics domain's virtual environment, because the engines this composes are that domain's and must be fitted where they are installed. Declared here rather than arranged by hand, so the runner enters the right environment without any machine naming a path.",
+    "activation": {
+      "kind": "venv",
+      "path": "../statistics/environments/py",
+      "note": "Entered by putting its bin directory first on PATH. The statistics environment, not a second copy of it: a second copy is a second set of versions, and the fit would stop being the same fit.",
+      "ready_when": "bin/python",
+      "restore_with": "bash ../restore.sh"
+    }
+  },
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "Closed-form fits and closed-form tests. Nothing is sampled, and the reference cohort is chosen by a stated rule rather than by row order."
+  },
+  "resources": {
+    "scales_with": "features times samples",
+    "bound_by": "cpu",
+    "cores_help": false,
+    "fans_out": false,
+    "basis": "derived_from_algorithm",
+    "memory_hint": "One feature is fitted at a time, so memory follows the table rather than the number of features."
+  },
+  "inputs": [
+    {
+      "name": "features",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/features.tsv",
+      "description": "Samples by features, sample identifier in the first column. The same table maaslin3 and lefser take."
+    },
+    {
+      "name": "metadata",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/metadata.tsv",
+      "description": "Samples by variables, same sample identifier in the first column, carrying the cohort column and any subject or covariate column named below."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "all_results",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/all_results.tsv",
+      "description": "Every feature in every comparison, with the effect, the raw p and the jointly adjusted p. Never truncated."
+    },
+    {
+      "name": "significant_results",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/significant_results.tsv",
+      "description": "The rows passing q<0.05 on the adjusted p."
+    },
+    {
+      "name": "model",
+      "type": "file",
+      "format": "json",
+      "staged_as": "{output_base}/model.json",
+      "description": "Which model was actually fitted, which cohort was the reference, the cohort order, and every warning raised. The sign of an effect is unreadable without it."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "group_by",
+      "type": "string",
+      "default": "",
+      "description": "The metadata column whose values are the cohorts. Required in practice: the capability is meaningless without one, and the format has no way to say a parameter is mandatory."
+    },
+    {
+      "name": "test",
+      "type": "string",
+      "default": "lme",
+      "description": "lme fits a random intercept per subject and is the correct choice for repeated measures. ols, welch and wilcoxon treat every sample as independent, and say so in the result when they were not."
+    },
+    {
+      "name": "subject_col",
+      "type": "string",
+      "default": "",
+      "description": "The metadata column identifying the subject a sample came from. Absent, every sample is treated as an independent observation."
+    },
+    {
+      "name": "covariates",
+      "type": "string",
+      "default": "auto",
+      "description": "Comma separated metadata columns to adjust for. Adjusted for but never reported and never FDR-corrected: nuisance terms, not hypotheses. 'auto' lets the workflow choose."
+    },
+    {
+      "name": "levels",
+      "type": "string",
+      "default": "",
+      "description": "Comma separated cohort values in the order to use, first one the reference. Absent, a conventional order is used for known ordinal vocabularies and alphabetical otherwise, and whichever was used is reported."
+    },
+    {
+      "name": "compare",
+      "type": "string",
+      "default": "",
+      "description": "Two cohort values, 'reference,contrast', to run that one comparison instead of every pair."
+    }
+  ],
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "python3 {entrypoint} --features {data_dir}/features.tsv --metadata {data_dir}/metadata.tsv --out {output_base} --group-by {group_by} --test {test} --subject-col {subject_col} --covariates {covariates} --levels {levels} --compare {compare}"
+  },
+  "interpretation": "Every effect is contrast minus reference on the analysis scale, so a positive effect means higher in the cohort named first in '<contrast> vs <reference>'. Which cohort is the reference is in model.json and on every row; it is not inferable from the table alone. The correction is one Benjamini-Hochberg family across every comparison in the file, so adding a cohort changes the adjusted p of comparisons you already had. Read effect size with the adjusted p, never the raw p. Where the test was one that assumes independent samples and the data has repeated measures, the p-values are anti-conservative and model.json says so."
+}

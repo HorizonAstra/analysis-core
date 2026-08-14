@@ -225,7 +225,22 @@ STATE_FILE = "run_state.json"
 DECLARED = ("type", "format", "description", "returnable")
 
 
-def run_identity(contract: dict, params: dict, staged: list) -> dict:
+# Hashing an input reads all of it, and both the run's identity and its manifest
+# are built from the same hashes. Computed twice, that is the whole of every
+# input read twice before the kernel starts — invisible on a table of a few
+# hundred rows and the dominant cost on a sample directory of several gigabytes,
+# which is the size this has to work at without anyone choosing.
+#
+# Once, then, and passed to both. A dict rather than a recomputation, because the
+# two must agree in any case: an identity built from one reading and a manifest
+# built from another describe different runs the moment a file changes between
+# them, and nothing would report it.
+def input_digests(staged: list) -> dict[str, str]:
+    """`{input name: content hash}`, reading each input exactly once."""
+    return {name: digest(src) for name, src, _ in staged}
+
+
+def run_identity(contract: dict, params: dict, digests: dict) -> dict:
     return {
         "capability": contract["id"],
         "contract_version": contract["version"],
@@ -233,7 +248,7 @@ def run_identity(contract: dict, params: dict, staged: list) -> dict:
         "image_digests": contract["environment"].get("digests"),
         "pinned_env": contract["environment"].get("pinned_env"),
         "parameters": params,
-        "inputs": {name: digest(src) for name, src, _ in staged},
+        "inputs": dict(digests),
     }
 
 
@@ -653,7 +668,8 @@ def main() -> int:
     # --- execute ----------------------------------------------------------
     stage_root.mkdir(parents=True, exist_ok=True)
 
-    identity = run_identity(contract, params, staging)
+    digests = input_digests(staging)
+    identity = run_identity(contract, params, digests)
     completed: list = []
     if args.resume:
         prior = read_state(stage_root)
@@ -856,7 +872,7 @@ def main() -> int:
         # anything reading a finished run had to guess those from directory
         # names. Recording the reference costs a string and settles it.
         "inputs": {name: ({"ref": asked[name]} if name in asked else {})
-                   | {"path": str(src), "sha256": digest(src)}
+                   | {"path": str(src), "sha256": digests[name]}
                    for name, src, _ in staging},
         "outputs": produced,
         # What each of those is, in the entry's own words. Every declared output

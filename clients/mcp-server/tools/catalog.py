@@ -114,25 +114,16 @@ def _tool_for(contract: dict, candidates: list) -> Any:
     """
     fields: list[tuple[str, type, Any, str]] = []
     for i in contract["inputs"]:
-        note = i.get("description", "")
-        if i.get("produced_by"):
-            note += f" Produced by '{i['produced_by']}'."
-        if i.get("type") != "text":
-            # Said on every input rather than once in a brief, because this is
-            # the moment the value is chosen. A caller that builds a path here
-            # is a caller that can hand one machine's path to another machine.
-            note += (" A reference: study:<study>/<role> from list_data, or "
-                     "run:<id>/<output> from an earlier run. Not a file path.")
-        fields.append((i["name"], str, ... if i.get("required", True) else "", note))
+        # What an input is called and what it says are the catalog's answer, not
+        # this file's. This built its own wording, and so did the MCP render
+        # target, and the two came apart: only one of them told a caller that an
+        # input is a reference rather than a path.
+        fields.append((i["name"], str, ... if i.get("required", True) else "",
+                       C.input_note(i)))
     for p in contract.get("parameters", []):
         fields.append((p["name"], _JSON_TYPE.get(p["type"], str),
                        p.get("default", ...), p.get("description", "")))
-    # Not a destination: the store decides where a result lives, and a caller
-    # naming its own is how results end up scattered. A workspace is a shelf to
-    # find it on again.
-    fields.append(("workspace", str, "default",
-                   "Which workspace to file the result under, so it can be found again. "
-                   "Use one per study or per line of work."))
+    fields.append(("workspace", str, "default", C.WORKSPACE_NOTE))
 
     qualified = C.qualified_id(contract)
 
@@ -245,35 +236,6 @@ def _tool_for(contract: dict, candidates: list) -> Any:
     return impl
 
 
-# What one invocation reasons about. Declared per entry, and worth saying out
-# loud: without it a caller cannot tell whether an answer describes one sample
-# or the set, and asking a per-sample capability a question about a cohort
-# produces an answer that looks right and means something else. Derived from the
-# entry rather than written into any brief, so it cannot go stale when a
-# capability is added.
-_SCOPE = {
-    "per_sample": "Runs on one sample. The answer is about that sample and no other, "
-                  "so comparing two samples means running it on each.",
-    "cross_sample": "Reasons across samples in one go. The answer belongs to the set "
-                    "rather than to any single sample in it.",
-}
-
-
-def describe(contract: dict) -> str:
-    """What the model is told a capability is, and how to read its answer."""
-    desc = contract.get("summary", contract["title"])
-    reasons_about = _SCOPE.get(contract.get("scope", ""))
-    if reasons_about:
-        desc += " " + reasons_about
-    det = contract["determinism"]
-    if det["consumes_rng"] and not det.get("seeded_by_default"):
-        desc += " Results vary between runs unless a seed is supplied."
-    if contract.get("interpretation"):
-        desc += "\n\nReading the result: " + contract["interpretation"]
-    return desc
-
-
-
 def register(mcp, *, sites, domain_allowed=lambda d: True) -> dict[str, str]:
     """Offer every capability that can run somewhere, routed when it is called.
 
@@ -296,7 +258,8 @@ def register(mcp, *, sites, domain_allowed=lambda d: True) -> dict[str, str]:
         if not able:
             continue
         name = C.qualified_id(contract).replace("/", "_")
-        mcp.add_tool(_tool_for(contract, able), name=name, description=describe(contract))
+        mcp.add_tool(_tool_for(contract, able), name=name,
+                     description=C.describe(contract))
         offered.append(name)
         routed[name] = ", ".join(n for n, _ in able)
 

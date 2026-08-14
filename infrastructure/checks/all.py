@@ -18,6 +18,7 @@ What is checked, in the order a failure is worth hearing about:
     the graph          that the capabilities order into a runnable sequence
     the methods        that what a domain says it computes is what it computes
     the formats        that every format a domain declares can be named as a file
+    the surfaces       that what we render a capability as is what we serve
     the data layer     that every shape of data a domain declares is still found
 
 The last one builds its own data. Everything before it reads the tree, which is
@@ -54,6 +55,7 @@ METHODS = TREE / "infrastructure" / "checks" / "methods.py"
 DATA = TREE / "infrastructure" / "checks" / "data_layer.py"
 COPIES = TREE / "infrastructure" / "checks" / "duplication.py"
 FORMATS = TREE / "infrastructure" / "checks" / "formats.py"
+SURFACES = TREE / "infrastructure" / "checks" / "surfaces.py"
 TARGETS = ("cli", "mcp", "openapi", "nextflow", "slurm", "verify")
 
 # What this interpreter must be able to import, and which check needs it. Every
@@ -62,6 +64,7 @@ TARGETS = ("cli", "mcp", "openapi", "nextflow", "slurm", "verify")
 NEEDS = {
     "jsonschema": "validating each catalog entry against the schema",
     "pandas": "the data layer check, which builds studies and reads them back",
+    "mcp": "asking the server what surface it actually serves",
 }
 
 # Where a working one usually is. Named as a suggestion and checked before it is
@@ -165,6 +168,12 @@ def main() -> int:
         f"{out.strip().splitlines()[-1] if out.strip() else ''}")
     if not ok:
         found.append(("the formats", out.strip()))
+
+    ok, out = _run([str(SURFACES)])
+    say(f"  {'ok  ' if ok else 'FAIL'}  surfaces · "
+        f"{out.strip().splitlines()[-1] if out.strip() else ''}")
+    if not ok:
+        found.append(("the surfaces", out.strip()))
 
     ok, out = _run([str(DATA)])
     say(f"  {'ok  ' if ok else 'FAIL'}  data layer · "

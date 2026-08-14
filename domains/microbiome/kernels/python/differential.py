@@ -15,8 +15,10 @@ every comparison shown, and the direction/labeling. A primitive should know none
 
 from __future__ import annotations
 
+import sys
 import warnings
 from itertools import combinations
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -25,9 +27,23 @@ import statsmodels.formula.api as smf
 from scipy.stats import mannwhitneyu, norm, ttest_ind
 from scipy.stats import t as _t
 
-from ..primitives.mixed_models import fit_mixed_model
-from ..primitives.multiple_testing import adjust_pvalues
-from .inputs import coerce_group_map, coerce_matrix
+# The engines this composes belong to the statistics domain, which is the
+# substrate both science domains compute on rather than a fourth science.
+#
+# These were relative imports — `..primitives`, `.inputs` — from a layout where
+# workflows and primitives were siblings under one package. They are not
+# siblings here and have not been since the migration, so this module raised
+# ImportError on the first line of any attempt to use it, which is why nothing
+# ever ran it. Resolved from this file's own location, the same way
+# `run_primitive.py` reaches the primitives, so it holds wherever the tree is
+# installed and needs nobody to set PYTHONPATH.
+_STATISTICS = Path(__file__).resolve().parents[3] / "statistics" / "kernels"
+if str(_STATISTICS) not in sys.path:
+    sys.path.insert(0, str(_STATISTICS))
+
+from primitives.mixed_models import fit_mixed_model        # noqa: E402
+from primitives.multiple_testing import adjust_pvalues     # noqa: E402
+from workflows.inputs import coerce_group_map, coerce_matrix  # noqa: E402
 
 VALID_TESTS = ("lme", "ols", "welch", "wilcoxon")
 
