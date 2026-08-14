@@ -207,6 +207,23 @@ def digest(path: Path) -> str:
 
 STATE_FILE = "run_state.json"
 
+# What the entry said each output is, copied into the manifest so the result can
+# say it for itself.
+#
+# A result travels. It is computed where the data is, which for anything large
+# means a cluster, and it is read somewhere else — a panel, a chat, a second
+# analysis on a third machine. Everything that read one had to answer "is this a
+# table, what is it called, may it leave this machine" by going and finding the
+# domain's catalog entry, which put the whole of `domains/` behind the act of
+# showing a file. That held only because every machine happens to carry an
+# identical copy of this tree, and it made a run's own record incomplete: the
+# entry can be edited afterwards, so an output could become returnable, or stop
+# being one, for a run that finished last month.
+#
+# Recorded at the moment of the run, from the entry that actually ran, which is
+# the only version of it that was ever true of this result.
+DECLARED = ("type", "format", "description", "returnable")
+
 
 def run_identity(contract: dict, params: dict, staged: list) -> dict:
     return {
@@ -842,6 +859,13 @@ def main() -> int:
                    | {"path": str(src), "sha256": digest(src)}
                    for name, src, _ in staging},
         "outputs": produced,
+        # What each of those is, in the entry's own words. Every declared output
+        # and not only the produced ones: an optional output that this run's
+        # parameters did not ask for is still part of what this capability
+        # offers, and a reader that sees the name elsewhere can say what it
+        # would have been.
+        "declared_outputs": {o["name"]: {k: o[k] for k in DECLARED if k in o}
+                             for o in contract["outputs"]},
         # Which output digests were taken over a filtered file, and what was
         # filtered out. Without this the digests above would be unexplainable.
         "volatile_outputs": volatile,

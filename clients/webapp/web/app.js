@@ -1642,7 +1642,11 @@ async function openItem(ref, name) {
   back.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Results</span>';
   back.addEventListener("click", showTree);
   const dl = document.createElement("a"); dl.className = "v-dl"; dl.href = `/api/results/file?chat_id=${currentChatId}&ref=${enc(ref)}&name=${enc(name)}`;
-  dl.setAttribute("download", `${name}.${item.format || "bin"}`);
+  // The name the server gave it. This used to append the format to the output's
+  // name, and the format was never sent, so every download arrived as `.bin` —
+  // and for a file that already carried its extension, as `.tsv.bin`. What an
+  // output is called is the store's answer, from what the domain declared.
+  dl.setAttribute("download", item.filename || name.split("/").pop());
   dl.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Download</span>';
   vhead.appendChild(back); vhead.appendChild(dl); viewer.appendChild(vhead);
 

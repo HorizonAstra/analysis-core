@@ -264,10 +264,11 @@ class LocalExecutor(Executor):
         manifest_path = Path(rec.spec.output_path) / "run_manifest.json"
         manifest = json.loads(manifest_path.read_text())
 
-        domain, cap = rec.spec.capability.split("/", 1)
-        contract = C.load(_TREE / "domains" / domain / "catalog" / f"{cap}.json")
-        stays = {o["name"] for o in contract.get("outputs", [])
-                 if o.get("returnable") is False}
+        # What may come back is the domain's decision, and the run recorded it.
+        # Asked of the manifest rather than of the catalog: an executor is the
+        # last thing to touch a result before it leaves, and it should not need
+        # the science installed to hand one over.
+        stays = ArtifactStore.stays(manifest)
 
         outputs = {name: str(Path(rec.spec.output_path) / name)
                    for name in manifest.get("outputs", {}) if name not in stays}

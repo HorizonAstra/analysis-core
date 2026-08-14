@@ -34,12 +34,13 @@ import paths
 import render
 import chats
 
-_MIME = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif",
-         "svg": "image/svg+xml", "webp": "image/webp", "csv": "text/csv",
-         "tsv": "text/tab-separated-values", "json": "application/json", "txt": "text/plain",
-         "md": "text/markdown", "markdown": "text/markdown", "html": "text/html",
-         "pdf": "application/pdf", "newick": "text/plain",
-         "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+# What a file is called and what it is are not asked here. This used to hold its
+# own extension-to-media-type table and read the extension off the stored path —
+# which for a declared output is `all_results`, with no extension at all, so
+# every table in the product was served as unknown bytes and offered under a
+# name ending `.bin`. The store answers both, from what the domain declared, and
+# it is the only thing that should: a second surface deriving it is a second
+# table to keep in step.
 
 _TEXT_PREVIEW_CHARS = 200_000
 _ROWS_IN_PANEL = 200
@@ -147,7 +148,7 @@ def _listed(st, directory, manifest: dict) -> list[dict]:
         "results" about it answers nothing.
     """
     declared = st._declared(manifest)
-    stays = st._stays(manifest)
+    stays = st.stays(manifest)
     out = []
     for name in sorted(manifest.get("outputs", {})):
         if name in stays:
@@ -751,7 +752,10 @@ def item(user: str, chat_id: str, ref: str, name: str) -> dict:
     out = {"name": name, "kind": detailed.get("kind"),
            "description": desc,
            "description_html": render.render_markdown(render.format_description(desc)),
-           "bytes": detailed.get("bytes")}
+           "bytes": detailed.get("bytes"),
+           # What to save it as. Carried through rather than rebuilt, so the
+           # name a person gets is the name the domain's declaration produces.
+           "filename": detailed.get("filename") or name.rpartition("/")[2]}
 
     kind = detailed.get("kind")
     if kind == "directory":
@@ -815,8 +819,7 @@ def file_bytes(user: str, chat_id: str, ref: str, name: str):
                   if o["name"] == name), None)
     if entry is None or not entry.get("path") or not os.path.isfile(entry["path"]):
         return None, None
-    ext = os.path.splitext(entry["path"])[1].lstrip(".").lower()
-    return entry["path"], _MIME.get(ext, "application/octet-stream")
+    return entry["path"], entry.get("media_type") or "application/octet-stream"
 
 
 # ── retiring runs ───────────────────────────────────────────────────────

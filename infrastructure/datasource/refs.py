@@ -217,11 +217,57 @@ def _within(target: Path, deeper: str, said_as: str) -> Path:
     if ".." in Path(deeper).parts:
         raise Unresolvable(f"{said_as}/{deeper} points outside {said_as}")
     inside = (target / deeper).resolve()
-    if not inside.exists():
-        holds = ", ".join(sorted(p.name for p in target.iterdir())) \
-            if target.is_dir() else "nothing, it is a file"
-        raise Unresolvable(f"{said_as} has no '{deeper}'. It holds: {holds}")
-    return inside
+    if inside.exists():
+        return inside
+    found = _one_extension_of(target, deeper)
+    if found is not None:
+        return found
+    holds = ", ".join(sorted(p.name for p in target.iterdir())) \
+        if target.is_dir() else "nothing, it is a file"
+    raise Unresolvable(f"{said_as} has no '{deeper}'. It holds: {holds}")
+
+
+# Naming a file without its extension, and meaning the file.
+#
+# Two halves of this vocabulary disagreed about whether a name carries one. A
+# capability's declared output is stored under the name the entry gave it, so
+# `run:<id>/all_results` is the whole name and there is no extension to know. A
+# file written *inside* a directory output is stored under whatever the code
+# called it, and submitted code that says `save(frame, "species_abundance")`
+# gets `species_abundance.tsv`, because saving a table appends the extension.
+#
+# So the same scheme required no extension one level up and an exact one level
+# down, and the level was not something the caller could see. What that cost was
+# a whole failed run to learn a filename: submit, stage, start R, exit 1, read
+# the reason, and ask again with four more characters. The name was never
+# ambiguous — one file answered to it — it simply had to be spelled the way the
+# filesystem spelled it rather than the way it had just been created.
+#
+# Here rather than in a client, because a reference is resolved by whichever
+# machine does the work. A client that repaired the spelling before sending
+# would repair it only for itself, and would be guessing about a directory it
+# cannot see: on a cluster run this resolves on the cluster.
+def _one_extension_of(target: Path, deeper: str) -> Path | None:
+    """`<name>` when the directory holds exactly one `<name>.<something>`.
+
+    Only when nothing matched exactly, so a real file called `x` always wins
+    over a file called `x.tsv`. Only when there is exactly one candidate: two
+    of them is a genuine question about which was meant, and answering it by
+    picking would hand an analysis the wrong data and say nothing.
+    """
+    parent, _, stem = deeper.rpartition("/")
+    root = (target / parent).resolve() if parent else target.resolve()
+    if not root.is_dir() or not root.is_relative_to(target.resolve()):
+        return None
+    found = sorted(p for p in root.iterdir()
+                   if p.is_file() and p.name.startswith(stem + "."))
+    if len(found) == 1:
+        return found[0].resolve()
+    if len(found) > 1:
+        raise Unresolvable(
+            f"'{stem}' could be {' or '.join(p.name for p in found)}. "
+            f"Name the one you mean, with its extension.")
+    return None
 
 
 def _run(rest: str, results_root: str) -> Path:
@@ -256,8 +302,18 @@ def _run(rest: str, results_root: str) -> Path:
     available = store.outputs(run)
     name, _, deeper = output.partition("/")
     if name not in available:
-        raise Unresolvable(f"run {run} has no output '{name}'. It has: "
-                           f"{', '.join(sorted(available)) or 'none'}")
+        # The same forgiveness as `_one_extension_of`, in the other direction. A
+        # declared output is stored under the name its entry gave it, and that
+        # name has no extension, so `run:<id>/all_results.tsv` names the right
+        # thing and spells it the way the file it was collected from was
+        # spelled. Exact first, so an entry that really does declare `x.tsv`
+        # keeps answering to it.
+        stem = name.rpartition(".")[0]
+        alike = sorted(n for n in available if n == stem)
+        if len(alike) != 1:
+            raise Unresolvable(f"run {run} has no output '{name}'. It has: "
+                               f"{', '.join(sorted(available)) or 'none'}")
+        name = alike[0]
     return _within(Path(available[name]), deeper, f"run:{run}/{name}")
 
 

@@ -30,9 +30,14 @@ from pathlib import Path
 _TREE = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_TREE / "interfaces" / "run"))
 sys.path.insert(0, str(_TREE / "interfaces" / "catalog"))
+sys.path.insert(0, str(_TREE / "infrastructure" / "artifact-store"))
 sys.path.insert(0, str(_TREE / "infrastructure" / "sites"))
 from protocol import Executor, JobRecord, JobSpec, JobState, Result, WriteScope
 import entry as C
+# Not to reach a store — the one that matters is on the cluster and is run there
+# as a command. This is for the reading of a manifest, which is the same reading
+# wherever the manifest came from.
+from store import ArtifactStore
 import profile as P
 
 from registry import JobRegistry
@@ -476,12 +481,15 @@ class SlurmSshExecutor(Executor):
         manifest_path = f"{rec.spec.output_path}/run_manifest.json"
         manifest = json.loads(self._ssh(f"cat {shlex.quote(manifest_path)}"))
 
-        # What may come back is the domain's decision, recorded per output in the
-        # catalog. An executor enforces it and does not interpret it.
-        domain, cap = rec.spec.capability.split("/", 1)
-        contract = C.load(_TREE / "domains" / domain / "catalog" / f"{cap}.json")
-        stays = {o["name"] for o in contract.get("outputs", [])
-                 if o.get("returnable") is False}
+        # What may come back is the domain's decision, recorded per output by the
+        # run itself. An executor enforces it and does not interpret it.
+        #
+        # Read from the manifest it just fetched rather than from a catalog on
+        # this side. The run happened on the cluster, against the entry installed
+        # there; reading the local copy asserts the two trees are identical, and
+        # the moment they are not, this machine decides what may leave a machine
+        # it is not on, from a file the run never saw.
+        stays = ArtifactStore.stays(manifest)
 
         outputs = {name: f"{rec.spec.output_path}/{name}"
                    for name in manifest.get("outputs", {}) if name not in stays}

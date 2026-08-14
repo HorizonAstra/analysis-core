@@ -12,10 +12,12 @@ the other machine.
 What is checked, in the order a failure is worth hearing about:
 
     the four rules     who may import whom, across the partitions
+    no duplication     that no file exists twice in two partitions
     the schema         every entry against the format it claims to satisfy
     every render       every entry to every surface it can be rendered as
     the graph          that the capabilities order into a runnable sequence
     the methods        that what a domain says it computes is what it computes
+    the formats        that every format a domain declares can be named as a file
     the data layer     that every shape of data a domain declares is still found
 
 The last one builds its own data. Everything before it reads the tree, which is
@@ -26,11 +28,20 @@ the cluster.
 Skipped is not passed. jsonschema is optional in the runner, deliberately, so a
 missing library never stops work; here it is a failure, because the whole
 purpose of this file is to be the thing that noticed.
+
+Which interpreter this runs under decides whether it can check anything at all,
+so it is established first and it is fatal. Run under a python without
+jsonschema and every entry reports "not validated"; without pandas the data
+layer check dies in its imports. That was eighteen problems and a traceback,
+from a tree with nothing wrong with it — a result indistinguishable from real
+failure, which makes it worse than no result. Exit 2 says this could not check,
+as against 1, which says it checked and found something.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -41,7 +52,25 @@ GRAPH = TREE / "infrastructure" / "graph" / "graph.py"
 RULES = TREE / "infrastructure" / "checks" / "dependencies.py"
 METHODS = TREE / "infrastructure" / "checks" / "methods.py"
 DATA = TREE / "infrastructure" / "checks" / "data_layer.py"
+COPIES = TREE / "infrastructure" / "checks" / "duplication.py"
+FORMATS = TREE / "infrastructure" / "checks" / "formats.py"
 TARGETS = ("cli", "mcp", "openapi", "nextflow", "slurm", "verify")
+
+# What this interpreter must be able to import, and which check needs it. Every
+# check below runs as `sys.executable <script>`, so what this process can import
+# is exactly what they can.
+NEEDS = {
+    "jsonschema": "validating each catalog entry against the schema",
+    "pandas": "the data layer check, which builds studies and reads them back",
+}
+
+# Where a working one usually is. Named as a suggestion and checked before it is
+# offered, so this never sends somebody to a path that is not there either.
+BUILT = TREE / "clients" / ".venv" / "bin" / "python"
+
+
+def usable() -> list[str]:
+    return [m for m in NEEDS if importlib.util.find_spec(m) is None]
 
 
 def entries() -> list[Path]:
@@ -60,6 +89,22 @@ def main() -> int:
     a = ap.parse_args()
     found = []
 
+    missing = usable()
+    if missing:
+        print(f"This python cannot import {', '.join(missing)}, so it cannot run "
+              f"every check.\n", file=sys.stderr)
+        for name in missing:
+            print(f"  {name:<12} {NEEDS[name]}", file=sys.stderr)
+        print(f"\n  using       {sys.executable}", file=sys.stderr)
+        if BUILT.exists():
+            print(f"\nRun it with the environment this tree builds:\n"
+                  f"  {BUILT} {Path(__file__).relative_to(TREE)}", file=sys.stderr)
+        else:
+            print("\nBuild the environment first:\n  ./setup.sh", file=sys.stderr)
+        print("\nNothing was checked. This is not a report about the tree.",
+              file=sys.stderr)
+        return 2
+
     def say(line: str) -> None:
         if not a.quiet:
             print(line)
@@ -68,6 +113,12 @@ def main() -> int:
     say(f"  {'ok  ' if ok else 'FAIL'}  four rules · {out.strip().splitlines()[-1] if out.strip() else ''}")
     if not ok:
         found.append(("the four rules", out.strip()))
+
+    ok, out = _run([str(COPIES), "--known"])
+    say(f"  {'ok  ' if ok else 'FAIL'}  no duplication · "
+        f"{out.strip().splitlines()[-1] if out.strip() else ''}")
+    if not ok:
+        found.append(("duplicated files", out.strip()))
 
     catalog = entries()
     passed = skipped = 0
@@ -108,6 +159,12 @@ def main() -> int:
     say(f"  {'ok  ' if ok else 'FAIL'}  methods · {out.strip().splitlines()[-1] if out.strip() else ''}")
     if not ok:
         found.append(("the methods", out.strip()))
+
+    ok, out = _run([str(FORMATS)])
+    say(f"  {'ok  ' if ok else 'FAIL'}  formats · "
+        f"{out.strip().splitlines()[-1] if out.strip() else ''}")
+    if not ok:
+        found.append(("the formats", out.strip()))
 
     ok, out = _run([str(DATA)])
     say(f"  {'ok  ' if ok else 'FAIL'}  data layer · "

@@ -254,17 +254,30 @@ class ArtifactStore:
         if not found:
             raise KeyError(f"no run called {run} under {self.root}")
         d, m = found
-        stays = self._stays(m)
+        stays = self.stays(m)
         return {n: str(d / n) for n in sorted(m.get("outputs", {})) if n not in stays}
 
-    def _declared(self, manifest: dict) -> dict[str, dict]:
+    @classmethod
+    def _declared(cls, manifest: dict) -> dict[str, dict]:
         """What the domain said each output is, by name.
 
-        An output is often written without a file extension, so the name on
-        disk cannot say whether it is a table. The entry already says, and
-        asking it is the same rule that puts the code root in the entry rather
-        than in a config.
+        An output is written under the name its entry gave it, which carries no
+        file extension, so the name on disk cannot say whether it is a table.
+        The entry already says.
+
+        Read from the run's own manifest, which `run.py` fills in from the entry
+        that actually ran. That is the version of the entry this result is true
+        of: entries are edited, and looking one up now would describe a run
+        finished last month in terms of a capability it never was.
+
+        Falling back to the catalog covers runs recorded before manifests said
+        so. It is a fallback and not the rule, because it needs `domains/` to be
+        installed beside the results — which is not true of a machine whose job
+        is only to show them.
         """
+        recorded = manifest.get("declared_outputs")
+        if isinstance(recorded, dict):
+            return recorded
         cap = manifest.get("capability")
         if not cap:
             return {}
@@ -272,9 +285,19 @@ class ArtifactStore:
             return {o["name"]: o for o in C.load(path).get("outputs", [])}
         return {}
 
-    def _stays(self, manifest: dict) -> set[str]:
-        """Outputs the domain declared unable to leave the machine."""
-        return {n for n, o in self._declared(manifest).items()
+    @classmethod
+    def stays(cls, manifest: dict) -> set[str]:
+        """Outputs the domain declared unable to leave the machine.
+
+        A function of the manifest and nothing else, so an executor holding one
+        it fetched over ssh can ask without a store rooted anywhere. It is asked
+        by every path that hands an output onward — this file when it lists a
+        run, and each executor when it collects one — and those were three
+        readings of the same rule, each with its own copy of "returnable is
+        False". A rule about what may leave a machine is the wrong rule to hold
+        three opinions about.
+        """
+        return {n for n, o in cls._declared(manifest).items()
                 if o.get("returnable") is False}
 
     # A path is not an answer. Something has to read a result back, or the
@@ -287,6 +310,44 @@ class ArtifactStore:
     _TABLES = {"tsv": ("\t", True), "csv": (",", True),
                "tsv_one_column": ("\t", True), "dense_tsv_no_header": ("\t", False)}
     _IMAGES = {"png", "jpg", "jpeg", "svg", "pdf"}
+
+    # What a format is called on a filesystem.
+    #
+    # These are two vocabularies and they are not the same one. A format is what
+    # the catalog says about how to read a file — `dense_tsv_no_header` is an
+    # instruction to a parser, and nobody wants a file called that. An extension
+    # is what an operating system reads to pick an application. Only this file
+    # knows both, because only this file is handed the entry's word and the
+    # bytes at the same time.
+    #
+    # Kept here rather than in whatever is displaying the result, because every
+    # surface needs the same answer and the ones that worked it out for
+    # themselves worked it out from the filename — which for a declared output
+    # has no extension to work from, so every one of them came back "unknown
+    # binary" for files that were plainly tables.
+    #
+    # An unlisted format gets no extension rather than a guessed one. A run that
+    # invents `.spaceranger_or_harmonised` is worse than one that hands over a
+    # bare name, and `format_check` fails the build before either can happen.
+    _EXTENSION = {
+        "tsv": "tsv", "tsv_one_column": "tsv", "dense_tsv_no_header": "tsv",
+        "csv": "csv", "json": "json", "text": "txt", "txt": "txt",
+        "png": "png", "jpg": "jpg", "jpeg": "jpeg", "svg": "svg", "pdf": "pdf",
+        "md": "md", "markdown": "md", "html": "html", "newick": "newick",
+        "python": "py", "log": "log", "directory": "",
+    }
+
+    # What to tell a client the bytes are, keyed by extension because that is
+    # the smaller vocabulary: three formats become `tsv`, and they cannot then
+    # disagree about what a tsv is.
+    _MEDIA = {
+        "tsv": "text/tab-separated-values", "csv": "text/csv",
+        "json": "application/json", "txt": "text/plain", "md": "text/markdown",
+        "html": "text/html", "newick": "text/plain", "py": "text/x-python",
+        "log": "text/plain", "png": "image/png", "jpg": "image/jpeg",
+        "jpeg": "image/jpeg", "svg": "image/svg+xml", "pdf": "application/pdf",
+    }
+    _OPAQUE = "application/octet-stream"
     _COUNTABLE = 8 * 1024 * 1024      # above this, counting rows means reading it all
 
     # A preview is for working out what something is, not for reading it. Rows
@@ -334,6 +395,44 @@ class ArtifactStore:
             return "table"
         return "text"
 
+    # An output leaving this system needs a name a person's machine can open and
+    # a type their client can act on. Neither is derivable from the stored file:
+    # it is called `all_results` and nothing about it says tsv. Both are answered
+    # here, once, so that adding a surface adds no opinion about file types and a
+    # domain declaring a format is the whole of what a domain has to do.
+
+    @classmethod
+    def filename_of(cls, declared: dict, name: str) -> str:
+        """What to call this output when handing it to somebody.
+
+        The last segment only. `results/cohort.tsv` is a file inside a directory
+        output, and a person downloading it wants `cohort.tsv` rather than a
+        path they did not ask about.
+
+        Left alone when it already ends the right way, so a file written by
+        submitted code — which names itself, extension and all — is handed over
+        under the name it was given rather than under that name with the
+        extension repeated.
+        """
+        leaf = name.rpartition("/")[2]
+        ext = cls._EXTENSION.get(cls._format(declared, name), "")
+        if not ext or leaf.lower().endswith("." + ext):
+            return leaf
+        return f"{leaf}.{ext}"
+
+    @classmethod
+    def media_type_of(cls, declared: dict, name: str) -> str:
+        """What the bytes are, for anything that has to say so in a header."""
+        if cls.kind_of(declared, name) == "directory":
+            return cls._OPAQUE
+        ext = cls._EXTENSION.get(cls._format(declared, name), "")
+        return cls._MEDIA.get(ext, cls._OPAQUE)
+
+    @classmethod
+    def formats(cls) -> set[str]:
+        """Every format this knows how to name a file for. Read by a check."""
+        return set(cls._EXTENSION)
+
     def preview(self, run: str, name: str | None = None, rows: int = 20) -> list[dict]:
         """The returnable outputs of a run, with enough of each one to read.
 
@@ -376,7 +475,14 @@ class ArtifactStore:
     _LISTING = 40      # files of a directory output described before it is cut short
 
     def _one(self, name: str, path: Path, rows: int, declared: dict) -> dict:
-        out: dict = {"name": name, "path": str(path)}
+        # Said on every entry, including the ones that turn out to be missing or
+        # unreadable. What a thing is called does not depend on whether it could
+        # be opened, and a caller drawing a row or offering a download needs the
+        # name either way.
+        out: dict = {"name": name, "path": str(path),
+                     "format": self._format(declared, name),
+                     "filename": self.filename_of(declared, name),
+                     "media_type": self.media_type_of(declared, name)}
         if declared.get("description"):
             out["what"] = declared["description"]
         if not path.exists():
