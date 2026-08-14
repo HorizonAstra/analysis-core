@@ -167,6 +167,24 @@ class Executor(ABC):
 
     name: str
 
+    # How long work started here is worth waiting on before it is fair to call
+    # it long-running, in seconds. Zero means never wait.
+    #
+    # This exists because "started" and "finished" are different things to say
+    # and the caller was only ever able to say the first. A capability run on a
+    # workstation finishes in under a second, and the answer still read "this
+    # runs on a machine, leave it and come back" — so a result that was already
+    # sitting there was described as being in progress, and nobody went back for
+    # it. Waiting a moment and saying which of the two actually happened is the
+    # whole fix.
+    #
+    # A property of the execution model rather than of a site or a capability: a
+    # scheduler queues, and how long a queue takes is not something the thing
+    # submitting to it can know, so it does not wait at all. A subprocess on this
+    # machine is either quick or it is genuinely long work, and a couple of
+    # seconds tells them apart.
+    settles_in: float = 0.0
+
     @abstractmethod
     def submit(self, spec: JobSpec) -> JobRecord:
         """Start a run and return at once, in state SUBMITTED.

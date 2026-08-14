@@ -55,12 +55,24 @@ def _slug(s: str) -> str:
 # Tools that enumerate what exists rather than return a result. Nothing is carded
 # from one, and nothing in one is claimed by the chat.
 #
-# A card says "here is a thing you asked for, open it". Asking what results exist
-# is not asking to open any of them, and treating a listing like a result put a
-# card in the conversation for every output of every run it named — a hundred of
-# them above the answer, none of them asked for. Reading one back is the moment
-# something has been looked at, and that is when it is worth showing.
-_LISTINGS = frozenset({"list_runs"})
+# A card says "here is a thing you asked for, open it", so one belongs to work
+# that was started, and to nothing else. Every tool that only reads is named
+# here, and none of them ever produces one.
+#
+# This began as just the listing tool, on the reasoning that reading a result is
+# the moment something has been looked at and therefore worth showing. That was
+# wrong about who is doing the looking. The model reads a result many times while
+# working out an answer — checking whether a run landed, pulling more rows,
+# reading the same table again with a different limit — and every one of those
+# put another card in the conversation. A single question produced nine, all
+# saying `saved.json`, none of them anything the person had asked to see. What
+# a run produced is the panel's job to show, permanently and once.
+#
+# Everything not named here starts work: `prepare`, and the per-capability tools
+# built from the catalog, whose names are not known until the server is running.
+# Listing the readers rather than the writers is what makes that possible, and it
+# is also the shorter list to keep right.
+_READ_ONLY = frozenset({"list_runs", "list_data", "run_result"})
 
 
 def _leaf_names(output, prefix: str = "") -> list[str]:
@@ -552,7 +564,7 @@ class Engine:
                 if b["type"] == "image":                 # not persisted (size)
                     yield {"type": "image", "src": f"data:{b['mime_type']};base64,{b['data']}"}
 
-            for r in (() if tc["name"] in _LISTINGS else self._parse_runs(blocks)):
+            for r in (() if tc["name"] in _READ_ONLY else self._parse_runs(blocks)):
                 if r["run"] not in rec_runs:
                     rec_runs.append(r["run"])
                 if r.get("state") and not r.get("outputs"):

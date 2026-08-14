@@ -89,6 +89,14 @@ class DomainSpec:
     label: str = ""
     notes: str = field(default="")
     input_label: str = ""
+    # Whether work in this domain is kept in versions, and therefore whether a
+    # person is ever asked which version is in play. Declared, because it is a
+    # fact about how the science is done: a pipeline run over many samples and
+    # rerun as parameters settle produces alternatives worth choosing between,
+    # and a study analysed once per question does not. A domain that says
+    # nothing does not, which is the safe answer — a control that is absent
+    # costs nothing, and one that opens onto nothing reads as broken.
+    versioned: bool = False
 
     @classmethod
     def read(cls, path: Path) -> "DomainSpec":
@@ -105,6 +113,7 @@ class DomainSpec:
             label=d.get("label", ""),
             notes=d.get("notes", ""),
             input_label=d.get("input_label", ""),
+            versioned=bool(d.get("versioned", False)),
         )
 
     # --- the older single-shape view, for callers that only want the first ---

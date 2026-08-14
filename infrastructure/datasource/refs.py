@@ -225,7 +225,21 @@ def _within(target: Path, deeper: str, said_as: str) -> Path:
 
 
 def _run(rest: str, results_root: str) -> Path:
-    """`<run>` or `<run>/<output>`, against the store on this machine."""
+    """`<run>`, `<run>/<output>`, or something named inside a directory output.
+
+    The third is what lets one analysis feed another. A capability whose result
+    is a directory declares one output, so everything it wrote answered to a
+    single name — and a downstream capability asking for a table got handed the
+    folder holding several. There was no way to say which, so the way through
+    was to run the same work again, once per table, each time saving one thing.
+    That is a workaround for a sentence the vocabulary could not say, and this is
+    the sentence: `run:<id>/results/cohorts` is the file called `cohorts` inside
+    the output called `results`.
+
+    The output itself is still looked up through the store, so what a domain said
+    may not leave its machine is still refused. Only what is inside something
+    already allowed can be named, and `..` cannot be.
+    """
     if not rest:
         raise Unresolvable("run: needs a run id")
     run, _, output = rest.partition("/")
@@ -240,10 +254,11 @@ def _run(rest: str, results_root: str) -> Path:
     # said may not leave its machine is refused here too rather than reachable
     # by anyone who guesses its name.
     available = store.outputs(run)
-    if output not in available:
-        raise Unresolvable(f"run {run} has no output '{output}'. It has: "
+    name, _, deeper = output.partition("/")
+    if name not in available:
+        raise Unresolvable(f"run {run} has no output '{name}'. It has: "
                            f"{', '.join(sorted(available)) or 'none'}")
-    return Path(available[output])
+    return _within(Path(available[name]), deeper, f"run:{run}/{name}")
 
 
 def _store(results_root: str):

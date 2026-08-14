@@ -88,6 +88,35 @@ def register(mcp, *, sites) -> list[str]:
             return json.dumps(visible[study], indent=2)
         return json.dumps({"studies": [visible[k] for k in sorted(visible)]}, indent=2)
 
+    def describe_study(
+        study: Annotated[str, Field(description="The study to describe, by name.")],
+    ) -> str:
+        """What one study actually contains: every table, its columns, and how they join.
+
+        Call this before planning any analysis on a study. It answers the
+        questions that otherwise have to be guessed at or computed: how many rows
+        each table has, what its columns are called, which values a column can
+        take when there are few enough to group by, and which column links one
+        table to another.
+
+        `links` is the part that decides whether a method is sound. A column that
+        identifies rows in one table and repeats in another means the rows in the
+        second are not independent, so anything comparing them has to account for
+        that rather than pooling them.
+
+        `other_files` lists real data this domain has no role for. It is not
+        loaded by anything automatically and is read by naming the file.
+
+        Nothing here starts a run or costs a job. It reads the data directly.
+        """
+        rows = [r for r in _across(sites)
+                if D.study_allowed(r["study"]) and D.domain_allowed(r["domain"])]
+        row = next((r for r in rows if r["study"] == study), None)
+        if row is None:
+            raise KeyError(f"no study called {study}. Available: "
+                           f"{', '.join(sorted(r['study'] for r in rows)) or 'none'}")
+        return json.dumps(D.describe_study(study, row.get("domain") or ""), indent=2)
+
     mcp.add_tool(list_data, name="list_data",
                  description=("What study data is available, and the reference for "
                               "each part of it. Call this before any analysis: a "
@@ -96,4 +125,11 @@ def register(mcp, *, sites) -> list[str]:
                               "Data only: it cannot say what has already been "
                               "computed, so pair it with the run listing before "
                               "describing what a study does or does not have."))
-    return ["list_data"]
+    mcp.add_tool(describe_study, name="describe_study",
+                 description=("What one study contains: every table with its row "
+                              "count and columns, the values of any column small "
+                              "enough to group by, which columns link the tables, "
+                              "and any files the domain has no role for. Call this "
+                              "before planning an analysis, rather than running "
+                              "code to find out what the columns are."))
+    return ["list_data", "describe_study"]

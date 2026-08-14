@@ -310,6 +310,11 @@
             "default": "copy",
             "description": "How the adapter places this input. Link rather than copy when the input is large and read only, such as a cohort directory; the adapter then binds its real location into the container, since a link out of the staging tree resolves to nothing inside one."
           },
+          "by_role": {
+            "type": "boolean",
+            "default": false,
+            "description": "For a directory input given a whole study: stage each of the study's tables under the role its domain recognises, rather than under the filename it happens to have on disk. A kernel then opens 'events' rather than 'Leukemia_events.csv', which is the name everything else already uses for it, and the same kernel works on a study whose files are named differently. Files the domain has no role for are staged under their own names and are still there to open."
+          },
           "from_site": {
             "type": "string",
             "description": "A reference the machine itself provides, by the name its profile gives it. For something that belongs to no study and is produced by no run, such as a deconvolution reference. Each site says where it keeps one under `references`."

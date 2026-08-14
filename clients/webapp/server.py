@@ -218,6 +218,19 @@ async def new_chat(user: str = Depends(current_user)):
     return {"id": chats.create_chat(user)}
 
 
+def _chat_versions_apply(user: str, domains) -> bool:
+    """Whether the versions control has anything to offer this chat.
+
+    Never fatal. This decides whether to draw a button, and a registry that
+    cannot be read is not a reason to fail loading the conversation.
+    """
+    try:
+        import versions as _versions
+        return _versions.applies(user, domains)
+    except Exception:                    # noqa: BLE001 - reported, not raised
+        return False
+
+
 @app.get("/api/chats/{cid}")
 async def get_chat(cid: str, user: str = Depends(current_user)):
     from datasource import domains as _domains
@@ -236,6 +249,15 @@ async def get_chat(cid: str, user: str = Depends(current_user)):
             "domains": [{"name": d, "label": _domains.label(d),
                          "note": (_domains.spec(d).notes if _domains.spec(d) else "")}
                         for d in choices],
+            # Which of the header controls mean anything in this chat. Decided
+            # here because it is a question about the chat's domains and its
+            # runs, and the page has neither. A control that can only report
+            # having nothing is worse than one that is absent: it reads as the
+            # feature being broken rather than not applying.
+            "controls": {
+                "viewers": bool(results_panel._viewer_kinds(user, within=selected)),
+                "versions": _chat_versions_apply(user, selected),
+            },
             "available_studies": engine.accessible_studies(user, selected)}
 
 
@@ -382,6 +404,20 @@ async def studies_for_domains(domains: str = "", user: str = Depends(current_use
 @app.get("/api/health")
 async def health(user: str = Depends(current_user)):
     return SafeJSONResponse(engine.info(user))
+
+
+@app.get("/api/controls")
+async def controls(domains: str = "", user: str = Depends(current_user)):
+    """Which header controls mean anything for a set of domains.
+
+    The same answer `/api/chats/{id}` carries, asked before a chat exists. A new
+    conversation has picked its domains and has no id yet, and drawing the
+    controls for the previous chat until it is saved is how a viewer appears in a
+    conversation that will never have one.
+    """
+    chosen = [d.strip() for d in domains.split(",") if d.strip()]
+    return {"viewers": bool(results_panel._viewer_kinds(user, within=chosen or None)),
+            "versions": _chat_versions_apply(user, chosen or None)}
 
 
 @app.get("/api/capabilities")

@@ -23,6 +23,7 @@ output that must stay put never appears here to be asked for.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from pathlib import Path
@@ -190,6 +191,79 @@ def _inside(path, prefix: str) -> list[dict]:
              "what": ""} for p in found[:_INSIDE_LIMIT]]
 
 
+# The kernel's own bookkeeping, written beside the results of every run: the list
+# of what was saved, what was printed, what was marked as an answer, and the
+# traceback if it stopped. Useful, and not a result. This is the whole of the
+# clutter that filled the panel with rows called `saved.json`, and hiding these
+# four is all that was ever needed — hiding every run of submitted code took the
+# cohort tables somebody asked for with it.
+_BOOKKEEPING = frozenset({"saved.json", "printed.txt", "presented.json", "error.txt"})
+
+
+def _about(answers: list[dict]) -> str:
+    """A heading for a run, from what it produced.
+
+    The description the code gave, when it gave one, because that is a sentence
+    written for a reader. Otherwise the file names, tidied: `metadata_cefepime`
+    reads as "Metadata cefepime", which is worse than a title someone wrote and
+    far better than the same word eleven times.
+    """
+    described = [a["description"] for a in answers if a.get("description")]
+    if described:
+        return described[0]
+    names = [Path(a["name"]).stem.replace("_", " ").strip() for a in answers]
+    names = [n for n in names if n]
+    if not names:
+        return ""
+    head = ", ".join(names[:2]) + (f" and {len(names) - 2} more" if len(names) > 2 else "")
+    return head[:1].upper() + head[1:]
+
+
+def _answers(directory, manifest: dict) -> list[dict]:
+    """What a run of submitted code produced that a person would want to see.
+
+    Everything it saved, minus the bookkeeping above. Saving is the act of
+    keeping something, and code that keeps a table has decided that table is
+    worth keeping — so that is the default, and nothing has to be remembered for
+    a result to appear.
+
+    `present(obj, name, description)` still exists, and what it adds is the
+    description and the ordering: a run that presented anything shows those
+    first, said in the words the code chose. It is how a result is explained,
+    not how it is made visible.
+
+    Each row names a file inside the run's directory output, which is exactly
+    what `run:<id>/<output>/<name>` addresses, so what the panel opens and what a
+    later capability reads are the same thing said the same way.
+    """
+    rows: list[dict] = []
+    for out_name in sorted((manifest.get("outputs") or {})):
+        where = Path(directory) / out_name
+        if not where.is_dir():
+            continue
+        described = {}
+        marker = where / "presented.json"
+        if marker.is_file():
+            try:
+                for entry in json.loads(marker.read_text()) or []:
+                    if isinstance(entry, dict) and entry.get("name"):
+                        described[entry["name"]] = entry.get("description") or ""
+            except (OSError, ValueError):
+                described = {}
+        for name in sorted(p.name for p in where.iterdir() if p.is_file()):
+            if name in _BOOKKEEPING:
+                continue
+            # No declaration to read: the domain never named these, because what
+            # submitted code writes is not something an entry can promise. The
+            # extension is all there is, and it is what `kind_of` falls back on.
+            rows.append({"name": f"{out_name}/{name}",
+                         "kind": _kind_of({}, name),
+                         "description": described.get(name, ""),
+                         "_first": name in described})
+    rows.sort(key=lambda r: (not r.pop("_first"), r["name"]))
+    return rows
+
+
 def _run_rows(st, run_ids, prefix: str, label_prefix: str,
               user: str | None = None, owner: str | None = None) -> list[dict]:
     # Which sample each run is about, worked out once for the whole panel rather
@@ -216,12 +290,26 @@ def _run_rows(st, run_ids, prefix: str, label_prefix: str,
             continue
         directory, manifest = found
         capability = manifest.get("capability", "")
-        items = [{
+        # A capability that runs code written for the question shows what that
+        # code presented, and nothing else. Everything it saved is kept and
+        # stays readable; the panel is for what somebody asked for. Presenting
+        # nothing is the ordinary case for a step whose job was to work
+        # something out, and such a run is left out entirely rather than listed
+        # as an empty folder.
+        answers = None
+        if render.is_working_material(capability):
+            answers = _answers(directory, manifest)
+            if not answers:
+                continue
+        items = answers if answers is not None else [{
             "name": o["name"],
             "kind": o.get("kind"),
             "description": o.get("what", ""),
             "ref": prefix + run,
         } for o in _listed(st, directory, manifest)]
+        if answers is not None:
+            for item in items:
+                item["ref"] = prefix + run
 
         declared = st._declared(manifest)
         # An output the domain said may not leave its machine is named rather
@@ -240,7 +328,14 @@ def _run_rows(st, run_ids, prefix: str, label_prefix: str,
             "stays": stays,
             "viewer": viewer,
             "key": prefix + run,
-            "label": label_prefix + render.capability_title(capability),
+            # A capability's title names what it does, which is the right heading
+            # when the entry decides what comes out. For code written to answer
+            # one question it names nothing: eleven runs all headed "Analyzing"
+            # are eleven folders a person has to open to tell apart. What it
+            # produced is the only thing that distinguishes them, so that is the
+            # heading, and the capability's title is what it falls back to.
+            "label": label_prefix + (_about(answers) if answers
+                                     else render.capability_title(capability)),
             # Which sample this is about, so the panel can file it under one.
             # Empty for anything built from more than one sample or from none,
             # which the panel leaves where it is rather than inventing a group
@@ -462,7 +557,7 @@ def _titled(text: str) -> str:
         for i, w in enumerate(words))
 
 
-def _viewer_kinds(user: str | None = None) -> dict:
+def _viewer_kinds(user: str | None = None, within=None) -> dict:
     """Every viewer the catalog knows about: its name, what produces one, and
     which domain it belongs to.
 
@@ -484,8 +579,14 @@ def _viewer_kinds(user: str | None = None) -> dict:
     """
     import json
     import glob
-    granted = access.allowed_domains(user) if user else None
-    allowed = set(granted) if granted is not None else None
+    if within is not None:
+        # A chat's own domains, which are narrower than what its owner may reach.
+        # Someone granted two domains gets a tissue viewer offered in a chat
+        # about neither, and it can only ever tell them it has nothing to open.
+        allowed = set(within)
+    else:
+        granted = access.allowed_domains(user) if user else None
+        allowed = set(granted) if granted is not None else None
     tree_root = os.environ.get("ANALYSIS_CORE",
                                str(Path(__file__).resolve().parents[2]))
     out: dict = {}
@@ -628,11 +729,17 @@ def item(user: str, chat_id: str, ref: str, name: str) -> dict:
     # its first segment. Matched against the flattened leaves first and then
     # against the outputs themselves, because a directory output is offered
     # whole when a viewer opens it and as its contents when nothing does.
-    top = name.split("/", 1)[0]
+    # Ask for exactly what was clicked. The store reads a file inside a
+    # directory output properly when it is named; asking for the directory
+    # instead returns its listing, which shows three lines of each file, and a
+    # person who clicked one table got three rows of it however small it was.
     try:
-        entries = st.preview(run, top, rows=_ROWS_IN_PANEL)
+        entries = st.preview(run, name, rows=_ROWS_IN_PANEL)
     except (KeyError, OSError):
-        return {"error": "not found"}
+        try:
+            entries = st.preview(run, name.split("/", 1)[0], rows=_ROWS_IN_PANEL)
+        except (KeyError, OSError):
+            return {"error": "not found"}
     detailed = next((o for o in (leaf for e in entries for leaf in _leaves(e))
                      if o["name"] == name), None)
     if detailed is None:

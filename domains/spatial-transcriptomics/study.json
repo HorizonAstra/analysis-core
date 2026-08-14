@@ -79,5 +79,7 @@
         ]
       }
     }
-  ]
+  ],
+  "versioned": true,
+  "versioned_note": "The same pipeline is run over every sample of a study and rerun as parameters settle, so one question has several answers and a person has to say which is in play. Domains that say nothing here are not asked, and their clients do not offer the choice."
 }

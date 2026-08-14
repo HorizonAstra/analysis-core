@@ -339,13 +339,36 @@ class ArtifactStore:
 
         Naming one output gives that one alone, which is how a caller asks for
         more rows of the table it cares about without dragging the rest along.
+
+        Naming something inside a directory output — `results/cohort.tsv` —
+        reads that file properly. Listing a directory shows three lines of each
+        of its files, which is the right amount for finding out what is in
+        there and the wrong amount for reading one of them; asking for the
+        directory when a person clicked a file in it is how a three column table
+        of three hundred rows came back as three rows. Same spelling as a
+        reference to the same file, so the panel and a capability ask for it the
+        same way.
         """
         available = self.outputs(run)
+        inner = ""
         if name is not None and name not in available:
-            raise KeyError(f"{run} has no returnable output called {name}. "
-                           f"It has: {', '.join(available) or 'none'}")
+            head, _, inner = name.partition("/")
+            if not inner or head not in available:
+                raise KeyError(f"{run} has no returnable output called {name}. "
+                               f"It has: {', '.join(available) or 'none'}")
+            name = head
         found = self.find(run)
         declared = self._declared(found[1]) if found else {}
+        if inner:
+            root = Path(available[name]).resolve()
+            if ".." in Path(inner).parts:
+                raise KeyError(f"{inner} points outside {name}")
+            target = (root / inner).resolve()
+            if not target.is_relative_to(root) or not target.is_file():
+                raise KeyError(f"{run}/{name} has no file called {inner}")
+            # Declared as nothing, because the domain declared the directory and
+            # not what submitted code chose to write into it.
+            return [self._one(f"{name}/{inner}", target, rows, {})]
         chosen = [name] if name else sorted(available)
         return [self._one(n, Path(available[n]), rows, declared.get(n, {}))
                 for n in chosen]

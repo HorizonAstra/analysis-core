@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from . import describe
 from . import domains
 from .base import DataSource
 from .domains import DOMAINS, known_domains
@@ -30,6 +31,8 @@ from .local import (
     study_domain,
 )
 from .refs import study_parts
+# Not `describe` — that name belongs to the submodule below, and importing the
+# function of the same name here would shadow it.
 from .tables import capabilities, ensure_parquet, read_tabular
 
 __all__ = [
@@ -45,6 +48,9 @@ __all__ = [
     "read_tabular",
     "ensure_parquet",
     "capabilities",
+    "describe",
+    "describe_study",
+    "study_files",
     # domains
     "domains",
     "DOMAINS",
@@ -64,3 +70,21 @@ __all__ = [
 def default_source(data_root: str = "data") -> LocalSource:
     """The process-wide LocalSource for a data root (cached so callers share one)."""
     return LocalSource(data_root)
+
+
+def study_files(study: str, domain: str = "", data_root: str = "") -> list[dict]:
+    """Every file one study holds, with the role it fills or None when unrecognised."""
+    root = resolve_data_root(data_root or "data")
+    where = resolve_study_dir(study, root)
+    return describe.files(where, domain or (study_domain(study, root) or ""))
+
+
+def describe_study(study: str, domain: str = "", data_root: str = "") -> dict:
+    """One study's tables, their columns, and how they join. See describe.py.
+
+    Takes a study by name, because that is what a caller holds; where it lives is
+    the data layer's business and nobody else's.
+    """
+    root = resolve_data_root(data_root or "data")
+    where = resolve_study_dir(study, root)
+    return describe.study(where, domain or (study_domain(study, root) or ""), study)

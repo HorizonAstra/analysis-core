@@ -51,15 +51,69 @@ def _list_arg(text: str) -> list:
     executor started passing parameters through, which is when this would have
     become a silent single-candidate run rather than an error.
     """
-    text = text.strip().strip("[]")
+    text = text.strip()
+    # JSON first, because that is what a bracketed list usually is and a parser
+    # gets the quoting right. Splitting on commas by hand kept the quotes as
+    # part of the value: `["cefepime_exposed"]` arrived as the name
+    # `'cefepime_exposed'`, MaAsLin looked for a column called that, did not
+    # find one, and stopped. The failure named the column, with its quotes, and
+    # still read as the caller having asked for a column that does not exist.
+    if text.startswith("[") and text.endswith("]"):
+        try:
+            loaded = json.loads(text)
+            if isinstance(loaded, list):
+                return loaded
+        except ValueError:
+            pass          # not JSON: a bare list like [5, 50], handled below
     out = []
-    for part in text.split(","):
+    for part in text.strip("[]").split(","):
         part = part.strip()
+        # A value written with quotes means the text inside them, here as
+        # anywhere else. Only a matching pair, so a name that genuinely contains
+        # one is left alone.
+        if len(part) >= 2 and part[0] == part[-1] and part[0] in "\"'":
+            part = part[1:-1]
         if not part:
             continue
         out.append(int(part) if re.fullmatch(r"-?\d+", part) else
                    float(part) if re.fullmatch(r"-?\d*\.\d+", part) else part)
     return out
+
+
+def _stage_by_role(src: Path, dst: Path) -> None:
+    """Stage a study so its tables carry the names its domain gives them.
+
+    A study on disk is named for whoever assembled it — `Leukemia_events.csv`,
+    `Leukemia_samples.csv` — and a kernel written against those names works for
+    exactly one study. The domain already recognises which file fills which
+    role, so the file arrives as `events.csv` and the kernel is written once,
+    against the role.
+
+    Files the domain has no role for keep their own names and are staged
+    anyway. They are real data, and a capability that was handed a whole study
+    should not be the one deciding that two of its seven tables do not exist.
+    """
+    from datasource import domains as _domains
+
+    dst.mkdir(parents=True, exist_ok=True)
+    domain = _domains.detect_domain(str(src)) or ""
+    by_role = {}
+    if domain:
+        try:
+            by_role = {os.path.abspath(p): r
+                       for r, p in (_domains.match_roles(str(src), domain) or {}).items()}
+        except Exception:                       # noqa: BLE001 - name it plainly instead
+            by_role = {}
+    for name in sorted(os.listdir(src)):
+        here = src / name
+        if name.startswith("."):
+            continue
+        role = by_role.get(os.path.abspath(str(here)))
+        target = dst / (f"{role}{here.suffix}" if role and here.is_file() else name)
+        if here.is_dir():
+            shutil.copytree(here, target, dirs_exist_ok=True)
+        else:
+            shutil.copy2(here, target)
 
 
 def build_parser(contract: dict) -> argparse.ArgumentParser:
@@ -612,8 +666,11 @@ def main() -> int:
         # input digest is part of the identity that was just checked.
         if args.resume and dst.exists():
             continue
-        mode = next((i.get("stage_mode", "copy") for i in contract["inputs"]
-                     if i["name"] == name), "copy")
+        declared = next((i for i in contract["inputs"] if i["name"] == name), {})
+        mode = declared.get("stage_mode", "copy")
+        if declared.get("by_role") and src.is_dir():
+            _stage_by_role(src, dst)
+            continue
         if mode == "link":
             # The staged path becomes a link to the real thing. Nothing is
             # copied and nothing is written through it: every capability that

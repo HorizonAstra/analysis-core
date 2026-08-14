@@ -32,6 +32,20 @@ let studies = [];       // the studies reachable in this chat's domain
 let chatStudies = null; // this chat's selection; null means all of the above
 let chatDomains = [];   // the domains this chat works in; fixed once chosen
 
+// Which header controls this chat has any use for, as the server decides it.
+// Per chat rather than per user: someone who may reach two domains still works
+// in one at a time, and a tissue viewer offered in a microbiome conversation can
+// only ever report having nothing to draw. Hidden rather than disabled — a
+// disabled control still asks to be clicked, and answers when it is.
+function applyControls(controls) {
+  const shown = controls || {};
+  for (const [key, sel] of [["viewers", "#viewBtn"], ["versions", "#verBtn"]]) {
+    const btn = $(sel);
+    if (btn) btn.hidden = !shown[key];
+  }
+  closePops();          // one of them may have just gone while its popover was open
+}
+
 // ── small helpers ───────────────────────────────────────────────────────────
 // Follow the streaming answer only while the reader is at the bottom. Scrolling up is
 // the reader saying they are reading rather than watching, and dragging them back is
@@ -57,7 +71,17 @@ scroll.addEventListener("scroll", () => { stickToBottom = atBottom(); }, { passi
 function el(cls, html) { const d = document.createElement("div"); d.className = cls; if (html !== undefined) d.innerHTML = html; return d; }
 function place(node) { if (working) thread.insertBefore(node, working); else thread.appendChild(node); toBottom(); }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
-function formatName(s) { return String(s).replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().split(" ").map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" "); }
+// A name as a person should read it. An output inside a directory is addressed
+// as `results/cohort.tsv`, because that is what opens it and what a later step
+// names in a reference — but the folder it sits in is already the row above, so
+// showing the path repeats it and reads as "Results/metadata Cefepime.tsv". The
+// last segment is the name; the rest is where it lives.
+function formatName(s) {
+  const leaf = String(s).split("/").filter(Boolean).pop() || String(s);
+  const stem = leaf.replace(/\.[a-z0-9]{1,5}$/i, "");
+  return stem.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
+             .split(" ").map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
+}
 const enc = encodeURIComponent;
 
 // ── transcript rendering ─────────────────────────────────────────────────────
@@ -67,57 +91,9 @@ function showWelcome() {
   const w = el("welcome");
   w.innerHTML = `<h1>What would you like to look into?</h1>
     <p class="sub">Ask in plain language, or in precise technical terms. I’ll inspect the
-    data, choose sound methods, and show you the results, figures included.</p>
-    <div class="chips" id="chips"></div>`;
+    data, choose sound methods, and show you the results, figures included.</p>`;
   thread.appendChild(w);
-  const chips = w.querySelector("#chips");
-  chips.classList.add("collapsed");                 // clips + fades the overflow
-  suggestions().forEach((t) => {
-    const c = document.createElement("button");
-    c.className = "chip"; c.type = "button"; c.textContent = t;
-    c.addEventListener("click", () => submit(t));
-    chips.appendChild(c);
-  });
-  // Show more / less on its own line below — only if the list actually overflows
-  const moreWrap = el("chips-more");
-  const more = document.createElement("button");
-  more.className = "chip-more"; more.type = "button"; more.textContent = "Show more";
-  moreWrap.appendChild(more); w.appendChild(moreWrap);
-  requestAnimationFrame(() => {
-    if (chips.scrollHeight <= chips.clientHeight + 4) { moreWrap.remove(); chips.classList.remove("collapsed"); }
-  });
-  more.addEventListener("click", () => {
-    more.textContent = chips.classList.toggle("collapsed") ? "Show more" : "Show less";
-  });
 }
-function suggestions() {
-  // built only from the studies in scope for this chat, so nothing unreachable is hinted
-  // at, and phrased for the chat's domain — a microbiome prompt in a spatial chat asks
-  // for analyses that do not exist there
-  const s = scopedStudies();
-  if (!s.length) return ["List the available studies", "Give me an overview of a study"];
-  const pick = (n, i) => (s.includes(n) ? n : (s[i] ?? s[0] ?? n));
-  const first = ["What studies are available, and what does each one contain?"];
-
-  if (chatDomains.length === 1 && chatDomains[0] === "spatial-transcriptomics") {
-    const st = s[0];
-    return first.concat([
-      `Which samples in ${st} produced a good spatial fit, and which look weak?`,
-      `In ${st}, which region boundary separates the most genes?`,
-      `Rank the genes in ${st} by how widespread their spatial bias is, and map the names.`,
-      `Which genes come up as significant across many samples in ${st}?`,
-    ]);
-  }
-
-  const ov = pick("AROW", 0), leuk = pick("Leukemia", 1), a = pick("AROW", 0), b = pick("HealthyDonors", 2);
-  const out = first.concat([`What are the top microbial-to-metabolite correlations in ${leuk}?`]);
-  if (a !== b) out.push(`Compare microbial diversity between ${a} and ${b}`);
-  out.push(`Make three cohorts in ${leuk} by inverse Simpson alpha diversity: low below 2, medium from 2 up to 7, and high at 7 or above.`);
-  out.push(`Plot a histogram showing the distribution of a metabolite in ${ov}.`);
-  out.push(`Plot the trajectory of a clinical event over time in ${leuk}.`);
-  return out;
-}
-
 function addUserTurn(text, index) {
   const w = thread.querySelector(".welcome"); if (w) w.remove();
   const turn = el("turn user");
@@ -703,6 +679,7 @@ async function loadChat(id) {
   // The domain gates which studies exist here, so settle it before the study picker
   // reads its list. Returns immediately unless the user genuinely has a choice.
   chatDomains = await ensureDomains(chat);
+  applyControls(chat.controls);
   studies = chat.available_studies || studies;
   chatStudies = chat.studies || null; updateStudyLabel();
   const msgs = chat.messages || [];
@@ -734,6 +711,8 @@ async function newChat(focus = true) {
   const options = health.domains || [];
   chatDomains = options.length === 1 ? [options[0].name] : [];
   if (options.length > 1) chatDomains = await pickDomains(options, ["microbiome"]);
+  applyControls(await fetch(`/api/controls?domains=${enc(chatDomains.join(","))}`)
+    .then((r) => r.json()).catch(() => ({})));
   studies = await studiesForDomains(chatDomains);
   updateStudyLabel();
   showWelcome(); await loadChats(); showTree(); refreshResults(); refreshGoing();
@@ -794,8 +773,30 @@ function initMenu() {
 // ── study scope + capabilities popups ───────────────────────────────────────
 // Two separate controls on purpose: capabilities describes the product and sits by the
 // name; study scope changes what this chat can reach and sits by Results.
-const POPS = [["#studyBtn", "#studyPop"], ["#infoBtn", "#infoPop"],
-              ["#viewBtn", "#viewPop"], ["#verBtn", "#verPop"]];
+// Button, popover, and the surface a click may land on without closing it. The
+// surface is the popover itself unless the popover is a full-screen overlay with
+// a card in the middle, where clicking the dimmed area around the card is how a
+// person closes it.
+const POPS = [["#studyBtn", "#studyPop"], ["#infoBtn", "#infoPop", ".info-card"],
+              ["#viewBtn", "#viewPop"], ["#verBtn", "#verPop", ".ver-card"]];
+
+// Whether a click happened inside the surface of a popover that is currently
+// open. Asked of the event at the moment it happens, rather than by hanging a
+// stopPropagation listener on the surface when the popover is wired up. Those
+// listeners were attached once, at start-up, to whatever node matched then — and
+// the capabilities panel builds its card contents on first open, so the listener
+// ended up on a node that had been replaced. Every click inside the panel
+// reached the document and closed it. Reading the event cannot go stale, and it
+// is one rule for every popover instead of one listener per popover.
+function insideOpenPop(target) {
+  for (const [, popSel, surfaceSel] of POPS) {
+    const pop = $(popSel);
+    if (!pop || pop.hidden) continue;
+    const surface = surfaceSel ? pop.querySelector(surfaceSel) : pop;
+    if (surface && surface.contains(target)) return true;
+  }
+  return false;
+}
 // Closing skips whatever is not on the page. This runs on every document click,
 // so one missing control here would break every click in the app.
 function closePops() {
@@ -822,10 +823,9 @@ function initPopover(btnSel, popSel, onOpen, surfaceSel) {
     closePops();
     if (wasClosed) { pop.hidden = false; btn.classList.add("on"); if (onOpen) onOpen(); }
   });
-  // clicks on the surface must not reach the document-level close handler. For the centred
-  // capabilities panel the surface is the card, not the element itself, so clicking the
-  // dimmed area around it closes.
-  $(surfaceSel || popSel).addEventListener("click", (e) => e.stopPropagation());
+  // Nothing is attached to the surface here. Which clicks close a popover is
+  // decided by insideOpenPop when the click happens, so content built later
+  // behaves the same as content present at start-up.
 }
 // ── what this can do ────────────────────────────────────────────────────────
 // One collapsed group per subject, because the whole of it at once is a wall
@@ -1315,7 +1315,7 @@ function initPops() {
   initPopover("#viewBtn", "#viewPop", renderViewers);
   $("#ipClose").addEventListener("click", closePops);
   $("#verClose")?.addEventListener("click", closePops);
-  document.addEventListener("click", closePops);
+  document.addEventListener("click", (e) => { if (!insideOpenPop(e.target)) closePops(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePops(); });
   $("#spAll").addEventListener("click", () => applyStudies(studies.slice()));
   window.addEventListener("resize", anchorStudyPop);
@@ -1414,7 +1414,7 @@ async function applyStudies(list) {
   const all = list.length === studies.length;
   chatStudies = all ? null : list;
   renderStudyPop(); updateStudyLabel();
-  if (!thread.querySelector(".turn")) showWelcome();     // refresh the suggestion chips
+  if (!thread.querySelector(".turn")) showWelcome();
   if (!currentChatId) return;
   // an empty list means "all" server-side, which is also what a fresh chat starts as
   try {
@@ -1486,6 +1486,19 @@ async function refreshGoing() {
   clearTimeout(goingTimer);
   goingTimer = setTimeout(refreshGoing, running.length ? 4000 : 20000);
 }
+// Whether another run in this panel carries the same heading. Asked of what is
+// being drawn rather than decided on the server, because it is a fact about the
+// list a person is looking at: the same heading twice needs telling apart, and
+// once does not.
+function sameLabelElsewhere(t) {
+  const all = (resultsData && resultsData.topics) || [];
+  return all.filter((x) => x.label === t.label).length > 1;
+}
+function shortTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
 // One run, as a folder of the things it produced. Built on its own so it can be
 // dropped straight into the panel or inside a sample, without the two cases
 // being two copies of the same code.
@@ -1493,7 +1506,15 @@ function runFolder(t) {
   const folder = document.createElement("div");
   folder.className = "folder" + (expanded.has(t.key) ? " open" : "");
   const row = document.createElement("button"); row.className = "folder-row";
-  row.innerHTML = `${ICON.chev}<span class="ico">${ICON.folder}</span><span class="name">${escapeHtml(t.label)}</span><span class="count">${t.items.length}</span>`;
+  // The time is part of the name when two runs are headed the same way. A run
+  // of code written for one question is named after what it produced, and the
+  // same work run twice produces the same names — two folders reading exactly
+  // alike, with no way to tell which is which without opening both.
+  const apart = sameLabelElsewhere(t) ? shortTime(t.finished) : "";
+  row.innerHTML = `${ICON.chev}<span class="ico">${ICON.folder}</span>` +
+                  `<span class="name">${escapeHtml(t.label)}</span>` +
+                  (apart ? `<span class="when">${escapeHtml(apart)}</span>` : "") +
+                  `<span class="count">${t.items.length}</span>`;
   // Where it ran and when, on hover rather than on screen. A row per run is
   // already the answer to "what did I do"; the rest is for the moment someone
   // asks whether they can rely on it, and that moment is rare enough that it
@@ -1865,18 +1886,13 @@ async function boot() {
   try { health = await (await fetch("/api/health")).json(); } catch { health = {}; }
   studies = health.studies || [];
   updateStudyLabel();
-  // No viewer draws anything in this user's domains, so the control goes rather
-  // than sitting there able only to say it has nothing. Removed, not disabled:
-  // a disabled button still asks to be clicked.
-  if (!health.any_viewer) $("#viewBtn")?.remove();
-
   initPanel(); initMenu(); initPops();
   await loadChats();
-  // resume the last real conversation; an empty one is not worth resuming and would
-  // skip the domain prompt a fresh chat gives
-  const resumable = chatList.find((c) => (c.title || "New chat") !== "New chat");
-  if (resumable) await loadChat(resumable.id);
-  else await newChat(false);
+  // Always a new conversation. Opening the page is not the same as asking to
+  // carry on with something, and resuming the last one put a person back in the
+  // middle of work they may have finished days ago, with its studies and domain
+  // still in scope. Everything earlier is one click away in the chat list.
+  await newChat(false);
   setSendEnabled();
 }
 boot();

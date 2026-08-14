@@ -14,7 +14,7 @@
       "kernels/run_code.py"
     ],
     "sha256": {
-      "kernels/run_code.py": "4887dbc9267e2f0279c7dd83f6831e54da623fac9432fe993e94a8005e2ca4aa"
+      "kernels/run_code.py": "e4a998326886d8d65b8c7c19c431593e5c65e704e9fa560870db87ffdfe4d034"
     },
     "third_party": [
       {
@@ -53,7 +53,7 @@
       "format": "python",
       "required": true,
       "staged_as": "{data_dir}/submitted.py",
-      "description": "The Python to run. `df` holds the table when one was given, `pd` and `np` are imported, and this domain's methods are importable as `primitives.<module>`.\n\nNothing survives the run unless it is saved. Each run is a fresh process: no variable, import or frame from an earlier one is still here, and there is no session to reach back into, so work that has to share state belongs in one run. Call `save(object, name)` for every result worth keeping: a data frame is written as a table, a figure as an image, anything else as JSON. Calling a method from here saves nothing on its own, whatever it returns.\n\nPrint a summary and save the whole thing. The top and bottom rows of a ranking are enough to reason from; printing thousands of rows fills the conversation with the result instead of the answer, and the file is where the result belongs."
+      "description": "The Python to run. `df` holds the table when one was given. When a study was given, each of its tables is bound by role \u2014 `samples`, `events` and so on \u2014 and `tables` maps every bound name to its data frame. `pd` and `np` are imported, and this domain's methods are importable as `primitives.<module>`.\n\nWhat you print is kept as `printed.txt` beside the results, so a summary printed here is readable afterwards rather than lost. Everything else survives only if it is saved. Each run is a fresh process: no variable, import or frame from an earlier one is still here, and there is no session to reach back into, so work that has to share state belongs in one run. Call `save(object, name)` for every result worth keeping: a data frame is written as a table, a figure as an image, anything else as JSON. Calling a method from here saves nothing on its own, whatever it returns.\n\nPrint a summary and save the whole thing. The top and bottom rows of a ranking are enough to reason from; printing thousands of rows fills the conversation with the result instead of the answer, and the file is where the result belongs.\n\nsave(object, name) keeps something. Everything saved is written into this run's results, is addressable afterwards as run:<id>/results/<name> so a later capability can read it without this work being repeated, and appears in the person's results. Saving is all that is needed for any of that.\n\npresent(object, name, description) saves it and adds a sentence saying what it is, which is shown to the person and sorted first. Use it for the thing they asked for. It changes how a result is explained, not whether it is kept or reachable."
     },
     {
       "name": "table",
@@ -62,6 +62,14 @@
       "required": false,
       "staged_as": "{data_dir}/table.tsv",
       "description": "A table to work on, available as `df`. Usually an output of an earlier run."
+    },
+    {
+      "name": "study",
+      "type": "directory",
+      "required": false,
+      "staged_as": "{data_dir}/study",
+      "by_role": true,
+      "description": "A whole study, named as study:<name>. Every one of its tables is bound by role, so `samples`, `events`, `metabolomics` and the rest are all in scope at once and can be joined in one run. Use this whenever a question needs more than one table, which is most questions. `tables` lists what was bound, and any file the domain has no role for is bound under its own name. Call describe_study first to see the roles, the columns and how they join."
     }
   ],
   "outputs": [
@@ -95,7 +103,7 @@
   "invocation": {
     "style": "named",
     "staging": "none",
-    "template": "python3 {entrypoint} --code {data_dir}/submitted.py --table {data_dir}/table.tsv --out {output_base}"
+    "template": "python3 {entrypoint} --code {data_dir}/submitted.py --table {data_dir}/table.tsv --study {data_dir}/study --out {output_base}"
   },
   "notes": "Replaces the run_code tool that lived in the MCP server, where there was no boundary at which to record what had been run.",
   "for_people": "Runs an analysis written for the question, where no other capability covers it."

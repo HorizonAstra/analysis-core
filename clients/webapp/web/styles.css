@@ -1,6 +1,14 @@
 /* Calm, unboxed, suggestible. Hierarchy from space, weight, and a restrained two-tone
    theme: a selected grey and a red for hover/emphasis. No bordered cards. */
 
+/* `hidden` means hidden, everywhere. The attribute only carries `display: none`
+   from the browser's own stylesheet, so any rule here that sets `display` beats
+   it — and most things worth hiding are flex. Two rules further down already
+   worked around this one element at a time; a control hidden because it has
+   nothing to offer stayed on screen, and a person clicked it and was told
+   nothing was there. Stated once so the next thing to be hidden simply is. */
+[hidden] { display: none !important; }
+
 :root {
   --paper:    #faf9f7;
   --surface:  #ffffff;
@@ -82,23 +90,6 @@ body.panel-open #panelToggle { background: var(--accent); color: #fff; }   /* se
 .welcome { padding: 13vh 0 0; }
 .welcome h1 { font-size: 30px; line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 10px; }
 .welcome .sub { color: var(--ink-soft); margin: 0 0 26px; max-width: 36rem; }
-.chips { display: flex; flex-wrap: wrap; gap: 10px; position: relative; }
-.chips.collapsed { max-height: 9.5rem; overflow: hidden; }   /* fades out the last visible row */
-.chips.collapsed::after {
-  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3rem;
-  background: linear-gradient(transparent, var(--paper)); pointer-events: none;
-}
-.chips-more { margin-top: 12px; }   /* Show more / less, on its own line below the chips */
-.chip {
-  border: 0; cursor: pointer; font: inherit; font-size: 14px; text-align: left;
-  color: var(--ink-soft); background: var(--tint); padding: 9px 14px; border-radius: 999px;
-  transition: background .18s var(--reveal), color .18s var(--reveal), transform .1s;
-  max-width: 100%;
-}
-.chip:hover { background: var(--hover-weak); color: var(--hover); }
-.chip:active { transform: translateY(1px); }
-.chip-more { border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px; color: var(--muted); padding: 2px 0; }
-.chip-more:hover { color: var(--hover); }
 
 /* ── turns ────────────────────────────────────────────────────────────────── */
 .turn { animation: rise .35s var(--reveal) both; }
@@ -276,6 +267,10 @@ body:not(.panel-open) .panel { margin-right: calc(-1 * var(--panel-w) - 2px); op
 .chev { flex: 0 0 13px; color: var(--muted); transition: transform .16s var(--reveal); }
 .folder.open > .folder-row .chev { transform: rotate(90deg); }
 .folder-row .count { margin-left: auto; color: var(--muted); font-size: 11px; }
+/* Shown only when two runs share a heading, so it reads as what tells them
+   apart rather than as a timestamp on everything. */
+.folder-row .when { margin-left: auto; color: var(--muted); font-size: 11px; }
+.folder-row .when + .count { margin-left: 8px; }
 .folder:not(.open) > .items { display: none; }     /* reliable collapse */
 /* a sample, holding the runs that are about it. Indentation carries the nesting,
    as it does for items, so a run reads the same whether it sits under a sample

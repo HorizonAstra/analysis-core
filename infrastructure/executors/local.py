@@ -65,6 +65,17 @@ def _now() -> str:
 
 class LocalExecutor(Executor):
     name = "local"
+    # Nothing queues here: work starts the moment it is asked for, so a caller
+    # can wait for it and usually should. "It is running in the background, come
+    # back later" is a claim about a queue, and said about a subprocess on this
+    # machine it is simply false — it was said about a run that failed seven
+    # seconds later, and nobody found out.
+    #
+    # Long enough for the work this site is given, which is a table joined, a
+    # cohort built, a model fitted on a few hundred rows. Past it the honest
+    # answer changes from "here is your result" to "this is taking a while",
+    # which is a different sentence and a true one.
+    settles_in = 120.0
 
     def __init__(self, *, site: str = "local", registry: JobRegistry, store: ArtifactStore,
                  work_dir: str | None = None, write_scope: WriteScope | None = None):

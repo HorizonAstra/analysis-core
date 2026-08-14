@@ -77,6 +77,70 @@ def _catalog_labels() -> dict:
     return out
 
 
+@functools.lru_cache(maxsize=1)
+def _writes_own_code() -> frozenset:
+    """Capabilities whose kernel runs code written for the question.
+
+    The distinction the results panel needs, and the domain already declares it.
+    A named method produces an output that means the same thing every time it is
+    run, so it can be listed, described and opened. A capability that executes
+    submitted code produces whatever that code happened to write — which is why
+    those rows read `saved.json` and nothing more useful could be said about
+    them. They are the working material of an answer rather than the answer.
+
+    Taken from the entry rather than by matching a name, so a second capability
+    of this kind is handled by declaring itself, not by editing this.
+    """
+    import json
+    tree = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
+    out = set()
+    for path in sorted((tree / "domains").glob("*/catalog/*.json")):
+        try:
+            entry = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if entry.get("executes_submitted_code"):
+            out.add(entry.get("id", path.stem))
+            out.add(f"{path.parents[1].name}/{entry.get('id', path.stem)}")
+    return frozenset(out)
+
+
+@functools.lru_cache(maxsize=1)
+def _domain_by_capability() -> dict:
+    """Which domain declares each capability, by bare id and by qualified id."""
+    import json
+    tree = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
+    out = {}
+    for path in sorted((tree / "domains").glob("*/catalog/*.json")):
+        try:
+            entry = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        domain, name = path.parents[1].name, entry.get("id", path.stem)
+        out[name] = domain
+        out[f"{domain}/{name}"] = domain
+    return out
+
+
+def domain_of(capability: str) -> str:
+    """The domain a capability belongs to, however it was spelled.
+
+    A capability is written qualified in one place and bare in another, so a
+    caller holding one spelling cannot answer this by splitting on a slash that
+    may not be there. Asked of the catalog, which is where the answer lives.
+    """
+    return _domain_by_capability().get(capability, "")
+
+
+def is_working_material(capability: str) -> bool:
+    """Whether a run's output is a person's result or an analysis's scratch work.
+
+    Asked by the results panel, which lists the first and not the second. The run
+    is kept either way and is still readable; this is about what is presented.
+    """
+    return bool(capability) and capability in _writes_own_code()
+
+
 def activity_label(name: str) -> str:
     """What to show while a step runs. Never the tool name, never a path."""
     if name in TOOL_LABELS:

@@ -44,6 +44,7 @@ from pathlib import Path
 import access
 import chats
 import paths
+import render
 import samples
 
 _TREE = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
@@ -100,6 +101,41 @@ def _records(user: str) -> dict:
     return out
 
 
+def _is_scratch(record) -> bool:
+    """Whether a run is working material rather than an answer to choose between.
+
+    A version is one of several answers to the same question, and code written
+    for one question is not that: two runs of it are two different pieces of
+    work that happen to share a capability, so offering them as versions of each
+    other is offering a choice that means nothing. Same rule the results panel
+    uses, asked in the same place, so the two cannot come to disagree.
+    """
+    import render
+    return render.is_working_material(record.spec.capability or "")
+
+
+def applies(user: str, domains=None) -> bool:
+    """Whether this chat's domains keep their work in versions.
+
+    A domain says so itself, in its study.json, because whether versions are a
+    thing here is a fact about the science and not about what happens to be on
+    disk today. Spatial transcriptomics runs the same pipeline over nineteen
+    samples and reruns it as parameters settle, so a person genuinely has to say
+    which run is the one in play. A microbiome study is analysed once per
+    question; there is nothing to choose between, and a grid offering the choice
+    is a control that cannot do its job.
+
+    Deriving this from the data instead was tried twice and was wrong both
+    times. "Anything finished" showed the control to somebody with one result.
+    "More than one version of something" would show it the moment a run was
+    repeated, which is not the same as the domain working that way.
+    """
+    from datasource import domains as _domains
+    chosen = list(domains) if domains else list(access.allowed_domains(user) or [])
+    return any((_domains.spec(d).versioned if _domains.spec(d) else False)
+               for d in chosen)
+
+
 def cell_of(record, sample: str) -> tuple:
     """Which cell a run belongs in: (subject, capability)."""
     return (sample or ACROSS, record.spec.capability.split("/")[-1])
@@ -115,7 +151,7 @@ def grid(user: str) -> dict:
     sample_of = samples.by_run(user, list(records))
     cells: dict = {}
     for run, record in records.items():
-        if record.state is not JobState.COMPLETED:
+        if record.state is not JobState.COMPLETED or _is_scratch(record):
             continue
         try:
             ident = _reuse.identity(records, record.spec)
@@ -219,11 +255,23 @@ def visible_runs(user: str, chat_id: str) -> list:
     """
     seen = list(chats.chat_runs(user, chat_id))
     known = set(seen)
-    for cell in active(user, chat_id).values():
+    # Only from a domain that keeps versions. Work another conversation did is
+    # that conversation's, and the reason to make an exception is narrow: a
+    # cluster pipeline run over a study costs hours, and starting a new chat
+    # about the same study should not mean running it again. That reasoning is
+    # exactly what `versioned` declares, and it does not extend to a domain
+    # where each question is answered once — there, another chat's tables
+    # turning up is a leak, not a convenience.
+    for (_, capability), cell in active(user, chat_id).items():
         run = cell.get("run")
-        if run and run not in known:
-            seen.append(run)
-            known.add(run)
+        if not run or run in known:
+            continue
+        from datasource import domains as _domains
+        spec = _domains.spec(render.domain_of(str(capability)))
+        if not (spec and spec.versioned):
+            continue
+        seen.append(run)
+        known.add(run)
     return seen
 
 

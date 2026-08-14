@@ -20,6 +20,7 @@ from __future__ import annotations
 import inspect
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -39,6 +40,40 @@ from . import scope
 
 _JSON_TYPE = {"string": str, "integer": int, "number": float,
               "boolean": bool, "array": list}
+
+
+def _settled(executor, record):
+    """The run's state once it has had the moment its site says it deserves.
+
+    Work that queues is never waited on: a scheduler cannot say when it will
+    start, and asking costs a round trip. Work that runs here either finishes
+    almost at once or is genuinely long, and telling those apart is the whole
+    difference between "your answer is ready" and "come back later" — which was
+    being said about results that had already landed, because the answer was
+    written before anyone looked.
+
+    Bounded by the executor and never by a capability: how long a machine takes
+    to start work is the machine's business, and a capability that happens to be
+    slow today should not teach this to wait longer for everything.
+    """
+    budget = float(getattr(executor, "settles_in", 0.0) or 0.0)
+    if budget <= 0 or record.state.terminal:
+        return record
+    deadline = time.monotonic() + budget
+    # Often at first, then less so. Work that finishes in a moment is answered
+    # in a moment, and work that takes two minutes is not asked about eight
+    # hundred times to find that out.
+    wait = 0.05
+    while time.monotonic() < deadline:
+        time.sleep(min(wait, max(0.0, deadline - time.monotonic())))
+        wait = min(wait * 1.6, 2.0)
+        try:
+            record = executor.poll(record.job_id)
+        except Exception:                    # noqa: BLE001 - a poll that fails is not an answer
+            return record
+        if record.state.terminal:
+            break
+    return record
 
 
 def _where(candidates: list, values) -> tuple:
@@ -118,23 +153,69 @@ def _tool_for(contract: dict, candidates: list) -> Any:
             fresh=scope.was_cleared(qualified, inputs, parameters),
         ))
         scope.also_allow(record.job_id)
-        # Already done, because an identical run had already finished. Said
-        # plainly rather than dressed up as a submission: the note below tells
-        # the reader to leave it running and come back, which is exactly the
-        # wrong thing to say about a result that is sitting there.
+        reused = record.state.value == "completed"
+        record = _settled(executor, record)
+        # Done, one way or the other: handed back because an identical run had
+        # already finished, or run here and finished before this was answered.
+        # Either way the note below is wrong — it tells the reader to leave it
+        # running and come back, which is the one thing not to say about a result
+        # that is sitting there.
         if record.state.value == "completed":
+            why = ("This had already been done, so nothing was run. Same inputs, "
+                   "same parameters, same pinned code, so the result is the same "
+                   "result." if reused else
+                   "This ran here and has already finished. It was quick; not "
+                   "everything is.")
             return json.dumps({
                 "run": record.job_id,
                 "state": "completed",
                 "capability": qualified,
                 "site": site,
-                "note": ("This had already been done, so nothing was run. Same "
-                         "inputs, same parameters, same pinned code, so the "
-                         "result is the same result. It is available now — read "
-                         "it and answer. Do not say it is running and do not "
-                         "offer to come back later. If the person needs it "
-                         "computed again rather than re-used, say so plainly "
-                         "and ask, because re-running it changes nothing."),
+                "note": (why + " It is available now — read it and answer. Do not "
+                         "say it is running, do not say it is in the background, "
+                         "and do not offer to come back later." +
+                         (" If the person needs it computed again rather than "
+                          "re-used, say so plainly and ask, because re-running it "
+                          "changes nothing." if reused else "")),
+            }, indent=2)
+        # Over before it began, which happens when an input does not resolve or
+        # the kernel refuses what it was given. Said as a failure, because the
+        # note below is about work still going and reads as reassurance: the
+        # answer used to carry `state: failed` and "leave it running and come
+        # back" in the same breath, and what came back was a promise to report
+        # on a run that had already stopped.
+        if record.state.value in ("failed", "cancelled"):
+            return json.dumps({
+                "run": record.job_id,
+                "state": record.state.value,
+                "capability": qualified,
+                "site": site,
+                "detail": record.detail or "",
+                "note": ("This did not run. It is not in progress and nothing will "
+                         "land later, so do not say it is running and do not offer "
+                         "to check back. `detail` says what went wrong; read it, say "
+                         "what happened in plain terms, and either fix the thing it "
+                         "names and submit again or ask for what you need."),
+            }, indent=2)
+        # Still going on a machine that does not queue, so it started the moment
+        # it was asked for and is simply taking a little longer than the moment
+        # spent waiting. The note below is about work that sits in a queue and
+        # cannot be waited on; said about this, it produced the exact failure it
+        # was written to prevent — a run that failed seven seconds in, described
+        # to somebody as running in the background and coming back later.
+        if float(getattr(executor, "settles_in", 0.0) or 0.0) > 0:
+            return json.dumps({
+                "run": record.job_id,
+                "state": record.state.value,
+                "capability": qualified,
+                "site": site,
+                "note": ("Started here, and still going after a moment. Nothing "
+                         "queues on this machine, so it is running now and will "
+                         "finish or fail shortly. Read the result before you "
+                         "answer. Do not describe it as running in the "
+                         "background, do not tell them to come back later, and "
+                         "do not summarise what it found until you have read "
+                         "it — it may have failed."),
             }, indent=2)
         return json.dumps({
             "run": record.job_id,
@@ -274,8 +355,17 @@ def register(mcp, *, sites, domain_allowed=lambda d: True) -> dict[str, str]:
     def run_result(
         run: Annotated[str, Field(description="The run id submit returned.")],
         output: Annotated[str, Field(
-            description="One output by name, for more of it. Omit for all of them.")] = "",
-        rows: Annotated[int, Field(description="How many rows or lines of each.")] = 20,
+            description="One output by name, for more of it. Omit for all of "
+                        "them. When an output is a directory, name a file "
+                        "inside it — `results/printed.txt`, `results/cohort.tsv` "
+                        "— to read that file properly. Naming the directory "
+                        "lists what is in it and shows only the first few lines "
+                        "of each, however large `rows` is, because a listing is "
+                        "for finding the file and not for reading it.")] = "",
+        rows: Annotated[int, Field(
+            description="How many rows or lines of the file named in `output`. "
+                        "Has no effect on a directory listing; name the file to "
+                        "read more of it.")] = 20,
     ):
         _in_scope(run)
         ex = _submitted_to(run)
