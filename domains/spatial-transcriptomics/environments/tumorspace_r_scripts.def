@@ -1,0 +1,40 @@
+# SCRIPT LAYER - built on top of tumorspace_r_base.sif.
+# Rebuild this layer (~30 sec) whenever workflow scripts change.
+# Only rebuild tumorspace_r_base.sif when R packages change (~30 min).
+#
+# NOTE: %files lists R scripts by explicit name - Singularity %files does not support globs.
+# build_r_container.sh verifies each entry exists on disk before building.
+# When adding a new workflow script, add an entry here AND re-run build_r_container.sh.
+# ⚠️  REFERENCE ONLY — not the active build driver. See containers/build_r_container.sh.
+# The active build uses the sandbox pattern (SIF→sandbox→host cp→pack) without --fakeroot.
+# This file is kept as a human-readable specification of what scripts are embedded.
+# The authoritative R_SCRIPTS list is in build_r_container.sh.
+Bootstrap: localimage
+From: tumorspace_r_base.sif
+
+%files
+    ../workflows/tumorspace_core/R/compute_ripley_k.R /opt/workflows/R/compute_ripley_k.R
+    ../workflows/R/sg_identify_pairs.R /opt/workflows/R/sg_identify_pairs.R
+    ../workflows/pipeline_report/R/generate_qc_single_run.R /opt/workflows/R/generate_qc_single_run.R
+    ../workflows/pipeline_report/R/generate_qc_plots.R /opt/workflows/R/generate_qc_plots.R
+    ../workflows/R/diagnose_tree_pruning.R /opt/workflows/R/diagnose_tree_pruning.R
+    ../workflows/R/diagnose_pruning_hyperparameters.R /opt/workflows/R/diagnose_pruning_hyperparameters.R
+
+%post
+    # Verify all scripts were embedded
+    echo "Verifying R scripts in script layer..."
+    for script in /opt/workflows/R/*.R; do
+        [ -f "$script" ] || { echo "ERROR: Missing script: $script"; exit 1; }
+        echo "  ✓ $script"
+    done
+
+%runscript
+    #!/bin/bash
+    # Default: run sg_identify_pairs with provided arguments
+    Rscript /opt/workflows/R/sg_identify_pairs.R "$@"
+
+%labels
+    Author Vivek Behera
+    Version 2.0
+    Description TumorSPACE R workflow container - script layer on tumorspace_r_base.sif
+    Purpose Step 6 - SG Identification, Pipeline Report, iSG Analysis

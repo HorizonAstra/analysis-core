@@ -1,0 +1,18 @@
+# What the statistics primitives import, and nothing else.
+#
+# Every one of these decides a number, so the versions are held at what the
+# primitives were measured against rather than left to resolve. A minor release
+# of statsmodels or scipy can change an estimate in the last digits, which is
+# the kind of drift that is only ever noticed long after it matters.
+#
+# Build with restore.sh. The pin travels with the domain; what it builds does not.
+
+numpy==2.4.6
+pandas==2.3.3
+scipy==1.17.1
+statsmodels==0.14.6
+patsy==1.0.2
+scikit-learn==1.9.0
+scikit-bio==0.7.3
+lifelines==0.30.3
+mlxtend==0.25.0

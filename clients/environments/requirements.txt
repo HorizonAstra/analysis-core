@@ -1,0 +1,37 @@
+# What a client needs, and nothing else.
+#
+# A client talks to a model, serves HTTP, reads a table to preview it, and
+# validates a catalog entry. It runs no science. The scientific stack belongs to
+# the domains, each of which pins its own, because the runner enters a domain's
+# environment rather than the caller's.
+#
+# Direct dependencies only. Build with restore.sh, then freeze back over this
+# file if the resolved set needs recording:
+#     ./py/bin/python -m pip freeze > requirements.txt
+
+# Model backends. anthropic is the default; google-genai serves LLM_PROVIDER=google.
+anthropic==0.109.1
+google-genai==2.10.0
+
+# The tool surface.
+mcp==1.27.2
+pydantic==2.13.4
+
+# The web product.
+fastapi==0.138.0
+uvicorn==0.49.0
+sse-starlette==3.4.4
+python-multipart==0.0.32
+PyJWT==2.13.0
+python-dotenv==1.2.2
+markdown==3.10.2
+bleach==6.4.0
+
+# Reading a result back to preview it, and the data layer's Parquet path.
+pandas==2.3.3
+numpy==2.4.6
+pyarrow==24.0.0
+duckdb==1.5.4
+
+# Checking a catalog entry against the schema.
+jsonschema==4.26.0

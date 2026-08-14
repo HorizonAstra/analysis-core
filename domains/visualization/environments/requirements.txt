@@ -1,0 +1,13 @@
+# What drawing a chart needs, and nothing else.
+#
+# Versions are held at what this domain was measured against. matplotlib in
+# particular decides pixels, so a version change here can move a figure without
+# moving any number in the table behind it, which is why the entry pins the
+# digest of this file.
+#
+# Build with restore.sh. The pin travels with the domain; what it builds does not.
+
+matplotlib==3.11.0
+seaborn==0.13.2
+pandas==2.3.3
+numpy==2.4.6

@@ -125,8 +125,18 @@ def main() -> int:
     tables = {}
     if a.table and Path(a.table).exists():
         tables["df"] = _read(a.table)
-        print(f"df: {tables['df'].shape[0]} rows, {tables['df'].shape[1]} columns")
-        print(f"    {', '.join(map(str, tables['df'].columns[:25]))}")
+        cols = [str(c) for c in tables["df"].columns]
+        print(f"df: {tables['df'].shape[0]} rows, {len(cols)} columns")
+        # Quoted, because this listing is read and copied straight into code.
+        # Printed bare, a name like Barcode looks like an identifier rather than
+        # a string, and the code that comes back says df[Barcode] and dies with
+        # NameError on its first line. Quoting them is the difference between a
+        # listing that describes the table and one that can be pasted.
+        shown = ", ".join(repr(c) for c in cols[:25])
+        rest = len(cols) - 25
+        # Said out loud when the list is cut. Silently showing 25 of 36 invites
+        # code that reaches for a column it was never told about.
+        print(f"    {shown}" + (f", and {rest} more" if rest > 0 else ""))
 
     ns = namespace(out, tables)
     code = Path(a.code).read_text()

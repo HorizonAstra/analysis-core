@@ -226,9 +226,21 @@ class ArtifactStore:
         return out
 
     def find(self, run: str) -> tuple[Path, dict] | None:
-        for path, m in self._manifests():
-            if path.parent.name == run:
-                return path.parent, m
+        """Where one run's results are, and what it recorded.
+
+        Looked up along the path the store itself lays out, workspace / domain /
+        capability / run, rather than by walking everything under the root until
+        a directory name matches. Both reach the same place. The difference is
+        cost: the walk grows with everything the user has ever run and reads and
+        parses each manifest it passes, and this is asked once per row and twice
+        per reference resolved, so a panel took half a minute and a chain spent
+        longer finding its inputs than running. This opens one file.
+        """
+        for path in self.root.glob(f"*/*/*/{_slug(run)}/{MANIFEST}"):
+            try:
+                return path.parent, json.loads(path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue      # as in _manifests: a half-written run is not an error
         return None
 
     def outputs(self, run: str) -> dict[str, str]:

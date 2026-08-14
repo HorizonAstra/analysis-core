@@ -1,0 +1,74 @@
+# ⚠️  REFERENCE ONLY — not the active build driver on midway3 (or any cluster where
+#     --fakeroot is not configured, i.e. newuidmap is not setuid root).
+#
+# The active build driver is containers/build_r_container.sh, which uses the
+# fakeroot-free sandbox pattern: pull → sandbox → host-side mutations → pack.
+# See that script for the canonical package list and build steps.
+#
+# This file is kept as a human-readable specification of the container's intent.
+# If --fakeroot ever becomes available, this def file should work as written.
+#
+# NOTE: 'Bootstrap: docker' is Singularity syntax — Docker does not need to be installed.
+# Base image changed to rocker/r-ver:4.4.1 (Ubuntu LTS + Posit Package Manager binary
+# packages) from r-base:4.4.1. rocker eliminates the need for dev headers because
+# packages install as pre-built binaries via P3M rather than compiled from source.
+Bootstrap: docker
+From: rocker/r-ver:4.4.1
+
+%post
+    # Create necessary directories for HPC mounts
+    mkdir -p /project /scratch /software /opt/workflows/R
+
+    # Install system dependencies
+    apt-get update && apt-get install -y \
+        build-essential \
+        git \
+        wget \
+        libcurl4-openssl-dev \
+        libssl-dev \
+        libxml2-dev \
+        && rm -rf /var/lib/apt/lists/*
+
+    # Install CRAN packages
+    # optparse: CLI parsing for run_bayesspace.R / run_spacet.R
+    # spatstat: Ripley's K spatial clustering (Step 3)
+    # remotes: needed to install SpaCET and other GitHub-only packages
+    R --vanilla -e 'install.packages(c("dplyr", "data.table", "ape", "phangorn", "ggplot2", "patchwork", "tidyr", "gridExtra", "cowplot", "ggrepel", "msigdbr", "optparse", "spatstat", "remotes"), repos="https://cloud.r-project.org", Ncpus=4)'
+
+    # Install BiocManager and Bioconductor packages
+    # BayesSpace: spatial clustering (workflows/bayesspace)
+    # Note: BayesSpace vendors HDF5 via Rhdf5lib and arrow downloads pre-built binaries;
+    #       no additional system dev headers are required beyond what rocker provides.
+    R --vanilla -e 'install.packages("BiocManager", repos="https://cloud.r-project.org"); BiocManager::install(c("org.Mm.eg.db", "org.Hs.eg.db", "AnnotationDbi", "fgsea", "BayesSpace"), ask=FALSE)'
+
+    # Install SpaCET from GitHub (and its non-CRAN dependency MUDAN)
+    # SpaCET: cell-type deconvolution for spatial transcriptomics (workflows/spacet)
+    # factoextra: CRAN dependency of SpaCET (PCA/clustering visualization)
+    # MUDAN: GitHub-only dependency of SpaCET (JEFworks-Lab/MUDAN)
+    R --vanilla -e 'install.packages("factoextra", repos="https://cloud.r-project.org")'
+    R --vanilla -e 'remotes::install_github("JEFworks-Lab/MUDAN")'
+    R --vanilla -e 'remotes::install_github("data2intelligence/SpaCET")'
+
+    # Post-build verification: packages only (no scripts in this layer)
+    R --vanilla -e '
+      pkgs <- c("dplyr", "data.table", "ape", "phangorn", "ggplot2", "patchwork",
+                "tidyr", "gridExtra", "cowplot", "ggrepel", "msigdbr", "fgsea",
+                "AnnotationDbi", "optparse", "SingleCellExperiment", "BayesSpace",
+                "SpaCET")
+      missing_pkgs <- pkgs[!sapply(pkgs, requireNamespace, quietly=TRUE)]
+      if (length(missing_pkgs) > 0) stop(paste("Missing packages:", paste(missing_pkgs, collapse=", ")))
+      cat("  ✓ All", length(pkgs), "required packages verified\n")
+      cat("✓ Base layer post-build verification passed\n")
+    '
+
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+
+%labels
+    Author Vivek Behera
+    Version 2.0
+    Description TumorSPACE R base container - R packages only, no workflow scripts
+    Purpose Base image for tumorspace_r_scripts.def; rebuild when packages change
+    ChangeLog v2.0: Add BayesSpace (Bioc) and optparse (CRAN) for workflows/bayesspace
+    ChangeLog v2.1: Add remotes (CRAN) and SpaCET (GitHub) for workflows/spacet

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -172,9 +173,17 @@ class LocalExecutor(Executor):
         # run outlives this process and a handle still means something after a
         # restart. setsid detaches it from our process group, which is also what
         # makes cancelling it a matter of signalling that group and nothing else.
-        quoted = " ".join(f"'{a}'" for a in argv)
+        # shlex.quote rather than wrapping each argument in quotes by hand. An
+        # argument holding a single quote closes the hand-written one and the
+        # shell reads the rest as bare words: submitted code saying
+        # `df[c] != 'Barcode'` arrived as `df[c] != Barcode` and died with
+        # NameError on its first line. Every failure looked like the caller
+        # writing bad code, which is why it survived so long. Any argument can
+        # carry a quote, but code is the one that always does.
+        quoted = " ".join(shlex.quote(a) for a in argv)
         started = subprocess.Popen(f"{self._wait_for(spec.after, log, status)}"
-                                   f"{quoted} > '{log}' 2>&1; echo $? > '{status}'",
+                                   f"{quoted} > {shlex.quote(str(log))} 2>&1; "
+                                   f"echo $? > {shlex.quote(str(status))}",
                                    shell=True, start_new_session=True)
 
         # The child's own pid, which start_new_session has just made the id of

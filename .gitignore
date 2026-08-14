@@ -24,7 +24,21 @@ clients/.userdata/
 
 # Built environments. Hundreds of megabytes, and specific to the machine that
 # built them. The manifests that describe them are committed; the trees are not.
-**/environments/
+#
+# Named one at a time on purpose. This was `**/environments/`, which matched the
+# whole directory and so excluded restore.sh, requirements.txt and every lock
+# file beside the tree as well — the recipes, not just what they build. The
+# comment above was already the intention; the rule did not implement it, and
+# `git status` stayed clean the whole time it was wrong. A clone could not
+# rebuild any environment, and six capabilities were unavailable with no way to
+# make them available.
+#
+# What a restore produces:
+**/environments/py/
+**/environments/*/renv/library/
+**/environments/biobakery_workflows/
+# A third-party binary fetched rather than built (see add_gotree_to_julia.sh).
+**/environments/bin/
 clients/.venv/
 .venv/
 

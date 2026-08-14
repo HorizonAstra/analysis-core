@@ -1,0 +1,13 @@
+# HAllA (hierarchical all-against-all association) — pinned env for the tertiary Python tool.
+#
+# HAllA lives in its OWN environment, not the toolkit's, for the same reason MaAsLin lives in
+# its own renv project: it is an external analysis program we invoke, not a library we import.
+# It also drags in rpy2 (it calls R for some association metrics) plus seaborn/jenkspy/tqdm,
+# none of which the toolkit itself needs. Isolating it keeps a HAllA upgrade from ever moving
+# the toolkit's numpy/scipy, and keeps a broken rpy2 build out of the toolkit env.
+#
+# Build:  ./envs/halla/build.sh     (or: uv venv envs/halla/.venv && uv pip install -r ...)
+halla==0.8.40
+# HAllA's CLI still imports pkg_resources, which Python 3.12+ venvs no longer ship (and uv
+# does not add). Pinned below 81 because setuptools 81 began removing pkg_resources.
+setuptools<81

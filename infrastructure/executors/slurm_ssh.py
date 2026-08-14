@@ -409,6 +409,53 @@ class SlurmSshExecutor(Executor):
         self.registry.put(rec)
         return rec
 
+    def poll_many(self, job_ids) -> list:
+        """The state of many runs, in one round trip instead of one each.
+
+        `poll` costs a full ssh round trip, which is right for one run and wrong
+        for a list. Asking about forty runs one at a time took forty seconds,
+        serialised, and the panel refreshes on a timer far shorter than that: a
+        sweep could not finish before the next began, the threads piled up, and
+        the app stopped answering requests at all. The scheduler will answer for
+        every job in one query, so it is asked that way.
+
+        `-X` keeps this to the jobs that were submitted rather than also
+        returning their batch and extern steps, which repeat the id and would
+        overwrite a job's state with a step's.
+
+        A run that has failed is handed to `poll`, because a failure is worth an
+        ssh: that is where the exit code, the scheduler's reason and the tail of
+        the log come from, and without them a failure reaches the model as the
+        word FAILED and a path it cannot read.
+        """
+        records = [r for r in (self.registry.get(j) for j in job_ids) if r is not None]
+        live = [r for r in records if not r.state.terminal and r.native_id]
+        if not live:
+            return records
+        out = self._ssh(f"sacct -j {shlex.quote(','.join(r.native_id for r in live))} "
+                        f"--format=JobID,State --noheader --parsable2 -X")
+        states = {}
+        for line in out.splitlines():
+            native, _, raw = line.strip().partition("|")
+            if native:
+                states[native.strip()] = raw.strip().split()[0] if raw.strip() else ""
+        for rec in live:
+            # A run the scheduler has not recorded yet keeps the state it has.
+            # Reading absence as failure would mark a run dead in the moment
+            # between submitting it and sacct knowing about it.
+            if rec.native_id not in states:
+                continue
+            raw = states[rec.native_id]
+            state = _STATES.get(raw.replace("+", ""), JobState.UNKNOWN)
+            if state is JobState.FAILED:
+                self.poll(rec.job_id)          # for the reason, which is worth a trip
+                continue
+            rec.state = state
+            rec.detail = raw or "no scheduler record yet"
+            rec.updated_at = _now()
+            self.registry.put(rec)
+        return [self.registry.get(r.job_id) or r for r in records]
+
     def cancel(self, job_id: str) -> JobRecord:
         rec = self.registry.get(job_id)
         if rec is None:
