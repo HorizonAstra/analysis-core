@@ -437,6 +437,39 @@ def staging_check(contract: dict) -> tuple[list[str], bool]:
     return lines, ok
 
 
+def parameter_check(contract: dict) -> tuple[list[str], bool]:
+    """Does every parameter offering a fixed set of values agree with itself.
+
+    A parameter may declare `values`, which is how a caller learns the set it
+    may choose from without discovering it by being refused. Two things then
+    have to hold, and neither is expressible in the schema.
+
+    The default has to be one of them. A surface renders the set as a choice, so
+    a default outside it is a value the caller cannot re-select once they have
+    moved off it, and for a host that validates the choice it is a default that
+    fails validation before anything runs.
+
+    And a set of one is not a choice. It is a constant, and belongs in the
+    kernel rather than in a signature that invites a caller to pick.
+    """
+    lines, ok = [], True
+    for p in contract.get("parameters", []):
+        if p.get("required") and "default" in p:
+            ok = False
+            lines.append(f"  {p['name']}: required, but carries a default "
+                         f"({p['default']!r}) — a default says not supplying it is fine")
+        values = p.get("values")
+        if not values:
+            continue
+        if "default" in p and p["default"] not in values:
+            ok = False
+            lines.append(f"  {p['name']}: default {p['default']!r} is not one of "
+                         f"{', '.join(map(repr, values))}")
+        else:
+            lines.append(f"  {p['name']}: {len(values)} values, default holds")
+    return lines or ["  no parameter declares a fixed set of values"], ok
+
+
 def wiring_check(contract: dict) -> tuple[list[str], bool]:
     """Is every input read from the place it was staged to.
 

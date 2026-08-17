@@ -79,12 +79,20 @@ def catalog(tree: Path | None = None) -> dict:
 
 
 def holdings(row: dict, sample: str) -> set:
-    """Which roles one sample of a study holds, from what a site reported.
+    """Which roles are held, from what a site reported.
 
-    A cohort is rarely uniform, so what every sample has and what some have are
-    reported separately, and the second names which ones. Reading only the first
-    would say a sample lacks what it has.
+    With no sample named, the study's own roles: a study whose data is a set of
+    tables describing every sample at once holds them itself, and there is no
+    sample to ask. Discovery already reports those as `roles`, and reading only
+    the per-sample keys said such a study held nothing — so nothing about it
+    could be planned, and its preparation stayed hand-written.
+
+    With a sample, what that sample holds. A cohort is rarely uniform, so what
+    every sample has and what some have are reported separately, and the second
+    names which ones. Reading only the first would say a sample lacks what it has.
     """
+    if not sample:
+        return set(row.get("roles") or [])
     holds = set(row.get("each_sample_has") or [])
     for role, who in (row.get("some_samples_have") or {}).items():
         if sample in (who.get("samples") or []):
@@ -133,18 +141,28 @@ def _asked_for(contract, given: dict) -> dict:
 
 
 def _from_role(spec, study: str, sample: str, holds: set) -> str | None:
-    """The reference a role gives, or None when the sample does not hold it.
+    """The reference a role gives, or None when it is not held.
 
     A role may be named with something inside it, since a role can be a
     directory and the thing wanted is often one folder of it. Only the role
-    itself is checked against what the sample holds; what is inside it is the
-    resolving machine's business, and it is the only one that can look.
+    itself is checked against what is held; what is inside it is the resolving
+    machine's business, and it is the only one that can look.
+
+    With no sample, the role belongs to the study. Not every domain's data is
+    per sample: a spatial study is a folder of Space Ranger runs and its roles
+    live inside one of them, while a microbiome study is five tables describing
+    every sample at once, and `study:Leukemia/metagenomics` is the whole of what
+    there is to name. This built a sample segment unconditionally, so the second
+    kind could not be planned for at all — a domain either fit the per-sample
+    shape or did without any of this, which is why its preparation was being
+    written out by hand each time.
     """
     for role in ([spec] if isinstance(spec, str) else list(spec or [])):
+        where = f"{study}/{sample}" if sample else study
         if role == ".":
-            return f"study:{study}/{sample}"
+            return f"study:{where}"
         if role.split("/", 1)[0] in holds:
-            return f"study:{study}/{sample}/{role}"
+            return f"study:{where}/{role}"
     return None
 
 

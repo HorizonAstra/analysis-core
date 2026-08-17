@@ -1,0 +1,146 @@
+{
+  "id": "assemble",
+  "version": "0.1.0",
+  "title": "A study's tables, as samples by features and samples by variables",
+  "summary": "Turns a microbiome study into the two tables every tertiary tool takes: samples by features at one rank, and samples by variables carrying every column the study knows. A shape change only \u2014 nothing is filtered and no cohort is chosen, so what to compare stays open and is named downstream.",
+  "scope": "cross_sample",
+  "kernel": {
+    "language": "python",
+    "entrypoint": "kernels/python/assemble.py",
+    "files": [
+      "kernels/python/assemble.py"
+    ],
+    "sha256": {
+      "kernels/python/assemble.py": "71590d14423e423d7324ff02685c1cd0206612b977b8b3e701321fb7df981301"
+    },
+    "functions": [
+      "main"
+    ],
+    "third_party": [
+      {
+        "name": "pandas",
+        "version": "unpinned",
+        "note": "Supplies the pivot and the join. Nothing here decides a number."
+      }
+    ]
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "manifest": "../statistics/environments/requirements.txt",
+    "manifest_sha256": "ab853b8109e0e7173b99f8a4e684af6dcb04defb35537d4c7bd9f18e72431eb7",
+    "provenance": "No image. Runs in the statistics domain's virtual environment, which is where pandas is pinned for this tree.",
+    "activation": {
+      "kind": "venv",
+      "path": "../statistics/environments/py",
+      "note": "Entered by putting its bin directory first on PATH.",
+      "ready_when": "bin/python",
+      "restore_with": "bash ../restore.sh"
+    }
+  },
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "A pivot and a join. Nothing is sampled and row order does not reach the output, which is sorted by sample."
+  },
+  "resources": {
+    "scales_with": "rows of the abundance table",
+    "bound_by": "memory",
+    "cores_help": false,
+    "fans_out": false,
+    "basis": "derived_from_algorithm",
+    "memory_hint": "The long table is read whole before it is pivoted, so memory follows the source table rather than the result."
+  },
+  "inputs": [
+    {
+      "name": "abundances",
+      "type": "file",
+      "format": "csv",
+      "required": true,
+      "from_role": [
+        "metagenomics",
+        "metabolomics"
+      ],
+      "staged_as": "{data_dir}/abundances.csv",
+      "description": "The study's long per-sample abundance table, one row per sample per feature."
+    },
+    {
+      "name": "samples",
+      "type": "file",
+      "format": "csv",
+      "required": true,
+      "from_role": "samples",
+      "staged_as": "{data_dir}/samples.csv",
+      "description": "The study's sample table, one row per sample."
+    },
+    {
+      "name": "subjects",
+      "type": "file",
+      "format": "csv",
+      "required": false,
+      "from_role": "subjects",
+      "staged_as": "{data_dir}/subjects.csv",
+      "description": "The study's subject table. Joined on so subject-level variables can be used as cohorts too."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "features",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/features.tsv",
+      "description": "Samples by features, sample_id in the first column. Unfiltered."
+    },
+    {
+      "name": "metadata",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/metadata.tsv",
+      "description": "Samples by variables, sample_id in the first column, carrying every sample-level and subject-level column the study holds."
+    },
+    {
+      "name": "assembled",
+      "type": "file",
+      "format": "json",
+      "staged_as": "{output_base}/assembled.json",
+      "description": "What was built and what can now be grouped by: every metadata column, and the values of the ones with few enough to list."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "omic",
+      "type": "string",
+      "default": "metagenomics",
+      "description": "Which of the study's long tables to pivot: metagenomics or metabolomics.",
+      "values": [
+        "metagenomics",
+        "metabolomics"
+      ]
+    },
+    {
+      "name": "rank",
+      "type": "string",
+      "default": "species",
+      "description": "For an omic whose table carries several levels, the one to build features at: species, genus, family, order, class, phylum, kingdom. Ignored where the omic has no levels.",
+      "values": [
+        "species",
+        "genus",
+        "family",
+        "order",
+        "class",
+        "phylum",
+        "kingdom"
+      ]
+    }
+  ],
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "python3 {entrypoint} --abundances {data_dir}/abundances.csv --samples {data_dir}/samples.csv --subjects {data_dir}/subjects.csv --omic {omic} --rank {rank} --out {output_base}"
+  },
+  "interpretation": "Nothing is filtered here. Every tool downstream applies its own prevalence and abundance rule, so a feature absent from a result was dropped by that tool and not by this one. Choosing what to compare is not part of this: name a column of the metadata as the grouping when calling the tool. A grouping that is not already a column is built in run_code as one column keyed by sample_id and joined to this metadata, rather than by rebuilding these tables."
+}

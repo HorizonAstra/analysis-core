@@ -15,6 +15,7 @@ What is checked, in the order a failure is worth hearing about:
     no duplication     that no file exists twice in two partitions
     the schema         every entry against the format it claims to satisfy
     every render       every entry to every surface it can be rendered as
+    site configs       every machine to the workflow engine's config
     the graph          that the capabilities order into a runnable sequence
     the methods        that what a domain says it computes is what it computes
     the formats        that every format a domain declares can be named as a file
@@ -152,6 +153,22 @@ def main() -> int:
                 found.append((f"{path.name} as {target}", out.strip()[-300:]))
     say(f"  {'ok  ' if not failed else 'FAIL'}  renders · {rendered} rendered"
         + (f", {failed} failed" if failed else ""))
+
+    # Every site as a Nextflow config. Not part of the loop above, because this
+    # is the one target that takes a machine rather than a capability — which is
+    # exactly why it went unrendered for long enough to break: a site declared a
+    # resource class the renderer had no label for, and every config for that
+    # machine died on it.
+    profiles = sorted((TREE / "infrastructure" / "sites").glob("*.json"))
+    bad = [p.stem for p in profiles
+           if not _run([str(RENDER), str(p), "--as", "nextflow-config"])[0]]
+    say(f"  {'ok  ' if not bad else 'FAIL'}  site configs · "
+        f"{len(profiles) - len(bad)} of {len(profiles)} sites render as nextflow-config")
+    for name in bad:
+        found.append((f"{name} as nextflow-config",
+                      _run([str(RENDER), str(TREE / "infrastructure" / "sites" /
+                                             f"{name}.json"), "--as",
+                            "nextflow-config"])[1].strip()[-300:]))
 
     ok, out = _run([str(GRAPH), "--as", "order"])
     say(f"  {'ok  ' if ok else 'FAIL'}  graph · orders {len(catalog)} capabilities")

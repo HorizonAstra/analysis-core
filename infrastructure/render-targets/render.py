@@ -41,10 +41,13 @@ RUNNER = TREE / "infrastructure" / "runner" / "run.py"
 CATALOG = TREE / "domains"
 load = C.load
 
-# A contract says what bounds it; Nextflow wants a label. One mapping, so the
-# two executors below cannot disagree about which class a capability lands in.
-LABEL = {"memory": "big_mem", "cpu": "cpu_bound",
-         "walltime": "long_run", "trivial": "small"}
+# A contract says what bounds it; Nextflow wants a label. Every class a site can
+# declare needs one, and `io` did not have one — so rendering a config for either
+# Randi profile died on a KeyError. It went unnoticed because the render check
+# walks catalog entries, and this is the one target that takes a site instead, so
+# nothing ever ran it.
+LABEL = {"memory": "big_mem", "cpu": "cpu_bound", "walltime": "long_run",
+         "trivial": "small", "io": "io_bound"}
 
 
 # --------------------------------------------------------------------------
@@ -55,7 +58,9 @@ def as_cli(c: dict) -> str:
     out = [f"# {c['id']} {c['version']} — {c['title']}", ""]
     out.append("Usage:")
     named = " ".join(f"--{i['name']} <path>" for i in c["inputs"])
-    params = " ".join(f"[--{p['name']} <{p['type']}>]" for p in c.get("parameters", []))
+    params = " ".join(
+        f"[--{p['name']} <{'|'.join(map(str, p['values'])) if p.get('values') else p['type']}>]"
+        for p in c.get("parameters", []))
     out.append(f"  {c['id']} {named} --outdir <path> {params}".rstrip())
     out.append("")
 
@@ -115,7 +120,15 @@ def as_mcp(c: dict) -> str:
         entry = {"type": _JSON_TYPE[p["type"]], "description": p.get("description", "")}
         if "default" in p:
             entry["default"] = p["default"]
+        # A fixed set of values is an enum here, which is the one thing a tool
+        # schema can say that a description cannot: a caller reading prose can
+        # still pass anything, and finds out it could not by starting a run that
+        # fails on its first line.
+        if p.get("values"):
+            entry["enum"] = list(p["values"])
         props[p["name"]] = entry
+        if p.get("required"):
+            required.append(p["name"])
 
     props["workspace"] = {"type": "string", "default": "default",
                           "description": C.WORKSPACE_NOTE}
@@ -277,8 +290,9 @@ def as_verify(c: dict, root=None):
     call, call_ok = C.arity_check(c)
     paths, paths_ok = C.staging_check(c)
     wire, wire_ok = C.wiring_check(c)
-    if call or holes or paths or wire:
-        out += ["", "calling convention", ""] + holes + call + paths + wire
+    vals, vals_ok = C.parameter_check(c)
+    if call or holes or paths or wire or vals:
+        out += ["", "calling convention", ""] + holes + call + paths + wire + vals
         out.append("")
         if not holes_ok:
             out.append("FAIL: a template contains a placeholder nothing substitutes, "
@@ -288,6 +302,9 @@ def as_verify(c: dict, root=None):
                        "relative to whatever the runner's working directory is.")
         elif not call_ok:
             out.append("FAIL: a stage passes the wrong number of arguments.")
+        elif not vals_ok:
+            out.append("FAIL: a parameter's default is not one of the values it "
+                       "offers, so the value it starts at cannot be chosen again.")
         elif not wire_ok:
             out.append("FAIL: an input is staged somewhere the invocation never reads.")
         else:
@@ -330,6 +347,8 @@ def as_openapi(c: dict) -> str:
         entry = {"type": _JSON_TYPE[p["type"]], "description": p.get("description", "")}
         if "default" in p:
             entry["default"] = p["default"]
+        if p.get("values"):
+            entry["enum"] = list(p["values"])
         if p["type"] == "array":
             entry["items"] = {"type": "integer"}
         props[p["name"]] = entry
@@ -492,6 +511,13 @@ def as_nextflow_config(profile: dict) -> str:
         out += ["", "// resource classes, keyed to a contract's resources.bound_by.",
                 "// The same table drives --as slurm; neither executor owns these numbers.",
                 "process {"]
+        unknown = sorted(set(classes) - set(LABEL))
+        if unknown:
+            raise SystemExit(
+                f"site '{profile['id']}' declares resource class(es) "
+                f"{', '.join(unknown)}, which no label in render.py covers. A "
+                f"capability bound by one of those would render with no limits "
+                f"at all. Add it to LABEL.")
         for name in sorted(classes):
             spec = classes[name]
             out.append(f"  withLabel: {LABEL[name]:<9} {{ "

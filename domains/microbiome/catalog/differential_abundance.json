@@ -1,5 +1,5 @@
 {
-  "id": "differential",
+  "id": "differential_abundance",
   "version": "0.1.0",
   "title": "Differential abundance between cohorts",
   "summary": "Which features sit at different levels between cohorts of samples, with one Benjamini-Hochberg correction across every comparison shown. Fits one model per feature and reads every pairwise contrast off it, so more than two cohorts costs one fit rather than one per pair. Runs once over the whole cohort, not per sample.",
@@ -84,7 +84,9 @@
       "format": "tsv",
       "required": true,
       "staged_as": "{data_dir}/features.tsv",
-      "description": "Samples by features, sample identifier in the first column. The same table maaslin3 and lefser take."
+      "description": "Samples by features, sample identifier in the first column. The same table maaslin3 and lefser take.",
+      "produced_by": "assemble",
+      "produced_output": "features"
     },
     {
       "name": "metadata",
@@ -92,7 +94,9 @@
       "format": "tsv",
       "required": true,
       "staged_as": "{data_dir}/metadata.tsv",
-      "description": "Samples by variables, same sample identifier in the first column, carrying the cohort column and any subject or covariate column named below."
+      "description": "Samples by variables, same sample identifier in the first column, carrying the cohort column and any subject or covariate column named below.",
+      "produced_by": "assemble",
+      "produced_output": "metadata"
     }
   ],
   "outputs": [
@@ -122,14 +126,20 @@
     {
       "name": "group_by",
       "type": "string",
-      "default": "",
-      "description": "The metadata column whose values are the cohorts. Required in practice: the capability is meaningless without one, and the format has no way to say a parameter is mandatory."
+      "description": "The metadata column whose values are the cohorts being compared.",
+      "required": true
     },
     {
       "name": "test",
       "type": "string",
       "default": "lme",
-      "description": "lme fits a random intercept per subject and is the correct choice for repeated measures. ols, welch and wilcoxon treat every sample as independent, and say so in the result when they were not."
+      "description": "lme fits a random intercept per subject and is the correct choice for repeated measures. ols, welch and wilcoxon treat every sample as independent, and say so in the result when they were not.",
+      "values": [
+        "lme",
+        "ols",
+        "welch",
+        "wilcoxon"
+      ]
     },
     {
       "name": "subject_col",

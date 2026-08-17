@@ -56,7 +56,9 @@
       "staged_as": "{data_dir}/features.tsv",
       "format": "tsv",
       "description": "Samples by features, sample_id in the first column. Raw abundances: maaslin3 does its own normalization and transform.",
-      "required": true
+      "required": true,
+      "produced_by": "assemble",
+      "produced_output": "features"
     },
     {
       "name": "metadata",
@@ -64,7 +66,9 @@
       "staged_as": "{data_dir}/metadata.tsv",
       "format": "tsv",
       "description": "Samples by variables, same sample_id index, carrying every fixed and random effect named below.",
-      "required": true
+      "required": true,
+      "produced_by": "assemble",
+      "produced_output": "metadata"
     }
   ],
   "outputs": [

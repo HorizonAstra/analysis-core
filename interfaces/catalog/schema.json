@@ -420,6 +420,15 @@
           "is_sample_name": {
             "type": "boolean",
             "description": "True when this parameter is the name of the sample being worked on, whatever the capability calls it. Only the domain knows which of its parameters means that, and something running a capability over a cohort has to set it or every result comes back labelled with the same default. Not a column name that happens to be about samples."
+          },
+          "values": {
+            "type": "array",
+            "minItems": 2,
+            "description": "Every value this parameter accepts, when it accepts a fixed set of them. Declared rather than described, because a caller that can only learn the set by being refused learns it by starting a run that fails. A surface renders this as the choice it is; the default, if there is one, must be among them."
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Whether a caller must supply this. An input can already say so; a parameter could not, so a capability that is meaningless without one had to ask for it in prose and find out it was missing by running. A required parameter carries no default, because a default is precisely the statement that not supplying it is fine."
           }
         }
       }

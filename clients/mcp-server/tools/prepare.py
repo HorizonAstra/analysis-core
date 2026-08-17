@@ -53,32 +53,45 @@ from . import scope
 _MOST = 64
 
 
-def _samples(reference: str, rows: list) -> list:
-    """Which samples were asked for, as (study, sample) pairs.
+def _work(reference: str, rows: list) -> list:
+    """What the work is about, as (study, sample, row). The sample may be empty.
 
     A study on its own means every sample in it, which is the whole reason this
     exists: a cohort is asked for once rather than once per sample.
+
+    A study with no samples to name means the study itself, once. Not every
+    domain's data is per sample — a microbiome study is a set of tables covering
+    every sample at once, and its capabilities read the set rather than a member
+    of it. This required a sample and fanned out over them, so for such a study
+    it raised "that names no samples" and there was no way to ask for anything
+    at all; the chain that would have prepared its tables was reachable only by
+    writing the preparation out by hand instead.
     """
     out = []
     for one in [r.strip() for r in str(reference).split(",") if r.strip()]:
         named = D.study_parts(one)
         if not named:
-            raise ValueError(f"'{one}' is not a sample. Use study:<study> for a whole "
-                             f"study, or study:<study>/<sample> for one of them.")
+            raise ValueError(f"'{one}' does not name data. Use study:<study> for a "
+                             f"whole study, or study:<study>/<sample> for one sample "
+                             f"of a study that has them.")
         study, sample = named[0], (named[1] if len(named) > 1 else "")
         row = next((r for r in rows if r["study"] == study), None)
         if row is None:
             raise KeyError(f"no study called {study} available here. There is: "
                            f"{', '.join(sorted(r['study'] for r in rows)) or 'none'}")
+        members = row.get("samples") or []
         if sample:
-            if sample not in (row.get("samples") or []):
-                raise KeyError(f"{study} has no sample called {sample}")
+            if sample not in members:
+                raise KeyError(f"{study} has no sample called {sample}"
+                               + ("; it is not organised into samples"
+                                  if not members else ""))
             out.append((study, sample, row))
+        elif members:
+            out += [(study, name, row) for name in members]
         else:
-            for name in row.get("samples") or []:
-                out.append((study, name, row))
+            out.append((study, "", row))
     if not out:
-        raise ValueError("that names no samples")
+        raise ValueError("that names no data")
     return out
 
 
@@ -106,9 +119,12 @@ def register(mcp, *, sites, domain_allowed=lambda d: True) -> list:
                         "example spatial-transcriptomics_spatialview_bundle. "
                         "Everything it needs is worked out and run first.")],
         sample: Annotated[str, Field(
-            description="study:<study>/<sample> for one sample, several separated "
-                        "by commas, or study:<study> on its own for every sample "
-                        "in it. From list_data.")],
+            description="What to run it on, from list_data. study:<study> on its "
+                        "own is the usual answer: for a study organised into "
+                        "samples that means every sample in it, and for one whose "
+                        "data covers every sample at once it means the study, "
+                        "once. study:<study>/<sample> names a single sample of "
+                        "the first kind, and several can be separated by commas.")],
         parameters: Annotated[str, Field(
             description="Optional. A JSON object keyed by capability, for the "
                         "steps you want to set rather than leave at their "
@@ -146,7 +162,7 @@ def register(mcp, *, sites, domain_allowed=lambda d: True) -> list:
         from executors import reachable
         rows = [r for r in reachable.datasets(sites)
                 if D.study_allowed(r["study"]) and D.domain_allowed(r["domain"])]
-        wanted = _samples(sample, rows)
+        wanted = _work(sample, rows)
         if len(wanted) > _MOST:
             raise ValueError(f"that is {len(wanted)} samples, and this stops at "
                              f"{_MOST}. Name the ones you want.")
@@ -200,10 +216,10 @@ def register(mcp, *, sites, domain_allowed=lambda d: True) -> list:
                 # capability is submitted. Without it the client cannot tell a
                 # step that has been started from one that has finished, so a
                 # whole chain goes by with nothing shown for it.
-                started.append({"sample": name, "capability": step.capability,
+                started.append({"sample": name or study, "capability": step.capability,
                                 "run": record.job_id, "state": record.state.value,
                                 "site": site})
-            plans.append({"sample": name,
+            plans.append({"sample": name or study,
                           "order": [s.capability for s in steps], "site": site})
 
         return json.dumps({
@@ -225,9 +241,11 @@ def register(mcp, *, sites, domain_allowed=lambda d: True) -> list:
         }, indent=2)
 
     mcp.add_tool(prepare, name="prepare",
-                 description=("Run a capability on one sample, or on every sample of "
-                              "a study, running whatever it needs first. For a result "
-                              "that sits several steps past the data, where chaining "
-                              "the calls by hand is the part that goes wrong. Submits "
-                              "the whole chain at once and returns."))
+                 description=("Run a capability on a study, or on one sample of one, "
+                              "running whatever it needs first. For a result that "
+                              "sits several steps past the data, where chaining the "
+                              "calls by hand is the part that goes wrong — including "
+                              "the shaping a statistical tool needs before it will "
+                              "read a study at all. Submits the whole chain at once "
+                              "and returns."))
     return ["prepare"]

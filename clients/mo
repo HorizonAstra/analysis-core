@@ -54,7 +54,7 @@ EOF
 have_venv() { [ -x "$PY" ]; }
 
 need_venv() {
-  have_venv || die "not set up yet. Run: ./mo setup"
+  have_venv || die "not set up yet. Run: ./setup.sh from the repository root."
 }
 
 # .env holds the keys and the session secret; set once, not per run. Anything already in
@@ -95,62 +95,29 @@ studies_line() { ls "$(data_root)" 2>/dev/null | grep -v README | tr '\n' ' ' ||
 
 # ── commands ────────────────────────────────────────────────────────────────
 cmd_setup() {
-  echo; echo "${BOLD}Setting up Multiomics${OFF}  ${DIM}$ROOT${OFF}"; echo
-
-  if [ ! -d .venv ]; then
-    echo "[1/5] Creating the virtual environment..."
-    python3 -m venv .venv
-  else
-    echo "[1/5] Virtual environment already present."
-  fi
-
-  echo "[2/5] Installing dependencies..."
-  "$PY" -m pip install --upgrade pip -q
-  "$PY" -m pip install -r requirements.txt -q
-
-  echo "[3/5] Creating data/ and outputs/..."
-  # outputs/ is the whole provenance trail. There is no separate results/ tree: whether an
-  # artifact was "presented" is a flag on its manifest, so one place holds everything.
-  mkdir -p "$(data_root)" outputs
-
-  echo "[4/5] Restoring the external analysis environments..."
-  # The bioBakery tools (MaAsLin 3, LEfSe, HAllA) run as external programs in their own
-  # pinned environments. Without them the toolkit still works, it just offers fewer tools —
-  # so this is attempted, reported, and never fatal. restore.sh installs from locks only.
-  # These live with the domain whose analyses need them, not with the client.
-  local envs="$TREE/domains/microbiome/environments"
-  if command -v Rscript >/dev/null 2>&1; then
-    bash "$envs/r-stats/restore.sh" >/dev/null 2>&1 \
-      && echo "      r-stats  ready" || echo "      r-stats  FAILED ${DIM}(see: bash $envs/r-stats/restore.sh)${OFF}"
-    bash "$envs/restore.sh" >/dev/null 2>&1 \
-      && echo "      halla    ready" || echo "      halla    FAILED ${DIM}(see: bash $envs/restore.sh)${OFF}"
-  else
-    echo "      skipped ${DIM}(no R found; install R to enable the bioBakery stats tools)${OFF}"
-  fi
-
-  echo "[5/5] Warming the data cache for any studies already present..."
-  # `datasource` is a package under infrastructure/, so its parent goes on the
-  # path rather than the directory itself. Same rule the server follows.
-  PYTHONPATH="$TREE/infrastructure" "$PY" -m datasource.ingest --all --data-root "$(data_root)" || true
-
+  # Installing this tree is not a client's job, and doing it here made it two
+  # jobs that disagreed: this built one domain's environments by name while
+  # ./setup.sh builds whatever the catalog declares, so a domain added later was
+  # installed by one and silently skipped by the other. One installer, named
+  # once, the same one a person cloning the repository is told to run.
   echo
-  echo "${BOLD}Done.${OFF} Next:"
-  echo "  1. Put study folders in  $(data_root)"
-  echo "  2. Copy .env.example to .env and add your API key"
-  echo "  3. ./mo web"
+  echo "${BOLD}Installing is done from the repository root, not from a client.${OFF}"
   echo
-  echo "  ${DIM}./mo capabilities  shows which analysis tools are actually available${OFF}"
-  echo "  ${DIM}For Claude Desktop instead: ./mo desktop${OFF}"
+  echo "    cd $TREE && ./setup.sh"
   echo
+  echo "${DIM}It builds the client environment and every environment the catalog"
+  echo "declares, and it is safe to re-run.${OFF}"
+  echo
+  return 1
 }
 
 cmd_capabilities() {
-  have_venv || die "not set up yet. Run: ./mo setup"
+  have_venv || die "not set up yet. Run: ./setup.sh from the repository root."
   "$PY" "$ROOT/capabilities.py" "$@"
 }
 
 cmd_web() {
-  have_venv || { echo "First run, setting up..."; cmd_setup; }
+  have_venv || { cmd_setup; exit 1; }
   "$PY" -c "import fastapi, uvicorn" 2>/dev/null \
     || die "web dependencies missing. Run: ./mo setup"
   [ -f .env ] || die "no .env found. Copy it first:  cp .env.example .env"
@@ -255,7 +222,7 @@ cmd_status() {
   if have_venv; then
     echo "  setup      ready ${DIM}($("$PY" --version 2>&1))${OFF}"
   else
-    echo "  setup      not done ${DIM}(run: ./mo setup)${OFF}"
+    echo "  setup      not done ${DIM}(run: ./setup.sh from the repository root)${OFF}"
   fi
   if [ -f .env ]; then
     load_env

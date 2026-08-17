@@ -56,7 +56,9 @@
       "format": "tsv",
       "required": true,
       "staged_as": "{data_dir}/features.tsv",
-      "description": "Samples by features, sample_id in the first column. Relative abundances; the wrapper rescales to per-sample percentages, which is what the LDA expects."
+      "description": "Samples by features, sample_id in the first column. Relative abundances; the wrapper rescales to per-sample percentages, which is what the LDA expects.",
+      "produced_by": "assemble",
+      "produced_output": "features"
     },
     {
       "name": "metadata",
@@ -64,7 +66,9 @@
       "format": "tsv",
       "required": true,
       "staged_as": "{data_dir}/metadata.tsv",
-      "description": "Samples by variables, same sample_id index, carrying the class column named below."
+      "description": "Samples by variables, same sample_id index, carrying the class column named below.",
+      "produced_by": "assemble",
+      "produced_output": "metadata"
     }
   ],
   "outputs": [

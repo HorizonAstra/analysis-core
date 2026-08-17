@@ -22,7 +22,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
@@ -121,8 +121,20 @@ def _tool_for(contract: dict, candidates: list) -> Any:
         fields.append((i["name"], str, ... if i.get("required", True) else "",
                        C.input_note(i)))
     for p in contract.get("parameters", []):
-        fields.append((p["name"], _JSON_TYPE.get(p["type"], str),
-                       p.get("default", ...), p.get("description", "")))
+        # A parameter with a fixed set of values is offered as that set, so the
+        # schema refuses a wrong one before anything is submitted. Prose saying
+        # which values are allowed is a caller's problem to obey; a Literal is
+        # the host's problem to enforce, and only one of those stops a run being
+        # started that cannot work.
+        kind = (Literal[tuple(p["values"])] if p.get("values")
+                else _JSON_TYPE.get(p["type"], str))
+        # A parameter the entry marks required has no default to fall back to,
+        # so it is demanded here exactly as a required input is. Without this a
+        # capability that cannot work without one was offered as though it could,
+        # and said so only in prose.
+        fields.append((p["name"], kind,
+                       ... if p.get("required") else p.get("default", ...),
+                       p.get("description", "")))
     fields.append(("workspace", str, "default", C.WORKSPACE_NOTE))
 
     qualified = C.qualified_id(contract)
