@@ -28,6 +28,15 @@ relating it to anything. So similarity is the measure, not equality, and a size
 floor and an extension list are both replaced by asking whether a file has
 enough substance to be worth comparing at all.
 
+The second version still had a hole, and a real file was sitting in it. Near
+copies were looked for only among files *sharing a name*, on the reasoning that
+comparing everything to everything would turn up files that merely resemble each
+other. `infrastructure/sites/randi-main.json` was 96% the same as `randi.json`,
+in the same directory, and went unreported for as long as the check existed —
+because somebody renaming a copy is the most ordinary thing in the world, and
+the check happened to be blind to exactly that. So every pair is compared now,
+and what stops that costing anything is a cheap filter, not a narrow question.
+
     duplication.py            report every duplicate
     duplication.py --known    ignore the ones recorded in KNOWN below
 
@@ -57,6 +66,13 @@ _SAMPLE = 8192
 # to be the same bytes in every copy of that environment.
 EXPECTED_SAME = ("lock", "requirements.txt", "renv.lock", ".sum", ".sha256")
 
+# Records of things that happened, rather than code. A baseline is what one run
+# produced on one date, and the next one is the same shape with different
+# numbers in it — two records of two runs, not one file in two places. They were
+# being reported at 84% alike, and there is one more of them after every run, so
+# left alone this is a check that grows noisier the more the tree is used.
+RECORDS = ("infrastructure/artifact-store/baselines",)
+
 # How alike two files must be before this calls them one file in two places.
 # Below this and they are simply two files that do a similar job, which is not
 # the same claim and not one worth a check.
@@ -67,6 +83,20 @@ ALIKE = 0.80
 # copy of the other. Counted in lines that say something rather than in bytes,
 # because a byte floor also skips a short file that is a real duplicate.
 SUBSTANCE = 8
+
+# What it takes to be worth a real comparison. Comparing every file to every
+# other one is 337 files and 56,616 pairs, and `difflib` on each of those is
+# minutes; these two make it a second, by throwing out the pairs that cannot
+# reach ALIKE before the expensive part runs.
+#
+# Length first, because it costs a subtraction: a sequence matcher's ratio is
+# 2·matches ÷ total, so two files whose lengths differ by more than the shorter
+# one cannot reach 0.80 however well they line up. Then shared lines, as a
+# fraction of the shorter file — an upper bound on how much can possibly match,
+# since a line that appears in only one of them can never be a match in either.
+# Both are bounds rather than guesses, so nothing real is filtered out.
+SHORTEST = 0.60
+SHARED = 0.50
 
 VENDORED = (".venv", "venv", "site-packages", "environments", "node_modules",
             "__pycache__", ".git", ".retired", ".cache", "outputs", ".userdata")
@@ -81,23 +111,32 @@ KNOWN: dict[tuple[str, str], str] = {}
 #
 # Three repositories were copied into this one so they could be left untouched
 # while this was built, and `_migration/manifest.tsv` records every placement:
-# repo, source, destination, what was done, and why. A file sitting at one of
-# those destinations is not a duplicate somebody made by accident. It is a copy
-# somebody made on purpose and wrote down.
+# repo, source, destination, what was done, and why.
 #
-# This check did not read it. It found the largest of those copies, had no way
-# to know it was recorded, and reported it as though it were a discovery — and
-# the accepted entry then had to be written out by hand, which is a second
-# statement of something the manifest already said and free to disagree with it.
+# This check did not read it at first. It found the largest of those copies, had
+# no way to know it was recorded, and reported it as though it were a discovery.
+# So the manifest was read — and used to *excuse* a pair, which was a worse
+# mistake than not reading it. A destination is usually a directory, so one row
+# excused everything that would ever be written into that directory, for good.
+# `contracts/bin/baseline.py` is a single file the migration placed, and its row
+# was silently excusing every artifact-store baseline; `contracts/profiles/`
+# placed three site files, and its row was excusing a fourth that arrived later
+# and duplicated one of them at 96%.
 #
-# So the manifest is the authority. A pair of files where one sits under a
-# recorded destination is annotated with that row's own note, and a migration
-# that has been cleaned up stops matching on its own.
+# The mistake underneath was treating provenance as an explanation. It is not.
+# Knowing a file arrived by copy says nothing about whether it exists twice, and
+# no source in this manifest was ever copied to two destinations — so the
+# migration created no duplicate here at all. The one large duplication it was
+# blamed for already existed in TumorSpace, between two of its own directories,
+# and the migration carried both faithfully.
+#
+# So the manifest says where a side came from, printed beside the pair, and
+# never decides anything. What is accepted is written in KNOWN, on purpose.
 _MANIFEST = TREE / "_migration" / "manifest.tsv"
 
 
-def _migrated() -> list[tuple[str, str, str]]:
-    """(destination, action, note) for every row the migration recorded."""
+def _migrated() -> list[tuple[str, str]]:
+    """(destination, where it came from) for every row the migration recorded."""
     rows = []
     try:
         text = _MANIFEST.read_text()
@@ -109,30 +148,31 @@ def _migrated() -> list[tuple[str, str, str]]:
         parts = line.split("\t")
         if len(parts) < 4:
             continue
-        repo, source, dest, action = parts[0], parts[1], parts[2], parts[3]
-        note = parts[4] if len(parts) > 4 else ""
+        repo, source, dest = parts[0], parts[1], parts[2]
         if dest and dest != "-":
-            rows.append((dest.rstrip("/"),
-                         action,
-                         f"migration: {repo} {source} -> {dest} ({action})"
-                         + (f"; {note}" if note else "")))
+            rows.append((dest.rstrip("/"), f"{repo} {source}"))
     return rows
 
 
 MIGRATED = _migrated()
 
 
-def accepted(first: str, other: str) -> str:
-    """Why this pair is not news, or "" when it is.
+def came_from(path: str) -> str:
+    """Which repository this path was migrated out of, if the manifest says.
 
-    A file under a recorded migration destination answers with that row. Only
-    one side needs to match: a copy is a copy of something, and the something is
-    where it already lived.
+    Context printed beside a duplicate, never a reason to hide one. The longest
+    matching destination wins, so a row for a file beats the row for the
+    directory holding it.
     """
-    for dest, _action, note in MIGRATED:
-        for path in (first, other):
-            if path == dest or path.startswith(dest + "/"):
-                return note
+    best = ""
+    for dest, source in MIGRATED:
+        if (path == dest or path.startswith(dest + "/")) and len(dest) > len(best):
+            best, found = dest, source
+    return found if best else ""
+
+
+def accepted(first: str, other: str) -> str:
+    """Why this pair is not news, or "" when it is."""
     for (a, b), note in KNOWN.items():
         if (first.startswith(a + "/") and other.startswith(b + "/")) or \
            (first.startswith(b + "/") and other.startswith(a + "/")):
@@ -141,7 +181,10 @@ def accepted(first: str, other: str) -> str:
 
 
 def ours(path: Path) -> bool:
-    return not any(part in VENDORED for part in path.parts)
+    if any(part in VENDORED for part in path.parts):
+        return False
+    where = str(path.relative_to(TREE))
+    return not any(where.startswith(r + "/") for r in RECORDS)
 
 
 def partition(path: Path) -> str | None:
@@ -190,42 +233,46 @@ def _files() -> dict[Path, list[str]]:
 def duplicates(files: dict[Path, list[str]]) -> list[tuple[str, str, float, str]]:
     """Every (path, other, similarity, note) where one file exists twice.
 
-    Identical content anywhere, and near-identical content under one name in two
-    places. The second is what the hash-only version could not see, and it is
-    the half that matters: a copy stops hashing alike the moment somebody edits
-    it, which is the moment it starts to disagree with its original.
+    Identical content anywhere, and near-identical content anywhere. The second
+    is what the hash-only version could not see, and it is the half that
+    matters: a copy stops hashing alike the moment somebody edits it, which is
+    the moment it starts to disagree with its original.
 
-    Near-copies are looked for among files sharing a name. Comparing everything
-    to everything would find pairs that merely resemble each other, and "two
-    files doing a similar job" is not this check's claim.
+    Every pair is considered, under a name or under two. The version that only
+    compared files sharing a name was answering a narrower question than the one
+    worth asking, and it missed a 96% copy sitting beside its original under a
+    different name. What keeps the wider question affordable is SHORTEST and
+    SHARED above: both are bounds on what a pair could score, so a pair they
+    reject could not have been reported anyway.
     """
     found: dict[tuple[str, str], tuple[float, str]] = {}
+    paths = sorted(files)
 
     same: dict[str, list[Path]] = {}
     for path, lines in files.items():
         same.setdefault(hashlib.sha256("\n".join(lines).encode()).hexdigest(),
                         []).append(path)
-    for paths in same.values():
-        rel = sorted(str(p.relative_to(TREE)) for p in paths)
+    for alike in same.values():
+        rel = sorted(str(p.relative_to(TREE)) for p in alike)
         for other in rel[1:]:
             found[(rel[0], other)] = (1.0, accepted(rel[0], other))
 
-    by_name: dict[str, list[Path]] = {}
-    for path in files:
-        by_name.setdefault(path.name, []).append(path)
-    for paths in by_name.values():
-        if len(paths) < 2:
-            continue
-        for i, first in enumerate(paths):
-            for other in paths[i + 1:]:
-                key = tuple(sorted((str(first.relative_to(TREE)),
-                                    str(other.relative_to(TREE)))))
-                if key in found:
-                    continue
-                ratio = difflib.SequenceMatcher(None, files[first],
-                                                files[other]).ratio()
-                if ratio >= ALIKE:
-                    found[key] = (ratio, accepted(*key))
+    marks = {p: frozenset(files[p]) for p in paths}
+    for i, first in enumerate(paths):
+        for other in paths[i + 1:]:
+            short, long = sorted((len(files[first]), len(files[other])))
+            if short < long * SHORTEST:
+                continue
+            if len(marks[first] & marks[other]) < short * SHARED:
+                continue
+            key = (str(first.relative_to(TREE)), str(other.relative_to(TREE)))
+            key = (min(key), max(key))
+            if key in found:
+                continue
+            ratio = difflib.SequenceMatcher(None, files[first],
+                                            files[other]).ratio()
+            if ratio >= ALIKE:
+                found[key] = (ratio, accepted(*key))
 
     return sorted((a, b, r, n) for (a, b), (r, n) in found.items())
 
@@ -254,6 +301,10 @@ def main() -> int:
     for first, other, ratio, note in shown:
         how = "identical to" if ratio == 1.0 else f"{ratio * 100:.1f}% the same as"
         print(f"  {first}\n      is {how} {other}")
+        for path in (first, other):
+            source = came_from(path)
+            if source:
+                print(f"      {path} was migrated from {source}")
         if note:
             print(f"      accepted: {note}")
     print(f"\n{len(shown)} duplicate(s) across {len(files)} files compared.")

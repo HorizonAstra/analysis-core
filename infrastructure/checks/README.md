@@ -1,96 +1,89 @@
 # Checks
 
-A contract's `verify` answers whether the frozen computation has moved, by
-comparing digests. A baseline answers whether a run reproduces, by comparing
-outputs. Neither answers a third kind of question: whether two pieces of code
-that are both in the repository, and are meant to compute the same thing,
-actually agree.
+Ten questions about the tree, asked in one command.
 
-That question comes up wherever something was rewritten. A rewrite is usually
-justified on speed, and speed is easy to measure, so it gets measured. Whether
-the numbers survived the move usually does not, because checking it means
-running the retired version, which nobody wants to reinstate.
-
-These checks run the retired version without reinstating it. Each one copies the
-old code out of wherever it is parked, runs both, and compares. Production files
-are never edited; every extraction records the file and line range it came from,
-so the copy can be re-derived and confirmed.
-
-The same folder holds one other kind of check, for the question a digest cannot
-answer either: whether an artifact that was stored as a reference still
-reproduces today. That is not about two implementations, it is about one
-implementation and the passage of time, but it belongs here for the same reason —
-it is a claim the repository makes implicitly and had never been tested.
-
-## ripley
-
-Ripley's K decides which nodes survive spatial filtering. It was computed in
-Julia inside the optimiser, then moved to R and `spatstat` for speed. The Julia
-version is still in `tumorspace_core.jl`, commented out, under a header that
-says why it was retired.
-
-The two are not the same calculation. Both sum `|K_border(r) - πr²|` over a range
-of `r`, and both use the whole tissue as the observation window, but:
-
-- The Julia version fixes `rmax = min(x_length/4, y_length/4, sqrt(1000/(πλ)))`
-  and evaluates 513 evenly spaced radii. The R version takes whatever radii
-  `spatstat::Kest` chooses by default. The sums are therefore over different
-  grids, and the grids differ per node in different ways.
-- The Julia version approximates distance-to-boundary by the distance to 40
-  points sampled along the window edge, 10 per side. `spatstat` computes the
-  exact distance to the edge. The approximation can only overestimate, which
-  keeps points eligible at radii where the exact version would drop them.
-
-So the two produce different numbers, and nothing in the repository claims
-otherwise. What matters is narrower than that. The threshold applied downstream
-is a quantile of the observed distribution:
-
-```julia
-rip_nodes_pass = filter(row -> row.RipleySum >= quantile(rip_nodes_pass.RipleySum, spatial), ...)
+```sh
+clients/.venv/bin/python infrastructure/checks/all.py
 ```
 
-Any strictly increasing rescaling of `RipleySum` leaves that selection
-untouched. The rewrite only changes results if it changes the **ordering** of
-nodes. `compare.py` measures that directly, and then measures the thing that
-actually propagates: the selected node sets at each quantile the optimiser cuts
-on.
+Fourteen seconds, no arguments, no setup beyond the environment `./setup.sh`
+builds. `--quiet` prints only what failed.
 
-### Running it
+Everything here is run by `all.py` and nothing else lives in this directory. A
+check that nothing runs is not a check, and for a while this folder held nine
+files that nothing ran — TumorSpace's benchmark harness, carried in by the
+migration, described by a README about a different directory in a different
+repository. They now sit beside the code that calls them, in
+`domains/spatial-transcriptomics/checks/`.
 
-Needs `allnodes_leaves.tsv` and `allnodes_ripley.tsv` from one `region_finder`
-run, which are the input and the output of the R step.
+## What each one catches
 
-```
-julia --project=workflows/tumorspace_core/julia \
-    contracts/checks/ripley/run_julia.jl <allnodes_leaves.tsv> julia_ripley.tsv
-python3 contracts/checks/ripley/compare.py julia_ripley.tsv <allnodes_ripley.tsv>
-```
+| Line | Script | The failure it exists for |
+|---|---|---|
+| four rules | `dependencies.py` | A partition reaching into another. This is the architecture; without it the four directories are a filing convention. |
+| no duplication | `duplication.py` | One file existing twice, exactly or nearly. Imports cannot see a copy, because a copy imports nothing. |
+| schema | `render.py --as verify` | An entry that does not satisfy the format it claims to. |
+| renders | `render.py --as <target>` | An entry that cannot be rendered as some surface. 19 entries × 6 targets = 114. |
+| site configs | `render.py --as nextflow-config` | A machine that cannot be rendered as a config. Separate because this target takes a site, not a capability. |
+| graph | `graph.py --as order` | Capabilities that do not order into a runnable sequence. |
+| methods | `methods.py` | A domain claiming to compute something it has no code for, or the reverse. |
+| formats | `formats.py` | An output format no file can be named for. |
+| surfaces | `surfaces.py` | What we render a capability as drifting from what we serve. |
+| data layer | `data_layer.py` | A declared shape of data no longer being found. Builds its own studies. |
 
-### Result
+## Which of these earn their keep
 
-They do not agree. Measured 2026-08-07 on the benchmark sample, 369 nodes:
-rank correlation 0.9935, and at the thresholds the optimiser searches over,
-between 1.3% and 5.3% of the selected nodes differ. Full numbers and the reason
-for the divergence are in `ripley/result-2026-08-07.md`.
+Worth saying plainly, because a check nobody trusts is worse than no check: it
+costs the same and gets ignored.
 
-So results produced before the rewrite and results produced after it are two
-different populations. Any refactor validated by comparison against an older
-stored run is validating against the wrong thing, and so is any figure that pools
-runs from both sides of the change. Validate against a seeded baseline recorded
-with the current code instead.
+**`dependencies.py`** is load-bearing. It has caught real leaks in all three
+forms it now looks for — an import across a partition, a domain named in a
+string, and a domain's shell scripts sitting in `infrastructure/`. The third
+form was added on 2026-08-16, after the first two held cleanly while nine
+domain files sat in this very directory.
 
-That is what an hour of compute bought, against a question that had otherwise
-been carried as an assumption.
+**`data_layer.py`** is the only one that builds data and reads it back. The
+others read the tree, which is identical on every machine; data is not, and a
+check that had only ever seen the seven flat studies on one laptop passed a
+change that broke every per-sample study on the cluster.
 
-## environment
+**`formats.py`** is forty lines and exists because every TSV this repository
+produced was arriving in a browser named `.tsv.bin`. It is cheap and narrow and
+stops exactly that from returning.
 
-Whether the container images have drifted since the reference outputs in
-`benchmarks/` were stored. They have not: a BayesSpace run in `--test` mode, which
-fixes its seeds, still md5s identically to the file committed on 2 July.
+**`surfaces.py`** is the most expensive: it starts the tool server in a
+subprocess to ask what it serves. It earns that because a capability is
+described twice — the renderer builds a JSON schema, the server builds a model —
+and those two descriptions drifting is invisible until a model is confused by a
+tool at run time.
 
-That result does double duty. It confirms the CRAN `latest` defect has not yet
-cost anything, since the images themselves are intact and only a rebuild would
-have exposed it. And it isolates why a seeded `region_finder` run does not match
-its stored reference from the same day: the environment is unchanged and the
-kernels hash identically, so what remains is that the stored file came from an
-unseeded run and matches nothing. `environment/result-2026-08-07.md`.
+**`duplication.py`** took three attempts to become real. The first hashed file
+contents and reported nothing; four hand-made copies defeated it. The second
+compared only files sharing a name, and missed `randi-main.json` sitting beside
+`randi.json` at 96% for as long as it existed. It also read the migration
+manifest and used it to *excuse* pairs, which was worse than not reading it: one
+row's destination is a directory, so it excused everything ever written there.
+Provenance is not an explanation. Knowing a file arrived by copy says nothing
+about whether it exists twice, and no source in that manifest was ever copied to
+two places, so the migration created no duplicate here at all. The manifest now
+says where a side came from, printed beside the pair, and decides nothing.
+
+**`methods.py`** guards a list written for a reader, which nothing else reads
+back. Cheap, and the list is otherwise the first thing to go stale.
+
+## The interpreter is checked first, and it is fatal
+
+Run under a python without `jsonschema` and every entry reports "not validated";
+without `pandas` the data layer check dies in its imports. That was eighteen
+problems and a traceback from a tree with nothing wrong with it — a result
+indistinguishable from real failure, which is worse than no result.
+
+Exit 2 means this could not check. Exit 1 means it checked and found something.
+Skipped is never passed.
+
+## Accepted, rather than fixed
+
+`dependencies.py` and `duplication.py` each hold a `KNOWN` list: things that are
+true today, recorded with why, so that a *new* one cannot arrive unnoticed.
+`--known` hides them. Nothing else is ever hidden — in particular, a file's
+history is not a reason to stop reporting what is wrong with it now.

@@ -99,9 +99,15 @@ def _where(candidates: list, values) -> tuple:
     return candidates[0]
 
 
-def entries() -> list[dict]:
-    """Every catalog entry in the tree, in a stable order."""
-    return [C.load(p) for p in sorted((_TREE / "domains").glob("*/catalog/*.json"))]
+def entries(**which) -> list[dict]:
+    """Every catalog entry in the tree, or the ones asked for.
+
+    `which` goes straight to the catalog interface: `domains=[...]` names the
+    ecosystems wanted, `general=True|False` selects the general engines or the
+    sciences. A session that only needs one science asks for one science and its
+    engines, rather than being handed all nineteen tools and told to pick.
+    """
+    return C.entries(_TREE, **which)
 
 
 def _tool_for(contract: dict, candidates: list) -> Any:

@@ -16,9 +16,15 @@ from itertools import permutations
 import numpy as np
 import pandas as pd
 
-from ..primitives.aggregation import aggregate_covariate_matrix
-from ..primitives.multiple_testing import adjust_pvalues
-from ..primitives.survival import cox_sweep, cox_univariate, kaplan_meier
+# Absolute rather than relative. There is no __init__.py anywhere under
+# kernels/, so `primitives` and `workflows` are sibling top-level packages
+# once the kernels directory is on the path, and `from ..primitives` asks
+# for a parent package that does not exist. This file and survival.py both
+# raised ImportError on every import until 2026-08-16, which is to say
+# nothing had ever run them. differential.py carried the same defect.
+from primitives.aggregation import aggregate_covariate_matrix
+from primitives.multiple_testing import adjust_pvalues
+from primitives.survival import cox_sweep, cox_univariate, kaplan_meier
 
 # covariate strategy -> aggregation method
 _STRATEGY_METHOD = {

@@ -1,0 +1,6 @@
+{
+  "_comment": "What this ecosystem is. `study.json` beside this says what a study of it looks like on disk; this says what the ecosystem itself is. See domains/statistics/domain.json for why the distinction is written down.",
+  "label": "Microbiome",
+  "general": false,
+  "note": "A science. Its tools name things only this field has — a taxon, a clade, a metabolite, a subject measured repeatedly — and its differential abundance is an opinionated composition of the general engines with those decisions baked in, which is what makes it microbiome rather than statistics."
+}

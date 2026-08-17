@@ -37,6 +37,9 @@ import sys
 from pathlib import Path
 
 TREE = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(TREE / "interfaces" / "catalog"))
+
+import entry as C                                               # noqa: E402
 RENDER = TREE / "infrastructure" / "render-targets" / "render.py"
 
 # Ask the server what it serves. Run in the clients partition because that is
@@ -82,7 +85,7 @@ def main() -> int:
         return 1
 
     wrong, compared = [], 0
-    for path in sorted((TREE / "domains").glob("*/catalog/*.json")):
+    for path in C.entry_paths(TREE):
         r = rendered(path)
         if r is None:
             continue

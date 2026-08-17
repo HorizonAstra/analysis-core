@@ -1,0 +1,106 @@
+{
+  "id": "alpha_diversity",
+  "version": "0.1.0",
+  "title": "Diversity within each sample, as seven named indices",
+  "summary": "Reads a samples by features table and returns one row per sample with richness, shannon, hill_q1, simpson_concentration, gini_simpson, inverse_simpson and evenness. Every index is returned under its exact name rather than a chosen one, because the popular names are ambiguous and two of them are different transforms of the same quantity.",
+  "level": 4,
+  "scope": "cross_sample",
+  "consumes": [],
+  "kernel": {
+    "language": "python",
+    "entrypoint": "kernels/run_primitive.py",
+    "files": [
+      "kernels/run_primitive.py",
+      "kernels/primitives/diversity.py",
+      "kernels/primitives/jsonsafe.py"
+    ],
+    "sha256": {
+      "kernels/run_primitive.py": "d32c9f95a789c55afce12f1e53ceb0a398fb7fb472495537f056fb43b1bac738",
+      "kernels/primitives/diversity.py": "4dcc267eb868460a1a94c3e998e596bc7226996cfa4d7f3f5ea0a122ff31c6bc",
+      "kernels/primitives/jsonsafe.py": "a8fb22eae7f12629cf3c807add5c08ca73c9c5e42cbfda8a1b6a8a08850a5e08"
+    },
+    "functions": [
+      "alpha_diversity"
+    ],
+    "third_party": [
+      {
+        "name": "pandas",
+        "version": "unpinned"
+      },
+      {
+        "name": "numpy",
+        "version": "unpinned",
+        "note": "The sums and logs are done as array operations."
+      }
+    ]
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "manifest": "environments/requirements.txt",
+    "provenance": "No image. The same virtual environment every statistics capability uses.",
+    "activation": {
+      "kind": "venv",
+      "path": "environments/py",
+      "note": "Entered by putting its bin directory first on PATH. Where python itself lives is the machine's business.",
+      "ready_when": "bin/python",
+      "restore_with": "bash ../restore.sh"
+    },
+    "manifest_sha256": "ab853b8109e0e7173b99f8a4e684af6dcb04defb35537d4c7bd9f18e72431eb7"
+  },
+  "inputs": [
+    {
+      "name": "table",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/table.tsv",
+      "description": "Samples by features, sample identifier in the first column. Values are renormalised per row to sum to one, so proportions and percentages both work."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "indices",
+      "type": "file",
+      "format": "tsv",
+      "staged_as": "{output_base}/table.tsv",
+      "description": "One row per sample: richness, shannon, hill_q1, simpson_concentration, gini_simpson, inverse_simpson, evenness.",
+      "returnable": true,
+      "interpretation": "Undefined values are NaN and never zero, which matters because zero is a real minimum for some of these. An empty sample has a true richness of 0 and no defined shannon; evenness is undefined when one feature is observed."
+    },
+    {
+      "name": "notes",
+      "type": "file",
+      "format": "json",
+      "required": false,
+      "staged_as": "{output_base}/notes.json",
+      "description": "What the primitive recorded, including rows it could not compute an index for."
+    }
+  ],
+  "parameters": [],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "Closed-form sums over each row. Nothing is sampled, and row order does not reach the output, which is indexed by sample."
+  },
+  "resources": {
+    "scales_with": "samples times features, in one pass",
+    "bound_by": "trivial",
+    "cores_help": false,
+    "fans_out": false,
+    "basis": "derived_from_algorithm",
+    "memory_hint": "The table is held once as a dense array of floats. Nothing is accumulated per sample beyond seven numbers."
+  },
+  "interpretation": "The seven columns are not seven opinions about one number, and picking whichever is highest is a way to get a wrong answer confidently. simpson_concentration rises as diversity falls. gini_simpson and inverse_simpson are different transforms of that same concentration D: 1-D is a probability bounded at 0, 1/D is an effective count with a floor of 1. A threshold set on one means nothing on the other, and converting between them by hand is the most common way this gets misread. Take the column the question asks for.\n\nThis is a statement about one sample at a time. Comparing it across groups is a further test, and an unpaired test over samples from the same subject is pseudoreplication.",
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "python3 {entrypoint} --module primitives.diversity --function alpha_diversity --table {data_dir}/table.tsv --out {output_base}"
+  },
+  "notes": "Placed in statistics rather than microbiome. The engine was already here, in kernels/primitives/diversity.py, and the client-era wrapper that called it lived in the microbiome tools only because that is where the data came from. Shannon entropy and Hill numbers of a composition are not a claim about organisms: the same indices describe a repertoire, a portfolio or a vocabulary. What is microbiome-specific is deciding that a taxa table is the composition worth measuring, and that decision is made by whoever supplies the table.",
+  "for_people": "How varied each sample is on its own, reported seven ways because the popular names disagree."
+}

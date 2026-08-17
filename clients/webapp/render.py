@@ -20,6 +20,7 @@ from __future__ import annotations
 import functools
 import os
 import re
+import sys
 from pathlib import Path
 from urllib.parse import quote
 
@@ -27,6 +28,17 @@ import bleach
 import markdown as _markdown
 
 import config
+
+_TREE = Path(__file__).resolve().parents[2]
+if str(_TREE / "interfaces" / "catalog") not in sys.path:
+    sys.path.insert(0, str(_TREE / "interfaces" / "catalog"))
+import entry as C     # noqa: E402
+
+
+def _tree() -> Path:
+    """The tree to read the catalog from. ANALYSIS_CORE moves this folder."""
+    return Path(os.environ.get("ANALYSIS_CORE", _TREE))
+
 
 # How much of a step's input is shown in the activity trail.
 ACTIVITY_CHARS = int(os.environ.get("LLM_ACTIVITY_CHARS", "4000"))
@@ -65,9 +77,8 @@ def _catalog_labels() -> dict:
     Nothing internal reaches a reader: a title is prose written for one.
     """
     import json
-    tree = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
     out = {}
-    for path in sorted((tree / "domains").glob("*/catalog/*.json")):
+    for path in C.entry_paths(_tree()):
         try:
             entry = json.loads(path.read_text())
         except (OSError, ValueError):
@@ -92,9 +103,8 @@ def _writes_own_code() -> frozenset:
     of this kind is handled by declaring itself, not by editing this.
     """
     import json
-    tree = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
     out = set()
-    for path in sorted((tree / "domains").glob("*/catalog/*.json")):
+    for path in C.entry_paths(_tree()):
         try:
             entry = json.loads(path.read_text())
         except (OSError, ValueError):
@@ -109,9 +119,8 @@ def _writes_own_code() -> frozenset:
 def _domain_by_capability() -> dict:
     """Which domain declares each capability, by bare id and by qualified id."""
     import json
-    tree = Path(os.environ.get("ANALYSIS_CORE", Path(__file__).resolve().parents[2]))
     out = {}
-    for path in sorted((tree / "domains").glob("*/catalog/*.json")):
+    for path in C.entry_paths(_tree()):
         try:
             entry = json.loads(path.read_text())
         except (OSError, ValueError):

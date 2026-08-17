@@ -70,10 +70,8 @@ class Step:
 
 def catalog(tree: Path | None = None) -> dict:
     """Every entry, by qualified id."""
-    root = tree or _TREE
     out = {}
-    for path in sorted((root / "domains").glob("*/catalog/*.json")):
-        contract = C.load(path)
+    for contract in C.entries(tree or _TREE):
         out[C.qualified_id(contract)] = contract
     return out
 
@@ -98,6 +96,39 @@ def holdings(row: dict, sample: str) -> set:
         if sample in (who.get("samples") or []):
             holds.add(role)
     return holds
+
+
+def fed_by(target: str, name: str, entries: dict) -> tuple[str, str] | None:
+    """Who can supply one input of a general engine, and which output of theirs.
+
+    `produced_by` is written on the input, which works everywhere the producer
+    and the consumer belong to the same science. It cannot be written at all
+    when the consumer is a general engine: correlation, charting and diversity
+    run on any table, and an entry in `statistics` naming `microbiome/assemble`
+    would point the dependency from the general at the particular, which is the
+    one direction that does not hold. So all six inputs of the general engines
+    said nothing about where their table comes from, and no chain could be
+    planned that ended in one of them.
+
+    The edge is the same edge; only the end it is written at moves. A science
+    declares, on the output, which general capabilities that output can be
+    handed to. This reads those declarations back.
+
+    Ambiguity is refused rather than guessed. Two sciences that both feed
+    `statistics/correlation` are two different tables, and picking whichever
+    sorted first would silently correlate the wrong study.
+    """
+    found = []
+    for qualified, contract in entries.items():
+        if qualified == target:
+            continue
+        for o in contract.get("outputs", []):
+            for fed in o.get("feeds", []):
+                if C.resolve_ref(fed, C.domain(contract)) == target:
+                    found.append((qualified, o["name"]))
+    if len(found) != 1:
+        return None
+    return found[0]
 
 
 def _from_site(spec) -> str | None:
@@ -198,6 +229,10 @@ def plan(target: str, *, study: str, sample: str, holds: set,
             producer = i.get("produced_by")
             if producer:
                 require(C.resolve_ref(producer, C.domain(contract)), optional_too=False)
+                continue
+            supplies = fed_by(qualified, i["name"], entries)
+            if supplies:
+                require(supplies[0], optional_too=False)
 
     require(target, optional_too=True)
 
@@ -214,6 +249,11 @@ def plan(target: str, *, study: str, sample: str, holds: set,
         for i in contract["inputs"]:
             producer = i.get("produced_by")
             producer = C.resolve_ref(producer, domain) if producer else None
+            output_name = i.get("produced_output") or i["name"]
+            if producer is None:
+                supplies = fed_by(qualified, i["name"], entries)
+                if supplies:
+                    producer, output_name = supplies
             role_ref = (_from_site(i.get("from_site"))
                         or _from_role(i.get("from_role"), study, sample, holds))
             if role_ref:
@@ -222,9 +262,8 @@ def plan(target: str, *, study: str, sample: str, holds: set,
                 # '.' asks for the run itself rather than one output of it, which
                 # is what an input wanting a directory of the producer's work
                 # means. A reference with no output already says that.
-                output = i.get("produced_output") or i["name"]
                 step.inputs[i["name"]] = (f"run:{{{producer}}}"
-                                          + ("" if output == "." else f"/{output}"))
+                                          + ("" if output_name == "." else f"/{output_name}"))
                 step.after.append(producer)
             elif i.get("required", True):
                 raise Impossible(_missing(qualified, i, sample, holds))
@@ -261,14 +300,18 @@ def compose(target: str, *, study: str, sample: str, holds: set, have: dict,
     for i in contract["inputs"]:
         producer = i.get("produced_by")
         producer = C.resolve_ref(producer, domain) if producer else None
+        output_name = i.get("produced_output") or i["name"]
+        if producer is None:
+            supplies = fed_by(target, i["name"], entries)
+            if supplies:
+                producer, output_name = supplies
         role_ref = (_from_site(i.get("from_site"))
                     or _from_role(i.get("from_role"), study, sample, holds))
         if role_ref:
             step.inputs[i["name"]] = role_ref
         elif producer and have.get(producer):
-            output = i.get("produced_output") or i["name"]
             step.inputs[i["name"]] = (f"run:{have[producer]}"
-                                      + ("" if output == "." else f"/{output}"))
+                                      + ("" if output_name == "." else f"/{output_name}"))
         elif i.get("required", True):
             raise Impossible(_missing(target, i, sample, holds))
     for p in contract.get("parameters", []):

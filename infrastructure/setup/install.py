@@ -38,6 +38,9 @@ import sys
 from pathlib import Path
 
 TREE = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(TREE / "interfaces" / "catalog"))
+
+import entry as C                                               # noqa: E402
 CLIENTS = TREE / "clients"
 
 # Colourless, because this runs in logs and over ssh as often as in a terminal.
@@ -122,7 +125,7 @@ def declared_environments() -> dict:
     they are absent rather than listed as ready.
     """
     wanted: dict = {}
-    for entry in sorted(TREE.glob("domains/*/catalog/*.json")):
+    for entry in C.entry_paths(TREE):
         try:
             contract = json.loads(entry.read_text())
         except (OSError, ValueError):

@@ -109,9 +109,13 @@ class JobSpec:
     # suspects a stored result, or who has changed a kernel without the entry
     # recording it, is asking the second, and there was no way to say so.
     #
-    # It does not make a new answer. Identical work produces identical output,
-    # so what comes back is the same result recorded twice — and if it is not,
-    # that difference is the finding.
+    # For work that repeats, it does not make a new answer: what comes back is
+    # the same result recorded twice, and if it is not, that difference is the
+    # finding. Three capabilities here draw random numbers and leave the seed
+    # unset in production, so for those the sentence above is simply false and a
+    # re-run is a second draw. Those are never handed back from cache in the
+    # first place, which is what keeps this flag about wanting the work done
+    # rather than about whether the cache can be trusted.
     fresh: bool = False
     # Filled in by the executor once the store has allocated a directory, so a
     # record can be read back later. Never supplied by a caller.

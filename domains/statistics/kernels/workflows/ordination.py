@@ -14,10 +14,16 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from ..primitives.distances import compute_distance_matrix
-from ..primitives.ordination import pcoa as _pcoa
-from ..primitives.ordination import permanova as _permanova
-from ..primitives.transformations import log_transform, zscore_transform
+# Absolute rather than relative. There is no __init__.py anywhere under
+# kernels/, so `primitives` and `workflows` are sibling top-level packages
+# once the kernels directory is on the path, and `from ..primitives` asks
+# for a parent package that does not exist. This file and survival.py both
+# raised ImportError on every import until 2026-08-16, which is to say
+# nothing had ever run them. differential.py carried the same defect.
+from primitives.distances import compute_distance_matrix
+from primitives.ordination import pcoa as _pcoa
+from primitives.ordination import permanova as _permanova
+from primitives.transformations import log_transform, zscore_transform
 
 #: PERMANOVA permutations are seeded so the same data gives the same p-value twice.
 _SEED = 0

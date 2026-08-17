@@ -49,6 +49,10 @@ import sys
 from pathlib import Path
 
 TREE = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(TREE / "interfaces" / "catalog"))
+
+import entry as C                                               # noqa: E402
+
 RENDER = TREE / "infrastructure" / "render-targets" / "render.py"
 GRAPH = TREE / "infrastructure" / "graph" / "graph.py"
 RULES = TREE / "infrastructure" / "checks" / "dependencies.py"
@@ -78,7 +82,7 @@ def usable() -> list[str]:
 
 
 def entries() -> list[Path]:
-    return sorted((TREE / "domains").glob("*/catalog/*.json"))
+    return C.entry_paths(TREE)
 
 
 def _run(argv: list[str]) -> tuple[bool, str]:

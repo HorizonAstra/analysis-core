@@ -30,6 +30,9 @@ import sys
 from pathlib import Path
 
 TREE = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(TREE / "interfaces" / "catalog"))
+
+import entry as C                                               # noqa: E402
 
 
 def _store():
@@ -46,7 +49,7 @@ def _store():
 def declared() -> dict[str, list[str]]:
     """Every output format any domain declares, and who declares it."""
     out: dict[str, list[str]] = {}
-    for path in sorted((TREE / "domains").glob("*/catalog/*.json")):
+    for path in C.entry_paths(TREE):
         try:
             entry = json.loads(path.read_text())
         except (OSError, json.JSONDecodeError):

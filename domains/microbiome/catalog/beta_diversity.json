@@ -1,0 +1,146 @@
+{
+  "id": "beta_diversity",
+  "version": "0.1.0",
+  "title": "Whether cohorts differ overall, by distance between whole communities",
+  "summary": "Builds a distance between every pair of samples from the assembled feature table, ordinates it with PCoA, and tests whether the cohorts named by one metadata column separate, with PERMANOVA. Answers 'are these groups different at all' rather than 'which features differ'.",
+  "level": 4,
+  "scope": "cross_sample",
+  "consumes": [],
+  "kernel": {
+    "language": "python",
+    "entrypoint": "kernels/python/run_beta_diversity.py",
+    "files": [
+      "kernels/python/run_beta_diversity.py",
+      "../statistics/kernels/workflows/ordination.py",
+      "../statistics/kernels/primitives/distances.py",
+      "../statistics/kernels/primitives/ordination.py",
+      "../statistics/kernels/primitives/transformations.py",
+      "../statistics/kernels/primitives/jsonsafe.py"
+    ],
+    "sha256": {
+      "kernels/python/run_beta_diversity.py": "19c03810a3e3de344e9337854d7337bd304a9098b7f61b76887c560eeb3b3543",
+      "../statistics/kernels/workflows/ordination.py": "ebb91439f2679ebbba326a9f500cf8f5f27063e1e2ac6868b1237b8ecfef8a79",
+      "../statistics/kernels/primitives/distances.py": "90f17d774224d3e40ba0d7f02d1334c4da491688bce3f0d53b481589f1ad4529",
+      "../statistics/kernels/primitives/ordination.py": "381885917468b53663d1efc733c19efda54ee77660b9e7cf3dea3b8a659b1a0b",
+      "../statistics/kernels/primitives/transformations.py": "78f060ea1e9c6543ba047e433be5d1148083e17466a978058290ebe02e32e740",
+      "../statistics/kernels/primitives/jsonsafe.py": "a8fb22eae7f12629cf3c807add5c08ca73c9c5e42cbfda8a1b6a8a08850a5e08"
+    },
+    "functions": [
+      "beta_diversity"
+    ],
+    "third_party": [
+      {
+        "name": "pandas",
+        "version": "unpinned"
+      },
+      {
+        "name": "numpy",
+        "version": "unpinned"
+      },
+      {
+        "name": "scikit-bio",
+        "version": "unpinned",
+        "note": "Supplies PCoA and the PERMANOVA permutation test."
+      }
+    ]
+  },
+  "environment": {
+    "images": {},
+    "digests": {},
+    "pinned_env": {
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "manifest": "../statistics/environments/requirements.txt",
+    "manifest_sha256": "ab853b8109e0e7173b99f8a4e684af6dcb04defb35537d4c7bd9f18e72431eb7",
+    "provenance": "No image. Runs in the statistics domain's virtual environment, because the engines this composes are that domain's and must be fitted where they are installed. Declared here rather than arranged by hand, so the runner enters the right environment without any machine naming a path.",
+    "activation": {
+      "kind": "venv",
+      "path": "../statistics/environments/py",
+      "note": "Entered by putting its bin directory first on PATH. The statistics environment, not a second copy of it: a second copy is a second set of versions, and the fit would stop being the same fit.",
+      "ready_when": "bin/python",
+      "restore_with": "bash ../restore.sh"
+    }
+  },
+  "inputs": [
+    {
+      "name": "features",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/features.tsv",
+      "description": "Samples by features, sample_id in the first column.",
+      "produced_by": "assemble",
+      "produced_output": "features"
+    },
+    {
+      "name": "metadata",
+      "type": "file",
+      "format": "tsv",
+      "required": true,
+      "staged_as": "{data_dir}/metadata.tsv",
+      "description": "Samples by variables, sample_id in the first column. The column named by group_by is read from here.",
+      "produced_by": "assemble",
+      "produced_output": "metadata"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "result",
+      "type": "file",
+      "format": "json",
+      "staged_as": "{output_base}/beta_diversity.json",
+      "returnable": true,
+      "description": "The distance used, how many samples and features took part, the PCoA proportion explained, and the PERMANOVA pseudo_F, p_value and r_squared with the size of each cohort.",
+      "interpretation": "Read p_value and r_squared together and never one alone. On the Leukemia study grouped by sex the cohorts separate at p=0.001 while cohort accounts for 1.4% of the variation, which is a real effect and a small one, and reporting only the p value would make it sound like the dominant structure in the data."
+    }
+  ],
+  "parameters": [
+    {
+      "name": "group_by",
+      "type": "string",
+      "required": true,
+      "affects_results": true,
+      "description": "The metadata column whose values are the cohorts to test. Samples with no value in it cannot take part and are reported as dropped."
+    },
+    {
+      "name": "transform",
+      "type": "string",
+      "default": "none",
+      "values": [
+        "none",
+        "log1p_zscore"
+      ],
+      "affects_results": true,
+      "description": "none leaves the values alone, which is right for the CLR-transformed metagenomics table assemble produces: euclidean distance on CLR is Aitchison distance. log1p_zscore is for raw concentrations, so features on very different scales contribute comparably."
+    },
+    {
+      "name": "permutations",
+      "type": "integer",
+      "default": 999,
+      "affects_results": true,
+      "description": "How many permutations the PERMANOVA draws. The smallest p value it can report is 1/(permutations+1)."
+    }
+  ],
+  "determinism": {
+    "consumes_rng": false,
+    "seed_env": null,
+    "seeded_by_default": true,
+    "note": "The permutation test draws, but the engine passes a fixed seed of its own, so the same table and the same grouping give the same p value twice. Nothing here has to be seeded by a caller."
+  },
+  "resources": {
+    "scales_with": "samples squared, times features for the distance",
+    "bound_by": "memory",
+    "cores_help": false,
+    "fans_out": false,
+    "basis": "derived_from_algorithm",
+    "memory_hint": "A dense samples-by-samples distance matrix is held in memory, so this follows the square of the sample count rather than the size of the table."
+  },
+  "interpretation": "This says whether whole communities differ between cohorts. It does not say which features drive it, and a small p here is not a licence to name any feature: that is what differential abundance is for. Samples missing the grouping column are dropped rather than pooled, and the count is reported, because a test run on half a study while reading as though it ran on all of it is the failure worth catching.",
+  "invocation": {
+    "style": "named",
+    "staging": "none",
+    "template": "python3 {entrypoint} --features {data_dir}/features.tsv --metadata {data_dir}/metadata.tsv --out {output_base} --group-by {group_by} --transform {transform} --permutations {permutations}"
+  },
+  "notes": "In microbiome rather than statistics, for the reason the differential is. The general engine, primitives.ordination, takes a distance matrix somebody else built and has no opinion about samples. This composes it with a decision about which distance a microbiome table deserves, and that decision is the domain's.",
+  "for_people": "Whether two groups of samples differ overall, taking the whole community at once."
+}

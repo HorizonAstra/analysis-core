@@ -27,6 +27,10 @@ import sys
 from pathlib import Path
 
 TREE = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(TREE / "interfaces" / "catalog"))
+
+import entry as C                                               # noqa: E402
+
 PARTS = ("interfaces", "domains", "infrastructure", "clients")
 
 # What a module name tells you about which partition it belongs to. Imports here
@@ -60,9 +64,19 @@ VENDORED = (".venv", "venv", "site-packages", "environments", "node_modules",
             "__pycache__")
 
 
+# Records of runs, rather than code. A baseline is named after the capability
+# that produced it, so every one of them names a domain — which is a fact about
+# what was run, not infrastructure reaching for a domain. `duplication.py` skips
+# the same directory, for the same reason in its own terms.
+RECORDS = ("infrastructure/artifact-store/baselines",)
+
+
 def ours(path: Path) -> bool:
     """Whether a file is this tree's own code rather than something installed."""
-    return not any(part in VENDORED for part in path.parts)
+    if any(part in VENDORED for part in path.parts):
+        return False
+    where = str(path.relative_to(TREE))
+    return not any(where.startswith(r + "/") for r in RECORDS)
 
 
 def partition(path: Path) -> str | None:
@@ -117,7 +131,55 @@ def violations() -> list[tuple[str, str, str]]:
         for n in names:
             if re.search(rf"['\"]{re.escape(n)}['\"]", code):
                 found.append((str(path.relative_to(TREE)), "domains", f"the name {n!r}"))
+
+    # And a third form, which is the one that actually got through: a file in
+    # infrastructure that is not Python at all. Reading imports cannot see a
+    # shell script, and neither could the search above, so TumorSpace's whole
+    # benchmark harness sat in `infrastructure/checks/` — `run_benchmark.sh`
+    # describing itself as an end-to-end test of one domain's pipeline, calling
+    # that domain's containers, while every rule about partitions held in the
+    # only sense anything could see. Nine files, moved out on 2026-08-16.
+    #
+    # A domain's directory name is the wrong thing to look for here, because
+    # those files say `bayesspace` and `tumorspace_core`, never
+    # `spatial-transcriptomics`. What they do say is the names of capabilities,
+    # and the catalog already holds every one of those. Nothing is listed by
+    # hand: a new capability is searched for the day it is added.
+    for path in sorted((TREE / "infrastructure").rglob("*")):
+        if not path.is_file() or path.suffix == ".py" or not ours(path):
+            continue
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        for word, domain in domain_words().items():
+            if re.search(rf"\b{re.escape(word)}\b", text, re.IGNORECASE):
+                found.append((str(path.relative_to(TREE)), "domains",
+                              f"the {domain} capability {word!r}"))
+                break
     return found
+
+
+# Words that belong to one domain and to nothing else, taken from the catalog.
+#
+# A capability id is only usable as a signal if it could not turn up innocently
+# in infrastructure prose. `chart`, `slab`, `assemble`, `correlation` and
+# `harmonize` are ordinary English and this check would cry wolf on every one of
+# them, so the test is that a name be long enough and not a plain word — which
+# leaves the ones that are somebody's software: bayesspace, growchain, maaslin3.
+_ORDINARY = {"chart", "assemble", "correlation", "harmonize", "slab",
+             "run_code", "de_analysis", "differential_abundance",
+             "tree_bundle", "toolchain_report", "region_finder", "cohort_sgp",
+             "spatialview_bundle"}
+
+
+def domain_words() -> dict[str, str]:
+    out = {}
+    for path in C.entry_paths(TREE):
+        name = path.stem
+        if len(name) >= 6 and name not in _ORDINARY:
+            out[name] = path.parents[1].name
+    return out
 
 
 def main() -> int:

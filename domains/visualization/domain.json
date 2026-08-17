@@ -1,0 +1,6 @@
+{
+  "_comment": "What this ecosystem is. See domains/statistics/domain.json for why this file exists.",
+  "label": "Visualization",
+  "general": true,
+  "note": "General engines. `chart` draws from named columns of a table and does not care what the columns mean, which is what makes it general. A picture that only makes sense for one science — a tissue section, a phylogeny laid out on tumour geometry — belongs to that science's ecosystem instead, and some already do."
+}

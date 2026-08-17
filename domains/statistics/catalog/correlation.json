@@ -17,7 +17,7 @@
       "kernels/primitives/jsonsafe.py"
     ],
     "sha256": {
-      "kernels/run_primitive.py": "2f7c48d4892857119ceec18c1b339613cb432e2c7ab37da0932547dc7f5caeeb",
+      "kernels/run_primitive.py": "d32c9f95a789c55afce12f1e53ceb0a398fb7fb472495537f056fb43b1bac738",
       "kernels/primitives/correlation.py": "eb716d72374b53b3ed6aaa3f06d0a340130af01b94d3b6773ffde92c34b28964",
       "kernels/primitives/transformations.py": "78f060ea1e9c6543ba047e433be5d1148083e17466a978058290ebe02e32e740",
       "kernels/primitives/multiple_testing.py": "cf13d537179dc045fd834b0c73d5483f1dea29055d93027d5f2b9aa8f7536f0b",
@@ -87,9 +87,9 @@
     {
       "name": "x",
       "type": "array",
-      "default": [],
       "affects_results": true,
-      "description": "Columns to correlate. With y omitted, every unordered pair within x is returned."
+      "description": "Columns to correlate. With y omitted, every unordered pair within x is returned. Required: it carried a default of [] until 2026-08-16, and that default reached the primitive as a missing argument every time, so the documented way to call this capability was the one way that could not work.",
+      "required": true
     },
     {
       "name": "y",

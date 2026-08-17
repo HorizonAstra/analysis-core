@@ -58,6 +58,25 @@ def _read(path: str) -> pd.DataFrame:
     return pd.read_csv(path, sep=sep, index_col=0)
 
 
+def _index_matters(frame: pd.DataFrame) -> bool:
+    """Whether this table's index is data rather than row numbers.
+
+    Every table was written with `index=False`, which is right for a primitive
+    returning a flat table of results: `correlation` gives one row per pair and
+    its index is 0, 1, 2. It is wrong for one that answers per sample.
+    `alpha_diversity` returns a frame indexed by sample_id, and dropping that
+    wrote seven diversity indices for 312 samples with no way to tell which
+    sample any row belonged to — a table that cannot be joined to anything, and
+    which reads as valid because the numbers are all correct.
+
+    A name is the test. A primitive that indexes by something meaningful names
+    it, and pandas' default positional index has no name, so nothing has to be
+    declared per capability and nothing has to be remembered.
+    """
+    named = [n for n in (frame.index.names or []) if n]
+    return bool(named)
+
+
 def _write(result, out: Path) -> list[str]:
     """Whatever a primitive returned, as files.
 
@@ -71,7 +90,7 @@ def _write(result, out: Path) -> list[str]:
         result = {"table": result}
     for key, value in (result or {}).items():
         if isinstance(value, pd.DataFrame):
-            value.to_csv(out / f"{key}.tsv", sep="\t", index=False)
+            value.to_csv(out / f"{key}.tsv", sep="\t", index=_index_matters(value))
             written.append(f"{key}.tsv")
     rest = {k: v for k, v in (result or {}).items() if not isinstance(v, pd.DataFrame)}
     if rest:

@@ -103,14 +103,21 @@ HOW_A_CHAT_WORKS = (
     },
 )
 
-# Domains whose capabilities read a table rather than study data. They are
+# Ecosystems whose capabilities read a table rather than study data. They are
 # offered alongside whatever a chat is about, so they are described on their own
-# terms rather than folded into a study domain.
-WORKS_ON_A_TABLE = ("statistics", "visualization")
+# terms rather than folded into a science.
+#
+# This was the tuple ("statistics", "visualization"), written out here. Which
+# ecosystems are general is a fact about them, not about this web page, and
+# holding it here meant the client had to be edited for the tree to gain one —
+# quietly, since nothing would have failed. Each ecosystem now says so itself,
+# in its `domain.json`, and this reads the answer.
+WORKS_ON_A_TABLE = tuple(
+    sorted({p.parents[1].name for p in C.entry_paths(_TREE, general=True)}))
 
 
 def _entries() -> list[dict]:
-    return [C.load(p) for p in sorted((_TREE / "domains").glob("*/catalog/*.json"))]
+    return C.entries(_TREE)
 
 
 def _title(contract: dict) -> str:

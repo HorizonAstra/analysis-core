@@ -10,8 +10,12 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).parent.parent.parent
-BENCHMARK_SCRIPT = REPO_ROOT / "run_benchmark.sh"
+# Beside the other checks of this domain, which is where the script now lives.
+# It used to be looked for at the root of the repository this came from, and for
+# as long as that was written here it was looked for in a directory that has
+# never held it in this tree.
+CHECKS = Path(__file__).parent.parent
+BENCHMARK_SCRIPT = CHECKS / "run_benchmark.sh"
 
 
 def test_benchmark_script_exists():

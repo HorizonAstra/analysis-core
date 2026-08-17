@@ -12,10 +12,22 @@ kept identical:
     laptop      ~/Desktop/repos/work/analysis-core
     randi       /gpfs/data/dfi-cores/rijul/analysis-core
 
-The second is a copy of the first. Work happens on the laptop and is pushed
-across; nothing is edited on randi. Both are complete, so either can run the
-checks and either can run an analysis, which is how a difference between the two
-gets noticed.
+Work happens on the laptop; nothing is edited on randi. Both are complete, so
+either can run the checks and either can run an analysis, which is how a
+difference between the two gets noticed.
+
+Randi's copy holds a checkout, and a branch is switched there the ordinary way.
+Built environments are ignored by git and so survive a switch; the recipes that
+describe them do not, so a branch that changes one changes the recipe without
+rebuilding what it describes. Two branches cannot be current at once — whoever
+checks out last wins — and a client whose catalog entry differs from randi's is
+refused before anything is submitted, with a message naming what randi is
+checked out at.
+
+There were two roots here until 2026-08-16, `analysis-core` and
+`analysis-core-main`, so that two branches could each have code on the cluster.
+That meant a second copy of every fact about the machine, and the two were
+already 96% the same file when the duplication was found.
 
 Inside it, four directories and nothing else:
 
@@ -27,12 +39,17 @@ Inside it, four directories and nothing else:
 Who may depend on whom across those four is checked rather than remembered, by
 `infrastructure/checks/all.py`. That one command runs every check there is.
 
-### It is not under version control
+### It is under version control
 
-`analysis-core` is not a git repository. There is no history, no branch, and no
-way back from a mistaken delete. Everything in it was copied out of three
-repositories that are still untouched, so nothing is lost as of today, but every
-change made since exists in exactly one place.
+`analysis-core` is a git repository, on `main`, pushed to
+`github.com:HorizonAstra/analysis-core`. There is history and there is a way
+back from a mistaken delete.
+
+This section used to say the opposite, at length, and went on saying it for ten
+commits — which is the point worth keeping. A file that describes the ground
+truth is the one file nothing checks, so it is also the one that can be
+confidently wrong for months. Read it as a starting point and believe the tree
+over it.
 
 ### Where it came from
 
@@ -80,11 +97,17 @@ resolved or listed. It is kept rather than deleted: the two runs disagree about
 the data itself, one sample going from 2277 spots to 2265, so a result from the
 first is not a result about what we now hold.
 
-**laptop** holds the microbiome studies, at
-`~/Desktop/repos/work/llm-analysis-toolkit/data/microbiome/`. Nothing currently
-points at them: the local machine's data root is unset, so it looks for a `data`
-folder that does not exist. Setting `DATA_ROOT` in `clients/.env` to that path
-makes them visible again.
+**laptop** holds the microbiome studies, in this tree, at `data/microbiome/`:
+
+    AROW  HealthyDonors  Leukemia  LiverDisease  MICU  Preset  WmgxTest
+
+`DATA_ROOT` in `clients/.env` points at `data/`, so they are visible. They are
+not committed and never will be — `data/` is the first rule in `.gitignore`,
+because these are human subject exports and a git history keeps a copy even
+after a file is deleted.
+
+This paragraph used to say they were still in `llm-analysis-toolkit` and that
+nothing pointed at them. Both stopped being true when they were copied across.
 
 The spatial transcriptomics study that used to sit beside them has been removed.
 It was a hand-picked subset of the results below, and keeping it meant a second,

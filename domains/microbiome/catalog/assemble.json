@@ -93,7 +93,11 @@
       "type": "file",
       "format": "tsv",
       "staged_as": "{output_base}/features.tsv",
-      "description": "Samples by features, sample_id in the first column. Unfiltered."
+      "description": "Samples by features, sample_id in the first column. Unfiltered. What it feeds is declared here rather than in each general engine, because correlation and diversity run on any table and an entry in statistics naming a science would point the dependency backwards. Charting is deliberately not listed: almost every table is chartable, including results of the capabilities below, so a planner inferring it would be choosing between several right answers rather than deriving one.",
+      "feeds": [
+        "statistics/alpha_diversity",
+        "statistics/correlation"
+      ]
     },
     {
       "name": "metadata",

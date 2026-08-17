@@ -1,6 +1,7 @@
 {
   "id": "randi",
   "install_root": "${ANALYSIS_CORE:-/gpfs/data/dfi-cores/rijul/analysis-core}",
+  "install_root_note": "One path, holding a git checkout, and branches are switched in it. There used to be a second profile, 'randi-main', identical to this one but for this line, so that two branches could each have code on the cluster without either overwriting the other. That made a second copy of every fact on this page — the modules, the excluded nodes, the resource classes — free to disagree with the ones here, and it was already 96% the same file when it was found. A checkout does the same job without the copy: `git checkout` swaps the tracked code and leaves the built environments alone, since those are ignored by git and untracked files survive a checkout. What it does not do is let two branches be current at once. Whoever checks out last wins, and the client refuses to submit when its catalog entry differs from the one here, naming what this is checked out at so the refusal says whose code is installed rather than that two digests differ.",
   "description": "Randi, the collaborator HPC. The default target for cluster work. Hierarchical module environment, so several modules need a prerequisite loaded first.",
   "launcher": "singularity exec --no-home {binds} --env-file {env_file} {image} {command}",
   "image_root": "${ANALYSIS_IMAGES:-/gpfs/data/dfi-cores/rijul/images}",
@@ -43,7 +44,7 @@
       "module load nextflow/26.03.0"
     ],
     "preamble_note": "What the driver itself needs before it can start, which is not what a task needs. The task preamble at the top of this file loads python and singularity so run.py can work; these four load the engine. Nextflow will not start without openjdk loaded first, and neither module is visible until then.",
-    "_exclude_note": "Nodes observed to fail in practice. cri22cn084 cannot resolve the running user inside a container, so singularity aborts before the kernel starts. Found 2026-08-08 while running growchain from this tree.",
+    "_exclude_note": "Nodes observed to fail in practice. cri22cn084 cannot resolve the running user inside a container, so singularity aborts before the kernel starts. Found 2026-08-08 while running work from this tree; which capability it was is not a property of the node, and naming it made this machine's profile answer to one domain's catalog.",
     "partition": "tier1q",
     "account": "dfi",
     "partition_note": "tier1q is 147 nodes with a ten day limit. Alternatives: tier2q, express (6h)."
@@ -66,7 +67,7 @@
       "memory": "16G",
       "cpus": 1,
       "time": "12:00:00",
-      "basis": "No precedent in the repository: the only walltime bound capability is BayesSpace, which has no submission script here. The figure is a guess and should be replaced by a measurement."
+      "basis": "No precedent in the repository: the only capability bound this way has no submission script here, so there is nothing to take a figure from. It is a guess and should be replaced by a measurement. It named that capability until 2026-08-16, which made this machine's profile depend on one domain's catalog for no gain — the sentence is true whichever capability it is."
     },
     "trivial": {
       "memory": "8G",

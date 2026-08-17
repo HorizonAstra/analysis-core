@@ -115,8 +115,38 @@ def _reads(records: dict, ref, seen: frozenset) -> str:
     return f"{identity(records, record.spec, seen | {earlier})}/{output}"
 
 
-def finished_match(runs, spec) -> JobRecord | None:
+def repeatable(determinism: dict | None, spec) -> bool:
+    """Whether running this again would produce the same bytes.
+
+    Everything in this file rests on one sentence — identical work produces
+    identical output — and three capabilities in this tree say plainly that it
+    does not hold for them. `bayesspace` is an MCMC sampler that draws its own
+    two seeds when none is given, and its entry states that two runs of one
+    input give different cluster labels. `region_finder` and spatial
+    transcriptomics' `differential_abundance` say the same of their search and
+    their permutations. All three leave the seed unset in production, on purpose.
+
+    Handing one of those back as "already done" is not a saving, it is a wrong
+    answer to a different question. The person most likely to re-submit an
+    unseeded sampler with everything else identical is the person checking
+    whether its result is stable, and the cache would tell them it is, using the
+    one run they were trying to test.
+
+    A seeded run of the same capability is reusable, and that is the case worth
+    keeping: it is reproducible by construction, which is the whole reason the
+    seed is there.
+    """
+    if not (determinism or {}).get("consumes_rng"):
+        return True
+    return getattr(spec, "seed", None) is not None
+
+
+def finished_match(runs, spec, determinism: dict | None = None) -> JobRecord | None:
     """A completed run that already did exactly this, or None.
+
+    `determinism` is the contract's own block. Omitted, this assumes the work
+    repeats — which is true of sixteen of the nineteen capabilities here and
+    keeps every caller that has no contract to hand working as before.
 
     `runs` is either the registry or the records it holds, because the other
     function in this file takes the records and taking different things was a
@@ -135,6 +165,8 @@ def finished_match(runs, spec) -> JobRecord | None:
     is what `fresh` means: the point of asking is to have the work performed.
     """
     if getattr(spec, "fresh", False):
+        return None
+    if not repeatable(determinism, spec):
         return None
     records = runs if isinstance(runs, dict) else None
     if records is None:

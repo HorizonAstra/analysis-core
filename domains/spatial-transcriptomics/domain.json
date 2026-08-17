@@ -1,0 +1,6 @@
+{
+  "_comment": "What this ecosystem is. `study.json` beside this says what a study of it looks like on disk; this says what the ecosystem itself is. See domains/statistics/domain.json for why the distinction is written down.",
+  "label": "Spatial transcriptomics",
+  "general": false,
+  "note": "A science. Its tools name a spot, a tissue section, a clone and a phylogeny laid out on tumour geometry. General statistics are visibly tangled up in its kernels — Ripley's K and the SVD selection among them — and were deliberately left there: pulling them into the general engines is real work with no result to show for it, and the risk of changing an answer while doing it is not worth taking. Those kernels are treated the way a third-party package is treated: pinned, described, and left alone."
+}

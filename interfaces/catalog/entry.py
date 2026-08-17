@@ -37,6 +37,64 @@ def load(path: str | Path) -> dict:
     return contract
 
 
+def entry_paths(tree: str | Path | None = None, *,
+                domains: list[str] | None = None,
+                general: bool | None = None) -> list[Path]:
+    """Every catalog entry, or the ones a caller asked for.
+
+    There was a `sorted((tree / "domains").glob("*/catalog/*.json"))` in twelve
+    files: both graph modules, the installer, four checks, the tool server, and
+    four places in the web client. Twelve answers to "what can this do", each
+    free to disagree with the rest about where entries live, whether a
+    subdirectory counts, and what order they come back in — and any narrowing of
+    the set had to be invented separately in every one of them.
+
+    `domains` names the ecosystems wanted. `general` selects on what kind they
+    are: True for the general engines, False for the sciences, None for both.
+    Both filters read what is already on disk, so a client says which bag of
+    tools it wants without holding a list of names that goes stale the day an
+    ecosystem is added.
+    """
+    root = Path(tree).resolve() if tree else REPO
+    found = sorted((root / "domains").glob("*/catalog/*.json"))
+    if domains is not None:
+        found = [p for p in found if p.parents[1].name in domains]
+    if general is not None:
+        found = [p for p in found if is_general(p.parents[1]) == general]
+    return found
+
+
+def entries(tree: str | Path | None = None, **which) -> list[dict]:
+    """The same set, loaded. See `entry_paths` for what `which` selects."""
+    return [load(p) for p in entry_paths(tree, **which)]
+
+
+def is_general(domain_dir: str | Path) -> bool:
+    """Whether this ecosystem's tools mean anything outside a science.
+
+    The tree's own distinction, in the README's words: `domains/` is "the
+    science, one directory per field", and separately "its general engines are
+    in `domains/statistics`". Correlation, charting and running submitted code
+    are the same operations on a microbiome table and on a spreadsheet of
+    anything; a taxon and a tissue spot are not.
+
+    It matters for more than tidiness. Delete every science from this tree and
+    the general engines still work; delete `statistics` and microbiome's
+    differential abundance stops, because it runs in that environment and
+    imports those primitives. The dependency only ever points one way, and this
+    is the fact that says which way.
+
+    Declared in the ecosystem's own `domain.json` rather than guessed at, so a
+    new one says what it is instead of being classified by something it happens
+    to lack.
+    """
+    where = Path(domain_dir) / "domain.json"
+    if not where.exists():
+        return False
+    with open(where) as fh:
+        return bool(json.load(fh).get("general", False))
+
+
 def public(contract: dict) -> dict:
     """The entry as the format defines it.
 

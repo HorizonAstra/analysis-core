@@ -1,0 +1,6 @@
+{
+  "_comment": "What this ecosystem is, as against what it can compute. `methods.json` beside this answers the second question; nothing answered the first, so every client that wanted a subset of the tools had to hold its own list of directory names.",
+  "label": "Statistics",
+  "general": true,
+  "note": "General engines, in the README's words. Correlation, regression, hypothesis tests and mixed models are the same operations whatever produced the table, so nothing here names a taxon, a spot or a subject. A science depends on this and it depends on no science: microbiome's differential abundance runs in this environment and imports these primitives, and removing every science from the tree would leave everything here working."
+}

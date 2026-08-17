@@ -41,8 +41,7 @@ def load_all() -> dict:
     is the correct answer rather than a special case.
     """
     caps = {}
-    for path in sorted(CAPS.glob("*/catalog/*.json")):
-        c = C.load(path)
+    for c in C.entries(CAPS.parent):
         qid = C.qualified_id(c)
         if qid in caps:
             raise SystemExit(f"two entries claim {qid}")

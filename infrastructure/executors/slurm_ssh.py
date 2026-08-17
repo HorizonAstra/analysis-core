@@ -75,6 +75,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _local_branch() -> str:
+    """What this client is working on, for a message about the far side.
+
+    Empty when this tree is not a checkout either, which is the case inside a
+    container built from a copy. Never raises: this decorates an error.
+    """
+    try:
+        done = subprocess.run(["git", "-C", str(_TREE), "rev-parse",
+                               "--abbrev-ref", "HEAD"],
+                              stdin=subprocess.DEVNULL, capture_output=True,
+                              text=True, timeout=5)
+        return done.stdout.strip() if done.returncode == 0 else ""
+    except (subprocess.SubprocessError, OSError):
+        return ""
+
+
 class SlurmSshExecutor(Executor):
     name = "slurm-ssh"
 
@@ -100,6 +116,9 @@ class SlurmSshExecutor(Executor):
         # Capabilities whose catalog entry has been checked against the far
         # side this session. One check each, not one per submission.
         self._agreed: set = set()
+        # What the installed copy is checked out at, asked once. None until
+        # asked; "" when the install root is not a git checkout at all.
+        self._installed: str | None = None
 
     # --- talking to the far side ------------------------------------------
     # Every one of these closes its standard input, and none of them can afford
@@ -176,16 +195,72 @@ class SlurmSshExecutor(Executor):
         if not theirs:
             raise RuntimeError(
                 f"{self.site} has no catalog entry for {capability} at {remote}. "
-                f"The installed copy there is out of date: sync the tree to "
-                f"{self._install_root()} and try again.")
+                f"The installed copy there is out of date. {self._catch_up()}")
         if theirs != mine:
             raise RuntimeError(
                 f"{capability} is not the same on both sides. This client has "
                 f"{mine[:12]} and {self.site} has {theirs[:12]}. The entry names "
                 f"the kernel and pins it, so submitting would run something other "
-                f"than what was asked for. Sync the tree to "
-                f"{self._install_root()} and try again.")
+                f"than what was asked for. {self._catch_up()}")
         self._agreed.add(capability)
+
+    def _determinism(self, domain: str, cap: str) -> dict:
+        """What this capability says about repeating itself. Empty if unreadable.
+
+        Never raises: this decides whether an optimisation applies, and a
+        capability whose entry cannot be read here is about to fail `_agree`
+        with a better message than anything this could produce.
+        """
+        try:
+            path = _TREE / "domains" / domain / "catalog" / f"{cap}.json"
+            return json.loads(path.read_text()).get("determinism") or {}
+        except (OSError, ValueError):
+            return {}
+
+    def _checked_out(self) -> str:
+        """What the installed copy is on, when it is a git checkout.
+
+        Empty when it is not one, and empty when asking fails, since this only
+        ever adds detail to a message that is already being raised.
+        """
+        if self._installed is None:
+            root = shlex.quote(self._install_root())
+            try:
+                self._installed = self._ssh(
+                    f"git -C {root} rev-parse --abbrev-ref HEAD 2>/dev/null && "
+                    f"git -C {root} rev-parse --short HEAD 2>/dev/null "
+                    f"|| true").strip()
+            except (RuntimeError, subprocess.SubprocessError, OSError):
+                self._installed = ""
+        return self._installed
+
+    def _catch_up(self) -> str:
+        """How to make the far copy match this one, in terms of what it is.
+
+        The two sides disagreeing is the most common way a submission fails, and
+        for a long time the only advice offered was to sync the tree — which is
+        the wrong instruction when the far side is a git checkout, and the right
+        one when it is a copy. Nothing here knew which, so the message guessed,
+        and guessed the same way every time.
+
+        Asking git is what tells them apart, and it also answers the question a
+        person actually has at that moment, which is not "do the digests differ"
+        but "whose code is over there". Two people on two branches share one
+        checkout; the one who did not run the checkout gets told so by name.
+        """
+        root = self._install_root()
+        state = self._checked_out().split()
+        if len(state) == 2:
+            branch, commit = state
+            here = _local_branch()
+            mine = f", and this client is on {here}" if here else ""
+            return (f"{self.site} is checked out at {branch} ({commit}){mine}. "
+                    f"Check out the branch you are working on there:\n"
+                    f"  ssh {self.ssh_host} 'git -C {root} checkout <branch> "
+                    f"&& git -C {root} pull'")
+        return (f"{root} on {self.site} is a copy rather than a checkout, so "
+                f"nothing there tracks what you are working on. Sync the tree to "
+                f"it and try again.")
 
     def available(self) -> bool:
         """Whether the far side answers, asked once and remembered.
@@ -311,15 +386,21 @@ class SlurmSshExecutor(Executor):
 
     # --- the four operations ----------------------------------------------
     def submit(self, spec: JobSpec) -> JobRecord:
+        domain, cap = spec.capability.split("/", 1)
         # Already done? A run's identity is what decides what it produces,
         # so an identical one that finished is this one's answer. Checked here
         # rather than in each caller because every caller wants it and the
         # check needs the registry, which is this executor's.
-        done = _reuse.finished_match(self.registry, spec)
+        #
+        # Except where the capability says its work does not repeat. That is
+        # declared, so it is read rather than assumed, and reading it is local:
+        # this is the entry this client already renders the job script from, not
+        # a second trip to the far side.
+        done = _reuse.finished_match(self.registry, spec,
+                                     determinism=self._determinism(domain, cap))
         if done is not None:
             return done
 
-        domain, cap = spec.capability.split("/", 1)
         # Decided here so the store over there names the run with it, leaving one
         # identifier for a caller, a directory, and anything asking about either.
         job_id = f"{cap}-{uuid.uuid4().hex[:8]}"
