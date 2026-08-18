@@ -203,6 +203,23 @@ def sites() -> None:
 
 
 def main() -> int:
+    # `--site <name>` installs onto a machine reached over ssh instead of this
+    # one. Handled here rather than in setup.sh so there is one entry point to
+    # an installation, whichever machine it lands on, and so a site name is
+    # validated against the profiles rather than against a shell string.
+    argv = sys.argv[1:]
+    if argv and argv[0] == "--site":
+        if len(argv) < 2:
+            print("--site needs the name of a site. Try: ./setup.sh --site randi",
+                  file=sys.stderr)
+            return 2
+        sys.path.insert(0, str(TREE / "infrastructure" / "setup"))
+        # Named site_install rather than site: the standard library has a
+        # module called `site`, it is imported before any of this runs, and
+        # `import site` would therefore have quietly returned that one.
+        import site_install                                     # noqa: PLC0415
+        return site_install.ready(argv[1], dry_run="--dry-run" in argv)
+
     print(f"\nanalysis-core, installing into {TREE}\n")
     essential = client_env() and client_settings()
     print()

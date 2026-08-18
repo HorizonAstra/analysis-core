@@ -27,6 +27,12 @@ well that fit, is recorded per sample. Read it before comparing samples to each
 other, and surface one that fits much worse than the rest rather than pooling it
 in silently.
 
+**Say which samples an answer covers.** What has been computed varies from
+sample to sample, so an analysis across a study is across whatever part of it
+had the inputs, which is rarely all of it. A comparison over part of a cohort,
+described as though it covered the whole, is wrong in a way the reader has no
+way to detect. Find out what is actually there and name the count you used.
+
 **Results that already existed were not necessarily produced here.** Where a
 result carries no record of the code that made it, it can be used and shown but
 not reproduced from here, and it should be described that way.

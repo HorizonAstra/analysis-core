@@ -85,8 +85,9 @@
       "type": "directory",
       "required": true,
       "staged_as": "{data_dir}/reference",
-      "description": "The reference_data directory. It must be the one holding Hg38_GeneNames_MultipleFormats.txt, not a subdirectory of it: the script joins that filename onto whatever path it is given.",
-      "from_site": "tumorspace"
+      "description": "The reference_data directory. It must be the one holding Hg38_GeneNames_MultipleFormats.txt, not a subdirectory of it: the script joins that filename onto whatever path it is given. Linked rather than copied. The machine owns it, the script only reads from it, and it is the same bytes for every run and every user, so copying it charged each run for something none of them changes.",
+      "from_site": "tumorspace",
+      "stage_mode": "link"
     }
   ],
   "outputs": [

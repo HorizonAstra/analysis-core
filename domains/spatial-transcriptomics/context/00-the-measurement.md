@@ -24,4 +24,13 @@ how a sample gets described as unprocessed when the prepared files are sitting
 right next to the thing being pointed at.
 
 Samples are independent of one another unless a study says otherwise. There is
-no repeated-measures structure here to correct for by default.
+no repeated-measures structure here to correct for by default. That is a
+consequence of what is recorded rather than a claim about the biology: where the
+data does not say which person a sample came from, two samples from one person
+could not be told apart from two samples from two, so nothing here is corrected
+for it and nothing here claims there was nothing to correct.
+
+What is measured sits inside what is measured about. A value belongs to a
+position, a position to a sample, a sample to the person it came from. Anything
+said about the person is therefore an inference from one piece of their tissue,
+and a section is not the tumour any more than one sample is the cohort.

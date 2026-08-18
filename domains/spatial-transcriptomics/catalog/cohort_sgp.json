@@ -19,7 +19,7 @@
     ],
     "sha256": {
       "kernels/sg_analysis/R/run_cohort_sgp_analysis.R": "3a0b675e3710292c8e23b83d0595cc37c1c6484b463ae221b5e5f62612f0b980",
-      "kernels/sg_analysis/R/cohort_ksweep.R": "c0792a1849886af47d360d91f17e6cc0699e1033f3542fde782ece6bac85bf72",
+      "kernels/sg_analysis/R/cohort_ksweep.R": "a6499590cb336817853060740c18463c90164a089859a6aa8849b6c8c0185111",
       "kernels/sg_analysis/R/cohort_spatial.R": "01c1cac42471b04880f07d90d5bf73c15855ca3bae082a087b9a74e909986e19"
     },
     "functions": [
@@ -183,6 +183,6 @@
     "basis": "derived_from_algorithm"
   },
   "notes": "The only capability whose result is not attributable to a single sample. Everything at levels 1 to 3 can be recomputed for one sample in isolation; this one cannot, because the decomposition is joint. That is also why its inputs are a manifest and a directory rather than a list of files: the set of samples is itself a parameter of the analysis.",
-  "interpretation": "The association with collection site is reported beside the association with group for a reason: a program that tracks the site is an artifact of where samples were collected, not a finding about the group, and it has to be excluded before anything is read from it. A cohort claim rests on each sample's loading on a program rather than on the program's existence.",
+  "interpretation": "The association with collection site is reported beside the association with group for a reason: a program that tracks the site is an artifact of where samples were collected, not a finding about the group, and it has to be excluded before anything is read from it. A cohort claim rests on each sample's loading on a program rather than on the program's existence.\n\nEvery p value from the K sweep is a candidate, not an association. The sweep runs one test per signed program per K \u2014 841 of them on a 58 program, 26 K cohort \u2014 reports the smallest per K, and corrects for none of it. Bonferroni over 841 tests puts the threshold at 5.9e-5, and on the 19 sample NSCLC cohort the strongest program reached 0.018, so nothing there survives correction. Read the ranking, not the significance.\n\nPhase 2 output produced before 2026-08-18 is not usable. Its tests counted one row per spatial group pair rather than one per sample, so a 19 sample cohort was tested as about 2,600 observations and the p values are inflated without bound; 725 of 841 programs came out significant, against 70 after the fix. sv_depth was never affected, because phase 1 always aggregated by sample. Anything downstream of the sweep has to be regenerated.",
   "for_people": "Finds expression programs that recur across samples, and tests whether one tracks a group."
 }

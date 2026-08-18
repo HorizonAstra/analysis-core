@@ -44,6 +44,22 @@ suppressPackageStartupMessages(library(data.table))
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+.site_test <- function(vals, sts, site_levels) {
+  # The site comparison, when there is a second site to compare against.
+  #
+  # Both callers used to write `site_levels[2]` unconditionally. On a cohort
+  # from one site that index is NA, and the two callers then behaved
+  # differently: the data.table one selected no rows and fell through to the
+  # empty-input guard below, while this one is plain vector subsetting, where
+  # an NA index returns NA — one per row. That vector is long enough to pass
+  # the guard, so wilcox.test was handed a column of NAs and the P value it
+  # produced meant nothing. Written once so the two cannot diverge again.
+  if (length(site_levels) < 2 || is.na(site_levels[2]))
+    return(.wilcox_auroc(numeric(0), numeric(0)))
+  .wilcox_auroc(vals[sts == site_levels[1]], vals[sts == site_levels[2]])
+}
+
+
 .wilcox_auroc <- function(a, b) {
   if (length(a) < 2 || length(b) < 2)
     return(list(n_A  = length(a), n_B  = length(b),
@@ -193,9 +209,7 @@ sv_depth_test <- function(u_full, cast_meta, manifest, n_load, out_dir) {
     p_group <- .kruskal_p(vals, grps)
     pw      <- .pairwise_tests(vals, grps, group_levels)
 
-    s1      <- vals[sts == site_levels[1]]
-    s2      <- vals[sts == site_levels[2]]
-    stest   <- .wilcox_auroc(s1, s2)
+    stest   <- .site_test(vals, sts, site_levels)
 
     row <- data.table(
       SV          = k,
@@ -236,7 +250,23 @@ ksweep <- function(u_full, cast_meta, manifest, sv_tests,
   n_sv  <- min(n_load, ncol(u_full))
   abs_u <- abs(u_full[, seq_len(n_sv)])
 
-  meta <- merge(data.table(SampleID = cast_meta$SampleID),
+  # One row per sample, not one row per spatial-group pair.
+  #
+  # `cast_meta` holds a row for every (SampleID, Node, Sibling), so a sample
+  # appears in it once per pair it contributed — hundreds of times. `freq`
+  # below produces one fraction per sample, and merging that onto an
+  # un-deduplicated table copies each sample's single value once per pair. The
+  # tests then counted those copies as observations: a 19 sample cohort was
+  # tested as though it had about 2,600, which is pseudoreplication and inflates
+  # significance without bound. Measured on the 19 sample NSCLC cohort, the
+  # smallest P_group was 3.01e-215 and 725 of 841 programs came out
+  # "significant"; deduplicating gives 0.0030 and 70 of 841.
+  #
+  # Phase 1 never had this: `sv_depth_test` aggregates to one row per sample
+  # with `by = SampleID` before it merges. This makes Phase 2 agree with Phase 1
+  # and with the header above, which already said "compute per-sample
+  # fractions, then test".
+  meta <- merge(data.table(SampleID = unique(cast_meta$SampleID)),
                 manifest[, .(SampleID = sample_id, site, group)],
                 by = "SampleID", all.x = TRUE)
 
@@ -294,9 +324,7 @@ ksweep <- function(u_full, cast_meta, manifest, sv_tests,
       p_group <- .kruskal_p(ps$Frac, ps$group)
       pw      <- .pairwise_tests(ps$Frac, ps$group, group_levels)
 
-      s1      <- ps[site == site_levels[1], Frac]
-      s2      <- ps[site == site_levels[2], Frac]
-      stest   <- .wilcox_auroc(s1, s2)
+      stest   <- .site_test(ps$Frac, ps$site, site_levels)
 
       row <- data.table(
         K               = K,
@@ -387,8 +415,23 @@ run_cohort_ksweep <- function(manifest, base_dir, out_dir,
                                da_file            = "gene/DA_significant.txt",
                                q_string           = "< 0.05") {
   stopifnot(all(c("sample_id", "canonical_dir", "site", "group") %in% names(manifest)))
-  stopifnot(length(unique(manifest$site))  >= 2)
   stopifnot(length(unique(manifest$group)) >= 2)
+
+  # A cohort from one site is allowed, and says so rather than being refused.
+  #
+  # This used to be a second stopifnot demanding two sites. The purpose of the
+  # site column is to find programs that track the batch rather than the
+  # biology, and with one site that question cannot be asked — but it cannot be
+  # asked with two either, in the sense that matters: site is confounded with
+  # batch, and two levels does not make the correction sound. Refusing to run
+  # was therefore not protecting anybody from a wrong answer, it was withholding
+  # a right one. P_site stays NA, the SV mask already skips NA, and the run says
+  # plainly that the question went unexamined.
+  if (length(unique(manifest$site)) < 2)
+    message("NOTE: one site in this cohort, so no program can be tested for ",
+            "site association. P_site is NA throughout and nothing is masked. ",
+            "Whether these programs track the batch rather than the biology is ",
+            "UNEXAMINED, not answered in the negative.")
 
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
   message(sprintf("\n=== run_cohort_ksweep | %d samples | K=%d..%d | N_LOAD=%d ===",

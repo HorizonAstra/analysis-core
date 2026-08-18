@@ -481,6 +481,16 @@ def staging_check(contract: dict) -> tuple[list[str], bool]:
     handed a path under the staging tree that was never written, and the failure
     surfaces as a missing input several steps from the cause. Every path here has
     to begin with a role.
+
+    And: a directory the machine provides is never copied. `from_site` names
+    something the site holds that belongs to no study and is produced by no run
+    — a reference genome, a database, a lookup table. It is shared, read only,
+    and the same bytes for everybody, so copying it into a staging tree moves it
+    once per run, per sample fanned out, and per user. `spacet` did exactly that
+    with a reference directory. It is 8.7 MB today, which is why nobody noticed,
+    and the next reference put beside it is a genome index at three to thirty
+    gigabytes. Staging mode is a property of what the input is, so it is checked
+    rather than remembered each time one is added.
     """
     lines, ok = [], True
     roles = "|".join(DIR_ROLES)
@@ -492,6 +502,13 @@ def staging_check(contract: dict) -> tuple[list[str], bool]:
                              f"staged_as {item.get('staged_as')!r} names no directory "
                              f"role, so it resolves relative to the runner")
                 ok = False
+    for i in contract.get("inputs", []):
+        if i.get("from_site") and i.get("stage_mode") != "link":
+            lines.append(f"  COPIED    input {i['name']:<20} comes from the site and "
+                         f"would be copied into the staging tree. Set "
+                         f"\"stage_mode\": \"link\": the machine owns it, nothing "
+                         f"writes to it, and its size is not this run's business")
+            ok = False
     return lines, ok
 
 
