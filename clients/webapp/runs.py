@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import concurrent.futures
 import threading
 import time
 from pathlib import Path
@@ -315,9 +316,27 @@ def bring_back(user: str, run: str) -> bool:
     return False
 
 
+# Transfers run here rather than on a thread each. One thread per run is fine
+# when a run finishes on its own, and it is not fine when the panel is drawn:
+# every result the person has that is not on this machine yet is noticed at the
+# same moment, and each one opened its own ssh. Fifty at once is not fifty
+# transfers, it is a login node applying MaxStartups and refusing most of them,
+# which surfaces as the cluster being unreachable and leaves the panel empty for
+# the reason it was trying to fix.
+#
+# Two at a time, because this is a shared machine that other people are also
+# reaching, and nobody is waiting on any single one of these — the work is
+# already done and this is only fetching it.
+_TRANSFERS = concurrent.futures.ThreadPoolExecutor(
+    max_workers=2, thread_name_prefix="bring-back")
+
+
 def _bring_back_later(user: str, run: str) -> None:
-    """Start the copy without holding up whatever noticed the run had finished."""
-    threading.Thread(target=bring_back, args=(user, run), daemon=True).start()
+    """Queue the copy without holding up whatever noticed the run had finished."""
+    try:
+        _TRANSFERS.submit(bring_back, user, run)
+    except RuntimeError:                      # interpreter shutting down
+        pass
 
 
 def _refresh_views(user: str, run: str) -> list:

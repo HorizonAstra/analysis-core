@@ -109,7 +109,16 @@ def record_for(row: dict, site: str, studies: dict) -> JobRecord:
                      inputs=inputs,
                      site=site,
                      parameters=dict(row.get("parameters") or {}),
-                     workspace=row.get("workspace") or "default"),
+                     workspace=row.get("workspace") or "default",
+                     # Where the run's results are on the machine that made them.
+                     # A submitting client learns this when the job lands; a
+                     # record built from a listing has to be told, and the
+                     # listing knows. Without it everything above worked and the
+                     # one thing that matters did not: opening a result reads
+                     # its manifest over there, at `spec.output_path`, so an
+                     # adopted run asked the far side to read `None` and every
+                     # transfer failed on a path that was never set.
+                     output_path=row.get("path") or None),
         executor=site,
         # Only finished work is adopted, so there is one state it can be in. A
         # run still going is the submitting client's to report on; a run that
