@@ -63,8 +63,9 @@ class ArtifactStore:
         self.root = Path(os.path.expandvars(str(root))).expanduser()
         # What each run read, remembered while one listing runs. A chain asks for
         # the run below it, and a listing walks every step of every chain.
-        self._read_cache: dict = {}
+        self._read_index: dict | None = None
         self._roles_cache: dict = {}
+        self._kinds_cache: dict = {}
 
     # --- writing ----------------------------------------------------------
     def new_run(self, capability: str, workspace: str = "default",
@@ -137,15 +138,20 @@ class ArtifactStore:
         Cached for the length of a listing, because a chain asks for the run
         below it and a listing walks the whole chain for every step of it.
         """
-        if run in self._read_cache:
-            return self._read_cache[run]
-        found = None
-        for path, m in self._manifests():
-            if path.parent.name == run:
-                found = self._referenced(m, self._domain_of(path))
-                break
-        self._read_cache[run] = found
-        return found
+        if self._read_index is None:
+            # One pass, not one pass per question. This is asked while following
+            # a chain back to the sample it started from, so a listing asks it
+            # about most of the runs it is listing, and a scan per answer makes
+            # the whole listing quadratic: on a cohort's worth of work that was
+            # a hundred thousand manifest reads over a shared filesystem, and
+            # the listing stopped finishing inside the ssh timeout — which a
+            # client reports as the machine being unreachable, because from
+            # where it stands that is indistinguishable.
+            self._read_index = {
+                path.parent.name: self._referenced(m, self._domain_of(path))
+                for path, m in self._manifests()
+            }
+        return self._read_index.get(run)
 
     def _domain_of(self, path: Path) -> str:
         """Which domain a run sits in, from where the store filed it.
@@ -173,6 +179,9 @@ class ArtifactStore:
         Empty when the entry cannot be read, which puts the reconstruction back
         on its own judgement rather than failing a listing over a missing file.
         """
+        key = (capability, domain)
+        if key in self._kinds_cache:
+            return self._kinds_cache[key]
         bare = capability.split("/")[-1]
         roots = ([_TREE / "domains" / domain] if domain
                  else sorted((_TREE / "domains").glob("*")))
@@ -182,7 +191,10 @@ class ArtifactStore:
                 contract = json.loads(path.read_text())
             except (OSError, ValueError):
                 continue
-            return {i["name"]: i for i in contract.get("inputs") or [] if i.get("name")}
+            found = {i["name"]: i for i in contract.get("inputs") or [] if i.get("name")}
+            self._kinds_cache[key] = found
+            return found
+        self._kinds_cache[key] = {}
         return {}
 
     def _role_words(self, domain: str) -> frozenset:
@@ -279,6 +291,10 @@ class ArtifactStore:
         # <workspace>/<domain>/<capability>/<run>/<output...>
         return rel.parts[3] if len(rel.parts) >= 4 else ""
 
+    def _subject(self, referenced: dict, domain: str) -> str:
+        """The sample, from references already built. See `_sample`."""
+        return _reference.subject(referenced, self._reads, self._role_words(domain))
+
     def _sample(self, manifest: dict, domain: str = "") -> str:
         """Which sample a run is about, following what it read back to the data.
 
@@ -304,6 +320,8 @@ class ArtifactStore:
             if capability and not self._same_capability(capability, cap):
                 continue
             rel = path.parent.relative_to(self.root)
+            domain = rel.parts[1] if len(rel.parts) > 1 else ""
+            referenced = self._referenced(m, domain)
             out.append({
                 "run": path.parent.name,
                 "capability": cap,
@@ -311,7 +329,7 @@ class ArtifactStore:
                 # leaves the sample buried among run ids for a reader to pick
                 # out, which is a guess, and a reader that guesses reports "at
                 # least a couple of samples" for work covering nineteen.
-                "sample": self._sample(m, rel.parts[1] if len(rel.parts) > 1 else ""),
+                "sample": self._subject(referenced, domain),
                 "on": self._on(m),
                 "version": m.get("contract_version"),
                 "site": m.get("profile"),
@@ -320,7 +338,7 @@ class ArtifactStore:
                 # the bare capability, and two domains here declare the same
                 # one, so a caller rebuilding a qualified name from a listing
                 # cannot get it from the manifest alone.
-                "domain": rel.parts[1] if len(rel.parts) > 1 else "",
+                "domain": domain,
                 "finished": m.get("finished"),
                 "reproducible": m.get("reproducible"),
                 "freeze_check": m.get("freeze_check"),
@@ -331,8 +349,7 @@ class ArtifactStore:
                 # them a reader can say a thing was run and not what it was run
                 # with, which is the difference between a record and a count.
                 "parameters": m.get("parameters") or {},
-                "inputs": self._referenced(
-                    m, rel.parts[1] if len(rel.parts) > 1 else ""),
+                "inputs": referenced,
             })
             if len(out) >= limit:
                 break
