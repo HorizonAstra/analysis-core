@@ -22,6 +22,7 @@ import json
 import shlex
 import subprocess
 import sys
+import time
 import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -91,6 +92,10 @@ def _local_branch() -> str:
         return ""
 
 
+# How long an unreachable answer is believed before the machine is asked again.
+# Short, because the cost of being wrong the other way is a probe.
+_RETRY_UNREACHABLE = 30.0
+
 class SlurmSshExecutor(Executor):
     name = "slurm-ssh"
 
@@ -112,6 +117,7 @@ class SlurmSshExecutor(Executor):
         self._expanded: dict[str, str] = {}
         self._built: dict[str, bool] = {}
         self._reachable: bool | None = None
+        self._reachable_at: float = 0.0
         self._datasets: list | None = None
         # Capabilities whose catalog entry has been checked against the far
         # side this session. One check each, not one per submission.
@@ -263,18 +269,35 @@ class SlurmSshExecutor(Executor):
                 f"it and try again.")
 
     def available(self) -> bool:
-        """Whether the far side answers, asked once and remembered.
+        """Whether the far side answers. A yes is kept; a no is re-asked.
 
         A machine that is down should remove its capabilities from the menu
         rather than accept work that cannot start. The timeout is short because
         this runs while a client is starting up.
+
+        The two answers are not worth the same and used to be treated as though
+        they were. A yes can be kept for the life of this executor: a machine
+        that answered will not stop being one, and if it does, the next real
+        command fails with a better account of why than a probe could give.
+
+        A no cannot. This runs over a VPN to a name that resolves to more than
+        one login node, so a probe timing out is ordinary and says nothing about
+        the next eight seconds. Remembered, it turned a blip into a cluster that
+        stayed down: the menu lost its capabilities, the model reported that it
+        could not reach the machine, and it went on reporting that after the
+        network had come back, because nothing was ever going to ask again.
         """
-        if self._reachable is None:
-            probe = subprocess.run(
-                ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
-                 self.ssh_host, "true"],
-                stdin=subprocess.DEVNULL, capture_output=True, text=True)
-            self._reachable = probe.returncode == 0
+        if self._reachable:
+            return True
+        if (self._reachable is False
+                and (time.monotonic() - self._reachable_at) < _RETRY_UNREACHABLE):
+            return False
+        probe = subprocess.run(
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
+             self.ssh_host, "true"],
+            stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self._reachable = probe.returncode == 0
+        self._reachable_at = time.monotonic()
         return self._reachable
 
     def can_run(self, contract) -> tuple[bool, str]:
