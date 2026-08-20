@@ -85,7 +85,7 @@ class Remote:
     def __init__(self, host: str, preamble: list, dry_run: bool = False):
         self.host, self.dry_run = host, dry_run
         self.preamble = "; ".join(preamble) if preamble else ""
-        self._root: str | None = None
+        self._expanded: dict = {}
 
     def _ssh(self, command: str, modules: bool,
              merge: bool = True) -> tuple[int, str]:
@@ -121,18 +121,26 @@ class Remote:
         """
         return self._ssh(command, False, merge=False)[1]
 
-    def root(self, install_root: str) -> str:
-        """`install_root` as it reads over there, asked once.
+    def expand(self, value: str) -> str:
+        """One of the site's paths as it reads over there, asked once each.
 
         A profile writes ${USER} and ${ANALYSIS_CORE} on purpose so one file
         serves every account on the machine, and only the machine can say what
-        those come out as.
+        those come out as. Every path taken from a profile has to come through
+        here: `install_root` did and `stage_root` did not, so the build was
+        told to write its log to a directory with a literal ${USER} in the
+        name, which is not a place, and the submission failed before the
+        scheduler ever saw it.
         """
-        if "$" not in install_root:
-            return install_root
-        if self._root is None:
-            self._root = self.ask(f'printf %s "{install_root}"') or install_root
-        return self._root
+        if "$" not in value:
+            return value
+        if value not in self._expanded:
+            self._expanded[value] = self.ask(f'printf %s "{value}"') or value
+        return self._expanded[value]
+
+    def root(self, install_root: str) -> str:
+        """Where this tree is installed over there."""
+        return self.expand(install_root)
 
 
 def place(remote: Remote, root: str, origin: str, branch: str) -> bool:
@@ -162,6 +170,16 @@ def place(remote: Remote, root: str, origin: str, branch: str) -> bool:
             return False
         say(OK, "cloned")
 
+    # Whether a file is executable is not something every filesystem stores.
+    # This lab share carries default ACLs that drop the bit as git writes the
+    # file, so a clone that has just been made reports every script in the tree
+    # as modified, and the next step then refuses to touch a checkout that
+    # nobody has edited. Told not to watch the bit, git agrees the tree is
+    # clean, and the scripts are invoked through their interpreter anyway.
+    # Set on every pass rather than only after a clone: a copy placed before
+    # this existed will not have it either.
+    remote.run(f"git -C {quoted} config core.fileMode false")
+
     dirty = remote.ask(f"git -C {quoted} status --porcelain 2>/dev/null | head -5")
     if dirty:
         say(MISS, f"{root} has uncommitted changes, so it will not be moved:")
@@ -183,14 +201,57 @@ def place(remote: Remote, root: str, origin: str, branch: str) -> bool:
     return True
 
 
-def build(remote: Remote, root: str) -> bool:
-    """Run the far copy's own setup, so one script decides what an install is."""
-    say(WARN, "building environments there; this takes a while the first time")
-    code, out = remote.run(f"cd {shlex.quote(root)} && ./setup.sh", modules=True)
-    for line in (out or "").splitlines()[-25:]:
+def build(remote: Remote, root: str, profile: dict | None = None) -> bool:
+    """Run the far copy's own setup, so one script decides what an install is.
+
+    On a machine with a scheduler the setup is submitted rather than run where
+    the ssh landed. Building an installation is minutes of pip and conda, and a
+    login node is shared by everyone on the cluster and exists to submit work
+    rather than to do it — the same rule the runner already enforces for a
+    capability, applied to the one piece of work that was still exempt from it.
+    The job carries the site's own preamble, because a compute node starts with
+    nothing loaded and the setup needs a python newer than the system one, and
+    it calls the setup through bash rather than running it: the same default
+    ACLs that make a fresh clone look modified also drop the executable bit, so
+    the script is there and refuses to start.
+    """
+    where = shlex.quote(root)
+    scheduler = ((profile or {}).get("executor") or {})
+    if scheduler.get("scheduler") != "slurm":
+        say(WARN, "building environments there; this takes a while the first time")
+        code, out = remote.run(f"cd {where} && bash ./setup.sh", modules=True)
+    else:
+        say(WARN, "submitting the build to the scheduler; login nodes are for "
+                  "submitting, not for building")
+        inner = "; ".join((remote.preamble.split("; ") if remote.preamble else [])
+                          + [f"cd {where}", "bash ./setup.sh"])
+        scratch = remote.expand((profile or {}).get("stage_root") or "/tmp")
+        base = f"{scratch.rstrip('/')}/analysis-core-setup"
+        remote.run(f"mkdir -p {shlex.quote(scratch)}")
+        parts = [f"cd {where} &&", "jid=$(sbatch --parsable --wait",
+                 f"--job-name=analysis-core-setup",
+                 f"--account={shlex.quote(str(scheduler.get('account') or ''))}"
+                 if scheduler.get("account") else "",
+                 f"--partition={shlex.quote(str(scheduler.get('partition') or ''))}"
+                 if scheduler.get("partition") else "",
+                 "--nodes=1 --ntasks=1 --cpus-per-task=4 --mem=8G --time=02:00:00",
+                 # Not in the tree. A scheduler writes the job's output where it
+                 # is told, and told nowhere it writes into the working
+                 # directory — which is a git checkout, so the log makes the
+                 # tree dirty and the next install refuses to move a checkout
+                 # somebody appears to have edited.
+                 f"--output={shlex.quote(base + '-%j.out')}",
+                 f"--wrap={shlex.quote(inner)})",
+                 f'&& cat "{base}-$jid.out"']
+        code, out = remote.run(" ".join(x for x in parts if x))
+    for line in (out or "").splitlines()[-30:]:
         print(f"         {line}")
     if code != 0:
-        say(MISS, "setup did not finish there")
+        if not (out or "").strip():
+            say(MISS, "setup did not finish there, and said nothing about why. "
+                      "The submission itself failed, so there is no job log to read.")
+        else:
+            say(MISS, "setup did not finish there")
         return False
     say(OK, "environments built")
     return True
@@ -228,7 +289,7 @@ def ready(site: str, dry_run: bool = False) -> int:
         print()
         say(WARN, "dry run: nothing was changed and nothing was built")
         return 0
-    if not build(remote, where):
+    if not build(remote, where, profile):
         return 1
 
     print()

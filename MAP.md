@@ -69,8 +69,14 @@ there is no single list.
 `infrastructure/sites/randi.json`:
 
     /gpfs/data/dfi-cores/rijul/cancer/input-data/
-        KunleOdunsisCohort/            one study, 19 samples
-            samples/<sample>/         one Space Ranger run each, counts and spatial
+        spatial-transcriptomics/          the domain
+            KunleOdunsisCohort/           one study, 19 samples
+                2026-08-11/               the Space Ranger run in use
+                    samples/<sample>/     counts and spatial, per sample
+                    cohort/               the assembled cohort, and its manifest
+                2025-10-08/               the run it replaced
+                    samples/<sample>/     harmonised, each keeping its own
+                                          instrument run under spaceranger/
 
 One study, because there is one study. It used to appear as three: the
 instrument run, the prepared samples, and a small test copy were three folders
@@ -85,17 +91,34 @@ Nothing is prepared ahead of time. A capability that needs the harmonised form
 gets it by running the preparation step, which is worked out from the catalog
 rather than asked for; see `infrastructure/graph/plan.py`.
 
+Both levels above the study are load-bearing and neither is decoration. `_scan`
+looks for a version layer only under a folder named for a domain, and only
+under a study folder that is not itself a study — so a study sitting directly
+in the data root is read as the one thing it is, and the versions it holds are
+never looked for. This tree had exactly that shape until 2026-08-20, which is
+why a domain declaring `versioned` still offered nobody a choice.
+
 ### The lineage that was replaced
 
-Space Ranger was run over this cohort twice. Everything here is the second run.
-The first, and every result computed from it, is at
+Space Ranger was run over this cohort twice, and both runs are here. The second
+is `2026-08-11` and is what a reference resolves to when it does not say: the
+newest version is what a bare name means. The first is `2025-10-08`, and naming
+it is the point — the two runs disagree about the data itself, one sample going
+from 2277 spots to 2265, so a result computed from one is not a result about
+the other, and until there were two versions there was no way to say which a
+result was about.
 
-    /gpfs/data/dfi-cores/rijul/retired/
+It was at `/gpfs/data/dfi-cores/rijul/retired/` until 2026-08-20, outside every
+root anything reads, so none of it could be discovered, resolved or listed.
+That kept it safe and made it unusable, which is the state versions exist to
+replace.
 
-which is outside every root anything reads, so none of it can be discovered,
-resolved or listed. It is kept rather than deleted: the two runs disagree about
-the data itself, one sample going from 2277 spots to 2265, so a result from the
-first is not a result about what we now hold.
+What is still under `retired/` is there because it cannot be read rather than
+because it is old: `analysis-results-old-lineage` holds 79 runs whose manifests
+name their inputs as bare sample ids, written before an input carried its
+reference, so nothing can say what any of them read. Also `duplicate-harmonize-1N`,
+`fixtures-old-spaceranger`, and the copy of this tree that was placed by hand
+before there was an installer.
 
 **laptop** holds the microbiome studies, in this tree, at `data/microbiome/`:
 
@@ -131,6 +154,31 @@ user and writes at the root; the web app gives each of its users their own, on
 every machine including the cluster. The client says whose work it is submitting
 in `ANALYSIS_OWNER`, and the same idea covers the record of what was submitted,
 one registry per user under `clients/.userdata/state/<user>/`.
+
+That is two roots on the same machine, and work done at a terminal is invisible
+to the web app by design, because it is somebody else's. On randi it was not
+somebody else's: 28 runs sat at the root, read outputs belonging to the web
+app's only user, and could be reached by nobody. They were moved under that
+user on 2026-08-20. The empty capability folders they left behind are still at
+the root, which is the honest record of where they were.
+
+### The store is the record; the registry is not
+
+What has been run on a machine is what its store holds. The registry beside a
+client records what that client asked for, which is a smaller thing: work
+started from a terminal, work from an earlier session, and work put straight on
+the scheduler never pass through it. The results panel already read the store
+and was right. The versions grid reads the registry, so on this cohort it drew
+two `growchain` cells against eighteen results, and no `cohort_sgp` row at all
+against three.
+
+So each machine's store is read at start-up and anything the registry is
+missing is recorded into it — `infrastructure/executors/adopt.py`, called from
+the web app's `_warm`. An adopted record's inputs are reconstructed rather than
+remembered, because a manifest written before an input carried its reference
+kept only the path it resolved to. Reconstruction can be wrong in one direction
+only: a run whose inputs are spelled differently from how a client would spell
+them appears as a second version of the same work rather than as none.
 
 ### Results come back to the machine that shows them
 
