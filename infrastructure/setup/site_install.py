@@ -192,6 +192,22 @@ def place(remote: Remote, root: str, origin: str, branch: str) -> bool:
         f"git -C {quoted} checkout --quiet {shlex.quote(branch)} && "
         f"git -C {quoted} merge --ff-only --quiet origin/{shlex.quote(branch)}",
         modules=True)
+    if code != 0 and _rewritten(remote, quoted, branch):
+        # The branch was rebased or amended here after being installed there.
+        # Not a fast forward, and not local work either: every commit the far
+        # side holds is already upstream as an equivalent patch, which is what
+        # `git cherry` answers with a minus. So there is nothing on that machine
+        # to lose, and the refusal below would be protecting a copy of what it
+        # is refusing to be replaced by.
+        #
+        # Narrow on purpose. A single `+` is a commit that exists only there,
+        # and then this does not apply and the refusal stands. Built
+        # environments are untracked and a hard reset does not touch them.
+        say(WARN, f"{root} is on a rewritten history; every commit it holds is "
+                  f"already upstream, so it is being reset to origin/{branch}")
+        code, out = remote.run(
+            f"git -C {quoted} reset --hard --quiet origin/{shlex.quote(branch)}",
+            modules=True)
     if code != 0:
         say(MISS, f"could not put {root} on {branch}: {out[-400:]}")
         return False
@@ -199,6 +215,28 @@ def place(remote: Remote, root: str, origin: str, branch: str) -> bool:
     at = remote.ask(f"git -C {quoted} rev-parse --short HEAD")
     say(OK, f"{root} is on {branch}" + (f" at {at}" if at else ""))
     return True
+
+
+def _rewritten(remote: Remote, quoted: str, branch: str) -> bool:
+    """Whether the far side holds nothing that is not already upstream.
+
+    `git cherry` lists each commit on this side against the upstream branch,
+    prefixing one that has an equivalent patch there with `-` and one that does
+    not with `+`. All minuses means the far copy is an older spelling of the
+    same work, which is what an amend or a rebase leaves behind. Any plus means
+    somebody committed on that machine, and that is the case this must not
+    touch.
+
+    False on any doubt, including a command that fails or says nothing: this is
+    the guard in front of the one unrecoverable move here, and an unreadable
+    answer is not a yes.
+    """
+    out = remote.ask(f"git -C {quoted} status --porcelain | head -1")
+    if out.strip():
+        return False                      # edited there; a different question
+    listed = remote.ask(f"git -C {quoted} cherry origin/{shlex.quote(branch)}")
+    lines = [x for x in (listed or "").splitlines() if x.strip()]
+    return bool(lines) and all(x.lstrip().startswith("-") for x in lines)
 
 
 def build(remote: Remote, root: str, profile: dict | None = None) -> bool:
