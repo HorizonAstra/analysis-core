@@ -533,6 +533,9 @@ body.resizing .resize::after { opacity: 1; background: var(--ink-soft); }
 .v-table tbody tr:hover td.is-cross { background: color-mix(in srgb, var(--tint) 70%, var(--line)); }
 .v-table tbody tr:hover td.is-key { color: var(--ink); }
 .v-table th.is-cross { color: var(--ink); background: color-mix(in srgb, var(--tint) 55%, var(--paper)); }
+/* Waiting for an output that has to be fetched from the machine that made it. */
+.v-wait { padding: 14px 2px; }
+
 /* A note under a result is read, not glanced at, so it is not the smallest
    type in the app. Same size as the tooltip text and the settings table. */
 .v-note { color: var(--muted); font-size: 12px; padding: 7px 2px 0; }

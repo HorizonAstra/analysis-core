@@ -1753,8 +1753,15 @@ function iconForFmt(it) {
   return ICON.doc;
 }
 async function refreshResults() {
-  if (!currentChatId) { resultsData = { topics: [] }; renderTree(); return; }
-  try { resultsData = await (await fetch(`/api/results?chat_id=${currentChatId}`)).json(); }
+  // Asked even when this chat does not exist on the server yet. The panel shows
+  // the person's work rather than this conversation's — that is what
+  // `visible_runs` is for — so a chat with no id has the same results as one
+  // with an id and nothing run in it. Refusing to ask made a new chat open onto
+  // an empty panel and stay empty, which is the exact thing the per-person rule
+  // was written to stop, undone on the client by a guard that looks like it is
+  // only avoiding a pointless request.
+  const id = currentChatId || "";
+  try { resultsData = await (await fetch(`/api/results?chat_id=${enc(id)}`)).json(); }
   catch { resultsData = { topics: [] }; }
   renderTree();
 }
@@ -1952,7 +1959,38 @@ function openViewer(where) {
 }
 
 async function openItem(ref, name) {
-  let item; try { item = await (await fetch(`/api/results/item?chat_id=${currentChatId}&ref=${enc(ref)}&name=${enc(name)}`)).json(); } catch { return; }
+  // Said before the request rather than after it. An output that is still on the
+  // machine that produced it is copied here before it can be opened, and that is
+  // a transfer over a network with nothing on screen to say so: the click did
+  // nothing, for as long as it took, and the reasonable reading of that is that
+  // it is broken. So the panel gives way to the viewer immediately, with the way
+  // back already drawn and the same pulse the rest of the app waits with.
+  viewer.innerHTML = "";
+  const waitHead = el("v-head");
+  const waitBack = document.createElement("button");
+  waitBack.className = "v-back";
+  waitBack.innerHTML = `${ICON.back}<span>Results</span>`;
+  waitBack.addEventListener("click", showTree);
+  waitHead.appendChild(waitBack);
+  viewer.appendChild(waitHead);
+  const waiting = el("v-wait");
+  waiting.innerHTML = '<div class="working"><span class="pulse"></span>'
+                    + '<span class="label">Opening</span></div>';
+  viewer.appendChild(waiting);
+  tree.hidden = true; viewer.hidden = false;
+
+  let item;
+  try {
+    item = await (await fetch(`/api/results/item?chat_id=${enc(currentChatId || "")}&ref=${enc(ref)}&name=${enc(name)}`)).json();
+  } catch {
+    // Was a silent return, which left the pulse going for ever. A request that
+    // failed is something to say, not something to keep pretending about.
+    waiting.remove();
+    const n = el("v-note");
+    n.textContent = "Couldn’t open this — the machine holding it did not answer. Try again in a moment.";
+    viewer.appendChild(n);
+    return;
+  }
   viewer.innerHTML = "";
   const vhead = el("v-head");
   const back = document.createElement("button"); back.className = "v-back";
