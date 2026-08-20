@@ -1010,6 +1010,14 @@ function initMenu() {
   $("#mpTheme").addEventListener("click", (e) => {
     e.stopPropagation();
     applyTheme(currentTheme() === "dark" ? "light" : "dark");
+    // And let it go again. This menu closes when the pointer leaves it, unless
+    // focus is still inside — a guard that exists so the menu does not vanish
+    // from under somebody typing in the search field. A button keeps focus
+    // after being clicked, which is not somebody typing, and every other
+    // control in here closes the menu as part of what it does. This one does
+    // not, so it sat holding focus and the close declined for as long as it
+    // did: switch the theme, move away, and the menu stayed open for good.
+    e.currentTarget.blur();
   });
   $("#mpLogout").addEventListener("click", async () => { await fetch("/api/logout", { method: "POST" }); window.location.href = "/login"; });
 }
