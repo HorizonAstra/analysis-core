@@ -97,6 +97,9 @@ function currentTheme() {
 // the button is labelled later, because the icon set is declared further down
 // this file and reaching for it here would be a use-before-initialisation.
 function applyTheme(name) {
+  // The button is about to rewrite itself under the pointer, and a tooltip
+  // still pointing at what it held is describing a node that is going away.
+  hideTip();
   const t = THEMES.includes(name) ? name : "dark";
   document.documentElement.dataset.theme = t;
   localStorage.setItem("theme", t);
@@ -148,7 +151,17 @@ function menuAt(anchor, items) {
     b.querySelector(".pm-lead").textContent = it.lead || "";
     b.querySelector(".pm-label").textContent = it.label;
     b.querySelector(".pm-note").textContent = it.note || "";
-    if (!it.disabled) b.addEventListener("click", () => { closeMenuLayer(); it.onClick(); });
+    if (!it.disabled) b.addEventListener("click", (e) => {
+      // Kept from the document, which would otherwise read it as a click landing
+      // outside every open popover and close the panel this menu belongs to. The
+      // layer is swept before the handler runs, so by the time the document sees
+      // the event the node it is asked about is no longer in the page and cannot
+      // be recognised. The capture-phase dismissal has already run by now, so
+      // nothing that needs this click has been skipped.
+      e.stopPropagation();
+      closeMenuLayer();
+      it.onClick();
+    });
     m.appendChild(b);
   }
   document.body.appendChild(m);
@@ -274,6 +287,23 @@ function tip(node, content) {
 window.addEventListener("scroll", () => { if (tipFor) hideTip(); }, true);
 window.addEventListener("resize", () => { if (tipFor) hideTip(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTip(); });
+// A tooltip is dismissed by its own node's mouseleave, which assumes the node
+// outlives the tooltip. Several do not: a panel redraws, or a button swaps its
+// contents in response to being clicked. The old node leaves the page with the
+// pointer still inside where it used to be, so the mouseleave that would have
+// hidden the tooltip never fires and it stays on screen until something
+// unrelated clears it. Switching the theme did exactly that — the button
+// rewrites itself to the other icon under the cursor, and its description hung
+// there afterwards.
+//
+// So the tooltip also answers for itself: on any pointer movement, if the node
+// it describes has left the document or the pointer is no longer within it, it
+// goes. Cheap, because it does nothing at all unless a tooltip is showing.
+document.addEventListener("mouseover", (e) => {
+  if (!tipFor) return;
+  if (!tipFor.isConnected || !tipFor.contains(e.target)) hideTip();
+}, true);
+document.addEventListener("mouseleave", () => { if (tipFor) hideTip(); });
 
 // ── transcript rendering ─────────────────────────────────────────────────────
 function clearTranscript() { thread.innerHTML = ""; working = null; liveProse = null; resetLive(); }
@@ -1003,6 +1033,13 @@ const POPS = [["#studyBtn", "#studyPop"], ["#infoBtn", "#infoPop", ".info-card"]
 // reached the document and closed it. Reading the event cannot go stale, and it
 // is one rule for every popover instead of one listener per popover.
 function insideOpenPop(target) {
+  // The version menu is drawn in a fixed layer on <body> so that nothing can
+  // clip it, which puts it outside the card it belongs to. To this question it
+  // is inside: choosing a version is working within the panel, not leaving it.
+  // Read literally, every choice made from a menu counted as a click outside
+  // and closed the panel underneath it — so the grid shut the moment it was
+  // used, and staying open required changing nothing.
+  if (menuEl && menuEl.contains(target)) return true;
   for (const [, popSel, surfaceSel] of POPS) {
     const pop = $(popSel);
     if (!pop || pop.hidden) continue;
