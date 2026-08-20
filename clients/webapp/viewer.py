@@ -151,9 +151,7 @@ def router(*, bundles_for, current_user) -> APIRouter:
         # one was built somewhere this cannot read from and has not arrived yet.
         raise HTTPException(
             status_code=409,
-            detail=(f"{run} has no viewer bundle here yet. If a bundle was built "
-                    f"on another machine it is still on its way; otherwise build "
-                    f"one with the spatialview_bundle capability."))
+            detail=f"Nothing prepared for a viewer here yet ({run}).")
 
     def _samples(roots: list) -> list[Path]:
         """Every sample across every bundle, each named once.
@@ -229,11 +227,9 @@ def router(*, bundles_for, current_user) -> APIRouter:
         if root is None:
             raise HTTPException(
                 status_code=503,
-                detail=(f"No viewer called {kind} is installed here."
-                        + (" Set SPATIALVIEW_ROOT to a copy of it. It is not "
-                           "distributed with this repository: its licence is "
-                           "academic and non-transferable, so each deployment "
-                           "obtains its own." if kind == "spatialview" else "")))
+                # The licence note belongs to whoever installs this, and it is in
+                # the README. A reader who clicked a viewer needs one sentence.
+                detail=f"This viewer is not installed ({kind}).")
         _roots(kind, run, user)                  # entitlement first, files after
         target = _within(root, path) if path else root
         if target.is_dir():

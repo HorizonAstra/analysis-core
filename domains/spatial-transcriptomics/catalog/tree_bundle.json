@@ -104,7 +104,7 @@
       "required": false,
       "staged_as": "{data_dir}/SLAB_barcodes.txt",
       "produced_by": "slab",
-      "produced_output": "scores",
+      "produced_output": "barcodes",
       "description": "Which spots carry each feature's local bias. This is what lets a spatial group say what fraction of it carries one, which a per-sample score cannot."
     }
   ],

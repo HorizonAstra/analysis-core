@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Multiomics</title>
-  <link rel="icon" href="/favicon.ico" />
+  <link rel="icon" href="/static/icons/mark.svg" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
@@ -13,47 +13,50 @@
       <header class="topbar">
         <div class="bar">
           <div class="left">
-            <button class="iconbtn" id="menuBtn" aria-label="Menu">
-              <img src="/static/icons/00-hexagon.svg?v=5" width="40" height="40" alt="" />
-            </button>
-            <span class="brand">Multiomics</span>
-            <button class="infobtn" id="infoBtn" aria-label="What this can do" title="What this can do">
-              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/>
-                <path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
-                <circle cx="12" cy="7.8" r="1.15" fill="currentColor"/>
+            <!-- mark + wordmark are one control: it opens the user/chats menu. The mark
+                 is inline rather than an <img> so it takes its colour from the theme —
+                 a file with the ink baked in disappears into a dark background. -->
+            <button class="brandbtn" id="menuBtn" aria-haspopup="true" title="Chats">
+              <svg class="mark" viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+                <rect width="32" height="32" rx="6" fill="currentColor"/>
+                <path d="M9.5 22.5V9.5L16 17.5l6.5-8v13" fill="none" stroke="var(--paper)"
+                      stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="brand">Multiomics</span>
+              <svg class="brand-chev" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                <path d="M6 10l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.5"
+                      stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
+            <!-- The study scope sits beside the name because it says what the name is
+                 currently about. Stays a word: it is the only control whose label is
+                 data rather than a fixed noun. -->
+            <button class="ghost scope" id="studyBtn"><span id="studyLabel">Studies</span></button>
           </div>
+          <!-- Icons, not words. Each opens a surface that names itself. -->
           <div class="right">
-            <button class="ghost" id="viewBtn" aria-label="Visualizers" title="Visualizers">
+            <button class="iconbtn" id="viewBtn" aria-label="Visualizers" title="Visualizers">
               <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-                <rect x="3.5" y="4.5" width="17" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/>
-                <path d="M3.5 14l4.2-3.6 3.1 2.6 3.6-4 6.1 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                <circle cx="9" cy="8.6" r="1.2" fill="currentColor"/>
+                <path d="M4 4.5v15h15.5" fill="none" stroke="currentColor" stroke-width="1.5"
+                      stroke-linecap="round"/>
+                <path d="M7.5 15.5l3.5-4.5 3 2.5 4.5-6" fill="none" stroke="currentColor"
+                      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              <span>Visualizers</span>
             </button>
-            <button class="ghost" id="verBtn" aria-label="Versions" title="Versions">
+            <button class="iconbtn" id="verBtn" aria-label="Versions" title="Versions">
               <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-                <path d="M4 5.5h16M4 12h16M4 18.5h16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                <circle cx="8.5" cy="5.5" r="2.1" fill="var(--paper, #fff)" stroke="currentColor" stroke-width="1.7"/>
-                <circle cx="15" cy="12" r="2.1" fill="var(--paper, #fff)" stroke="currentColor" stroke-width="1.7"/>
-                <circle cx="10.5" cy="18.5" r="2.1" fill="var(--paper, #fff)" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M12 3.5l8.5 4.5L12 12.5 3.5 8z" fill="none" stroke="currentColor"
+                      stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M3.5 13l8.5 4.5 8.5-4.5" fill="none" stroke="currentColor"
+                      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              <span>Versions</span>
             </button>
-            <button class="ghost" id="studyBtn" aria-label="Study Selection">
+            <button class="iconbtn" id="panelToggle" aria-label="Results" title="Results">
               <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-                <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H19v13H6.5A2.5 2.5 0 0 0 4 19.5zM19 17v3H6.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none"
+                      stroke="currentColor" stroke-width="1.5"/>
+                <path d="M14 4.5v15" fill="none" stroke="currentColor" stroke-width="1.5"/>
               </svg>
-              <span id="studyLabel">Studies</span>
-            </button>
-            <button class="ghost" id="panelToggle" aria-label="Toggle results">
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                <path d="M4 6h10M4 12h16M4 18h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
-              <span>Results</span>
             </button>
           </div>
         </div>
@@ -66,23 +69,28 @@
       <footer class="composer">
         <div class="wrap">
           <form id="form" class="field">
-            <textarea id="input" rows="1" placeholder="Ask about a study…" autocomplete="off"></textarea>
+            <textarea id="input" rows="1" placeholder="Ask about a study" autocomplete="off"></textarea>
             <button id="send" type="submit" aria-label="Send" disabled>
-              <svg class="ic-send" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                <path d="M12 19V5M12 5l-6 6M12 5l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg class="ic-send" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor"
+                      stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              <svg class="ic-stop" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <svg class="ic-stop" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
                 <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/>
               </svg>
             </button>
           </form>
-          <div class="hint">AI can make mistakes. Review the results before relying on them.</div>
+          <div class="hint">AI can make mistakes. Review results before relying on them.</div>
         </div>
       </footer>
     </div>
 
     <aside class="panel" id="panel" aria-label="Results">
-      <div class="resize" id="resize" title="Drag to resize"></div>
+      <div class="resize" id="resize"></div>
+      <div class="panel-head">
+        <span class="ph-title">Results</span>
+        <span class="ph-count" id="phCount"></span>
+      </div>
       <div class="panel-body">
         <!-- Work still going, wherever in the conversation it was started. One
              place for it, because a long chat scatters the same information
@@ -96,41 +104,43 @@
   </div>
   <div class="backdrop" id="backdrop"></div>
 
-  <!-- user + chats popup (opened by the top-left icon) -->
+  <!-- user + chats popup (opened by the wordmark) -->
   <div class="menu-pop" id="menuPop" hidden>
     <button class="mp-new" id="mpNew">
-      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       <span>New chat</span>
     </button>
-    <input class="mp-search" id="mpSearch" placeholder="Search chats" autocomplete="off" />
+    <button class="mp-new" id="mpCaps">
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M12 11.4v5.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="12" cy="7.6" r="1.05" fill="currentColor"/>
+      </svg>
+      <span>Capabilities</span>
+    </button>
+    <input class="mp-search" id="mpSearch" placeholder="Search" autocomplete="off" />
     <div class="mp-chats" id="mpChats"></div>
     <div class="mp-foot">
       <span class="mp-user" id="mpUser"></span>
+      <button class="mp-theme" id="mpTheme" type="button"></button>
       <button class="mp-logout" id="mpLogout">Sign out</button>
     </div>
   </div>
 
-  <!-- studies in scope for this chat (opened by the Studies button) -->
+  <!-- studies in scope for this chat. No heading: it hangs off the button that names it. -->
   <div class="menu-pop study-pop" id="studyPop" hidden>
-    <div class="pop-head">
-      <div class="pop-title">Study Selection</div>
-    </div>
     <div class="sp-list" id="spList"></div>
     <div class="sp-foot">
-      <button class="sp-all" id="spAll" type="button">Select all</button>
+      <button class="sp-all" id="spAll" type="button">All</button>
       <span class="sp-count" id="spCount"></span>
     </div>
   </div>
 
-  <!-- results that can be looked at rather than read (opened by the Visualizers button) -->
+  <!-- results that can be looked at rather than read -->
   <div class="menu-pop view-pop" id="viewPop" hidden>
-    <div class="pop-head">
-      <div class="pop-title">Visualizers</div>
-    </div>
     <div class="vw-list" id="vwList"></div>
   </div>
 
-  <!-- capabilities (opened by the info button beside the name) -->
   <!-- which version of each result is in play. User-scoped, unlike the results
        panel: this answers "what do I have", which is about the data rather than
        about this conversation. -->
@@ -138,11 +148,9 @@
    <div class="info-card ver-card">
     <div class="pop-head">
       <div class="pop-title">Versions</div>
-      <div class="pop-sub">Every result you have, and which one this chat is working with.
-        Newest is used unless you pick another. Clear a cell to run something fresh.</div>
       <button class="ip-close" id="verClose" type="button" aria-label="Close">
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-          <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
       </button>
     </div>
@@ -155,15 +163,13 @@
    <div class="info-card">
     <div class="pop-head">
       <div class="pop-title">Capabilities</div>
-      <div class="pop-sub">Ask in plain language or in technical terms. Everything listed here is available to you.</div>
       <button class="ip-close" id="ipClose" type="button" aria-label="Close">
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-          <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
       </button>
     </div>
     <div class="ip-body" id="ipBody"></div>
-    <div class="pop-foot">Everything an analysis produces is kept, and appears in the Results panel.</div>
    </div>
   </div>
 

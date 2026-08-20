@@ -64,6 +64,7 @@ class ArtifactStore:
         # What each run read, remembered while one listing runs. A chain asks for
         # the run below it, and a listing walks every step of every chain.
         self._read_cache: dict = {}
+        self._roles_cache: dict = {}
 
     # --- writing ----------------------------------------------------------
     def new_run(self, capability: str, workspace: str = "default",
@@ -141,21 +142,104 @@ class ArtifactStore:
         found = None
         for path, m in self._manifests():
             if path.parent.name == run:
-                found = self._referenced(m)
+                found = self._referenced(m, self._domain_of(path))
                 break
         self._read_cache[run] = found
         return found
 
-    def _referenced(self, manifest: dict) -> dict:
+    def _domain_of(self, path: Path) -> str:
+        """Which domain a run sits in, from where the store filed it.
+
+        `<workspace>/<domain>/<capability>/<run>/run_manifest.json`, so the
+        layout answers it and the manifest does not have to. Empty when the path
+        is not one of ours, which only happens to a caller passing in something
+        from elsewhere.
+        """
+        try:
+            return Path(path).resolve().relative_to(self.root.resolve()).parts[1]
+        except (ValueError, OSError, IndexError):
+            return ""
+
+    def _input_kinds(self, capability: str, domain: str = "") -> dict:
+        """Each of a capability's inputs as the entry declares it, by name.
+
+        Read from the entry, because only the entry knows. It decides how a
+        recorded path is read back as a reference, and getting it wrong is not
+        visibly wrong: a directory input read as though it were a file names the
+        folder above it, which for every per-sample capability here is the word
+        `samples`, so every run in the store reported itself as being about a
+        sample of that name and none about the sample it was actually for.
+
+        Empty when the entry cannot be read, which puts the reconstruction back
+        on its own judgement rather than failing a listing over a missing file.
+        """
+        bare = capability.split("/")[-1]
+        roots = ([_TREE / "domains" / domain] if domain
+                 else sorted((_TREE / "domains").glob("*")))
+        for root in roots:
+            path = root / "catalog" / f"{bare}.json"
+            try:
+                contract = json.loads(path.read_text())
+            except (OSError, ValueError):
+                continue
+            return {i["name"]: i for i in contract.get("inputs") or [] if i.get("name")}
+        return {}
+
+    def _role_words(self, domain: str) -> frozenset:
+        """What this domain calls the parts of a sample, and nothing else.
+
+        A reconstructed reference names the last thing on the path, and for an
+        input that reads one part of a sample that is the part rather than the
+        sample: `spatial`, or the folder a count matrix is kept in. Told which
+        words those are, `subject` steps over them and takes the sample from
+        whatever else the run read; not told, it sees two different answers and
+        reports the run as being about neither.
+
+        Both the role names and the words each role is recognised by, because a
+        path carries the second: the role is `counts` and what is written on
+        disk is `filtered_feature_bc_matrix`. Read straight from the domain's
+        own declaration, which is a JSON file rather than the data layer, since
+        this module has to run over ssh with nothing importable beside it.
+        """
+        if domain in self._roles_cache:
+            return self._roles_cache[domain]
+        words: set = set()
+        try:
+            declared = json.loads(
+                (_TREE / "domains" / domain / "study.json").read_text())
+        except (OSError, ValueError):
+            declared = {}
+        shapes = declared.get("datasets") or [declared]
+        for shape in shapes:
+            for role, keys in (shape.get("roles") or {}).items():
+                words.add(role)
+                words.update(keys or ())
+            # The folder that holds the samples is not one of them. A cohort
+            # input names that folder, and read as a sample it makes every
+            # cross-sample run look like a run about a sample called `samples`,
+            # which is the one shape of answer this whole walk exists to avoid.
+            holder = shape.get("sample_dir") or ""
+            if holder not in ("", "."):
+                words.add(holder)
+        found = frozenset(words)
+        self._roles_cache[domain] = found
+        return found
+
+    def _referenced(self, manifest: dict, domain: str = "") -> dict:
         """A run's inputs as references, however the manifest recorded them.
 
         Runs made since the manifest carried the reference say what they read
         outright. Older ones recorded only the path it resolved to, so the
         reference is reconstructed: a path inside this store is an earlier run,
-        and anything else is data, whose enclosing folder is the sample where
-        data is kept per sample. Reconstructed rather than given up on, because
-        the results that exist now are the ones people are asking about.
+        and anything else is data, whose sample is the last segment when the
+        input is a whole sample directory and the one above it when the input is
+        a file kept inside one. Which of the two it is comes from the entry
+        rather than from the shape of the string, because a sample directory and
+        a file both look like a path and only the entry says which was asked
+        for. Reconstructed rather than given up on, because the results that
+        exist now are the ones people are asking about.
         """
+        kinds = self._input_kinds(manifest.get("capability", ""), domain)
         out = {}
         for name, spec in (manifest.get("inputs") or {}).items():
             spec = spec or {}
@@ -166,8 +250,24 @@ class ArtifactStore:
             if not path:
                 continue
             inside = self._within_root(path)
-            out[name] = (f"run:{inside}" if inside else
-                         f"study:_/{path.rsplit('/', 2)[-2]}" if "/" in path else path)
+            if inside:
+                out[name] = f"run:{inside}"
+                continue
+            if "/" not in path:
+                out[name] = path
+                continue
+            declared = kinds.get(name) or {}
+            if declared.get("from_site"):
+                # Something the machine provides, not a study's data. Read as
+                # data it becomes a sample named for whatever directory the
+                # reference material sits in, and a run that read one is then
+                # about two samples at once, which is the same as being about
+                # none: every spacet run reported no sample for this reason.
+                out[name] = f"site:{declared['from_site']}"
+                continue
+            parts = path.split("/")
+            subject = parts[-1] if declared.get("type") == "directory" else parts[-2]
+            out[name] = f"study:_/{subject}"
         return out
 
     def _within_root(self, path: str) -> str:
@@ -179,7 +279,7 @@ class ArtifactStore:
         # <workspace>/<domain>/<capability>/<run>/<output...>
         return rel.parts[3] if len(rel.parts) >= 4 else ""
 
-    def _sample(self, manifest: dict) -> str:
+    def _sample(self, manifest: dict, domain: str = "") -> str:
         """Which sample a run is about, following what it read back to the data.
 
         Only the first stage of a chain is handed anything that names a sample;
@@ -192,7 +292,8 @@ class ArtifactStore:
         panel and the recompute decision ask, and it used to have a different
         answer in each of them.
         """
-        return _reference.subject(self._referenced(manifest), self._reads)
+        return _reference.subject(self._referenced(manifest, domain), self._reads,
+                                  self._role_words(domain))
 
     def runs(self, workspace: str | None = None, capability: str | None = None,
              limit: int = 50) -> list[dict]:
@@ -210,16 +311,28 @@ class ArtifactStore:
                 # leaves the sample buried among run ids for a reader to pick
                 # out, which is a guess, and a reader that guesses reports "at
                 # least a couple of samples" for work covering nineteen.
-                "sample": self._sample(m),
+                "sample": self._sample(m, rel.parts[1] if len(rel.parts) > 1 else ""),
                 "on": self._on(m),
                 "version": m.get("contract_version"),
                 "site": m.get("profile"),
                 "workspace": rel.parts[0] if rel.parts else "default",
+                # The domain, from where the store filed it. A manifest records
+                # the bare capability, and two domains here declare the same
+                # one, so a caller rebuilding a qualified name from a listing
+                # cannot get it from the manifest alone.
+                "domain": rel.parts[1] if len(rel.parts) > 1 else "",
                 "finished": m.get("finished"),
                 "reproducible": m.get("reproducible"),
                 "freeze_check": m.get("freeze_check"),
                 "path": str(path.parent),
                 "outputs": sorted(m.get("outputs", {})),
+                # What it was given, so that two runs of one capability can be
+                # told apart by a caller that has only this listing. Without
+                # them a reader can say a thing was run and not what it was run
+                # with, which is the difference between a record and a count.
+                "parameters": m.get("parameters") or {},
+                "inputs": self._referenced(
+                    m, rel.parts[1] if len(rel.parts) > 1 else ""),
             })
             if len(out) >= limit:
                 break

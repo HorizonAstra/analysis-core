@@ -4,23 +4,25 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sign in · Multiomics</title>
-  <link rel="icon" href="/favicon.ico" />
+  <link rel="icon" href="/static/icons/mark.svg" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body class="login-body">
   <main class="login">
-    <div class="login-card">
-      <div class="login-brand">
-        <img src="/static/icons/00-hexagon.svg?v=5" width="48" height="48" alt="" />
-        <span>Multiomics</span>
-      </div>
-      <form id="loginForm" autocomplete="on">
-        <input id="username" name="username" placeholder="Email" autocomplete="username" autofocus />
-        <input id="password" name="password" type="password" placeholder="Password" autocomplete="current-password" />
-        <button id="loginBtn" type="submit">Sign in</button>
-      </form>
-      <div class="login-error" id="loginError" aria-live="polite"></div>
+    <div class="login-brand">
+      <svg class="mark" viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+        <rect width="32" height="32" rx="6" fill="currentColor"/>
+        <path d="M9.5 22.5V9.5L16 17.5l6.5-8v13" fill="none" stroke="var(--paper)"
+              stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Multiomics</span>
     </div>
+    <form id="loginForm" autocomplete="on">
+      <input id="username" name="username" placeholder="Email" autocomplete="username" autofocus />
+      <input id="password" name="password" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="loginBtn" type="submit">Sign in</button>
+    </form>
+    <div class="login-error" id="loginError" aria-live="polite"></div>
   </main>
   <script src="/static/login.js"></script>
 </body>

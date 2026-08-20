@@ -69,7 +69,7 @@ there is no single list.
 `infrastructure/sites/randi.json`:
 
     /gpfs/data/dfi-cores/rijul/cancer/input-data/
-        NSCLC-Neoadjuvant/            one study, 19 samples
+        KunleOdunsisCohort/            one study, 19 samples
             samples/<sample>/         one Space Ranger run each, counts and spatial
 
 One study, because there is one study. It used to appear as three: the
@@ -146,12 +146,12 @@ that must stay put is named in the panel rather than shown.
 Nothing above is ever typed into an analysis. Data and results are named, and
 the machine that runs the work resolves the name:
 
-    study:NSCLC-Neoadjuvant                 the study
-    study:NSCLC-Neoadjuvant/1N              one sample
-    study:NSCLC-Neoadjuvant/1N/matrix       one part of one sample
-    study:NSCLC-Neoadjuvant/1N/raw/spatial  something inside a part that is a folder
-    study:NSCLC-Neoadjuvant@2026-08-13/1N   that sample, in one version of the data
-    run:<id>/<output>                       an output of an earlier run
+    study:KunleOdunsisCohort                 the study
+    study:KunleOdunsisCohort/1N              one sample
+    study:KunleOdunsisCohort/1N/matrix       one part of one sample
+    study:KunleOdunsisCohort/1N/raw/spatial  something inside a part that is a folder
+    study:KunleOdunsisCohort@2026-08-13/1N   that sample, in one version of the data
+    run:<id>/<output>                        an output of an earlier run
 
 That is the reason the paths in this file are worth writing down once and never
 again. A path says which machine, which layout, and who may see it, and none of

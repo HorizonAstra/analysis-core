@@ -162,6 +162,34 @@ def _domain_of(c: dict) -> str:
     return C.code_root(c).name
 
 
+def process_name(qualified: str) -> str:
+    """The Nextflow process name for a qualified capability id.
+
+    From the qualified name rather than the bare one, because two domains can
+    hold a capability with the same id and both of ours do: microbiome and
+    spatial transcriptomics each have `differential_abundance`. Named from the
+    bare id, one pipeline file declares that process twice and Nextflow refuses
+    the file rather than the process.
+
+    Here rather than in each caller because `graph.py` calls processes by name
+    and this file declares them, so a name derived in two places is a name that
+    drifts. It had already drifted: the workflow block wrote the qualified id
+    through unchanged, giving `Microbiome/assemble`, which is a division rather
+    than an identifier. Neither target is rendered by the checks, so nothing said
+    so.
+    """
+    return "".join(w.capitalize() for w in re.split(r"[/_-]+", qualified) if w)
+
+
+def channel_name(qualified: str) -> str:
+    """A Groovy variable standing for one capability's channel.
+
+    Same reasoning as `process_name`, and the same failure: a slash in a
+    variable name parses as division.
+    """
+    return re.sub(r"[/-]+", "_", qualified)
+
+
 def _on_site(profile: dict, path: Path) -> str:
     """A path in this tree, as it will read on the machine the script runs on.
 
@@ -196,7 +224,7 @@ def as_nextflow(c: dict, profile: dict) -> str:
     the runtime axis stays with the profile, where the rest of this design puts
     it.
     """
-    name = "".join(w.capitalize() for w in c["id"].split("_"))
+    name = process_name(f"{_domain_of(c)}/{c['id']}")
     res = c["resources"]
     label = LABEL.get(res["bound_by"], "small")
 
@@ -204,8 +232,19 @@ def as_nextflow(c: dict, profile: dict) -> str:
     # one tuple rather than as parallel channels. Without it a cohort run cannot
     # tell whose result is whose; without the tuple, a downstream capability
     # drawing inputs from two producers has nothing to join them on.
-    ins = ["    tuple val(sample_id), "
-           + ", ".join(f"path({i['name']})" for i in c["inputs"])]
+    #
+    # A capability that reads no files still runs once per sample and still emits
+    # a tuple carrying the identifier, so the identifier alone is the input. The
+    # tuple form cannot express that: with nothing to join to it, it renders as
+    # `tuple val(sample_id), ` and the trailing comma is a syntax error. That is
+    # what `toolchain_report` produced, and it went unseen because this target is
+    # checked by whether render.py exits zero rather than by whether Nextflow
+    # will parse what it wrote.
+    if c["inputs"]:
+        ins = ["    tuple val(sample_id), "
+               + ", ".join(f"path({i['name']})" for i in c["inputs"])]
+    else:
+        ins = ["    val sample_id"]
 
     outs = [f'    tuple val(sample_id), path("out/{o["name"]}"), emit: {o["name"]}'
             + ("" if o.get("required", True) else ", optional: true")

@@ -102,8 +102,8 @@ def _site(rest: str, references: dict) -> Path:
 
 # How a reference names one version of a study's data:
 #
-#     study:NSCLC-Neoadjuvant/1N                 the newest version
-#     study:NSCLC-Neoadjuvant@2026-08-13/1N      that one
+#     study:KunleOdunsisCohort/1N             the newest version
+#     study:KunleOdunsisCohort@2026-08-13/1N  that one
 #
 # In the reference rather than beside it, and that is the whole point. A
 # reference is resolved by the machine that does the work, and it is also what a

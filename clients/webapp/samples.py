@@ -10,9 +10,9 @@ Nothing new is recorded to make this work. A run's inputs are already kept as
 *references* rather than paths, because a reference is resolved by the machine
 that does the work rather than by the client that asks for it:
 
-    study:NSCLC-Neoadjuvant/1N          one sample of a study
-    run:harmonize-28d87c0e/matrix       an output of an earlier run
-    site:tumorspace                     something the machine itself provides
+    study:KunleOdunsisCohort/1N     one sample of a study
+    run:harmonize-28d87c0e/matrix   an output of an earlier run
+    site:tumorspace                 something the machine itself provides
 
 So the sample is already there, and the rule is simply: **a run is about the
 sample of whatever it was made from.** `harmonize` names one directly.

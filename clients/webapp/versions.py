@@ -442,7 +442,7 @@ def _members(built: dict, capability: str) -> str:
         return "across samples"
     upstream = [x for x in versions[0]["inputs"].values()
                 if isinstance(x, str) and x.startswith("run:")]
-    return f"across {len(upstream)} inputs" if upstream else "across samples"
+    return f"{len(upstream)} inputs" if upstream else "across samples"
 
 
 def chosen(user: str, chat_id: str) -> dict:

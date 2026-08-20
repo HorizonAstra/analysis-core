@@ -13,7 +13,7 @@ is the check. Where it says what should not, that matters more.
 
     What study data can I work with?
 
-Should name `NSCLC-Neoadjuvant`, say how many samples it holds, and say what each
+Should name `KunleOdunsisCohort`, say how many samples it holds, and say what each
 sample has. It should not name a path, and it should not name a study you were
 not given.
 
@@ -122,7 +122,7 @@ are two pictures rather than one.
 
 ## 8. The Whole Cohort
 
-    Build interactive tissue views for every sample in NSCLC-Neoadjuvant.
+    Build interactive tissue views for every sample in KunleOdunsisCohort.
 
 Nineteen samples, four steps each. It should return **at once**, having submitted
 all of it, rather than sitting there. The results panel fills as they land.

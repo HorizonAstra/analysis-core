@@ -1,30 +1,84 @@
-/* Calm, unboxed, suggestible. Hierarchy from space, weight, and a restrained two-tone
-   theme: a selected grey and a red for hover/emphasis. No bordered cards. */
+/* Calm, unboxed, tight. Hierarchy from space, weight, and a two-tone theme: ink for what
+   is selected, red for hover and emphasis. No bordered cards, no decorative icons, and a
+   small fixed scale for every value that repeats — 11/12/13/15/20/24 type, four radii,
+   three shadows. Near-duplicate sizes (12.4 / 12.5 / 12.6px) are what makes an interface
+   look assembled rather than designed, so there are none. */
 
 /* `hidden` means hidden, everywhere. The attribute only carries `display: none`
    from the browser's own stylesheet, so any rule here that sets `display` beats
-   it — and most things worth hiding are flex. Two rules further down already
-   worked around this one element at a time; a control hidden because it has
-   nothing to offer stayed on screen, and a person clicked it and was told
-   nothing was there. Stated once so the next thing to be hidden simply is. */
+   it — and most things worth hiding are flex. Stated once so the next thing to
+   be hidden simply is. */
 [hidden] { display: none !important; }
 
 :root {
-  --paper:    #faf9f7;
-  --surface:  #ffffff;
-  --tint:     #f1efea;
-  --ink:      #1f1d1b;
-  --ink-soft: #57534e;
-  --muted:    #8f8a83;
-  --hairline: #e9e7e1;
-  --accent:      #4b5563;   /* selected grey */
-  --accent-weak: #e8eaed;
-  --hover:       #991b1b;   /* red on hover / emphasis */
-  --hover-weak:  #f4e9e9;
-  --radius:   16px;
+  color-scheme: dark;
+
+  /* Dark by default. The scale is the same one the light theme used, inverted and kept
+     warm — a neutral-grey dark next to warm paper reads as two different products, and
+     the red is lifted because #991b1b on a dark ground is a bruise, not an accent.
+     Every value a rule needs is a token: nothing below this block names a colour, which
+     is what makes the light values in @media print a five-line override instead of a
+     second stylesheet. */
+  --paper:    #1a1917;      /* the page */
+  --surface:  #232120;      /* raised: popovers, dialogs, inputs, sticky heads */
+  --tint:     #2c2926;      /* hover fill, user bubble, quiet notices */
+  --ink:      #f2efe9;      /* primary text */
+  --ink-soft: #b3aca2;
+  --muted:    #857e74;
+  --hairline: #302c28;      /* structural: dividers nobody should notice */
+  --line:     #46413a;      /* a border meant to be seen: inputs, pills */
+  --accent:      #f2efe9;   /* selected is ink, which on a dark ground means inverted */
+  --accent-weak: #37332d;   /* selected rows, which must out-read hover */
+  --hover:       #e2665f;   /* red on hover / emphasis */
+  --hover-weak:  #38211f;
+  --hover-deep:  #f08a83;   /* a destructive hover has to get brighter, not darker */
+  /* Code recedes rather than shouts: below the page on dark, above it on paper. */
+  --code-bg:  #110f0e;
+  --code-fg:  #e8e4dc;
+
+  /* four radii, and a pill where a pill is the meaning. Nothing else. */
+  --r-sm: 4px;
+  --r:    8px;
+  --r-lg: 12px;
+  --pill: 999px;
+
+  /* On a dark ground a shadow is nearly invisible, so the popover border does the
+     separating and the shadow only sets depth. */
+  --rest: 0 1px 2px rgba(0,0,0,.3);
+  --pop:  0 6px 24px rgba(0,0,0,.5);
+  --lift: 0 16px 48px rgba(0,0,0,.6);
+  --scrim: rgba(0,0,0,.6);
+
   --col:      min(46rem, 92%);   /* % of the chat column, so it reflows as the panel resizes */
   --panel-w:  620px;
   --reveal: cubic-bezier(.22,.61,.36,1);
+}
+
+/* ── light ───────────────────────────────────────────────────────────────────
+   The same scale, the other way up. Every rule below reads from tokens, which is
+   what makes a second theme this block rather than a second stylesheet. Dark is
+   the default; this is opt-in, and the choice is remembered. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --paper:    #faf9f7;
+  --surface:  #ffffff;
+  --tint:     #f0eee9;
+  --ink:      #17150f;
+  --ink-soft: #56514a;
+  --muted:    #7d7770;
+  --hairline: #e6e3db;
+  --line:     #d8d4ca;
+  --accent:      #17150f;
+  --accent-weak: #eae7e0;
+  --hover:       #991b1b;
+  --hover-weak:  #f7eae9;
+  --hover-deep:  #7a1616;
+  --code-bg:  #17150f;
+  --code-fg:  #f2efe8;
+  --rest: 0 1px 2px rgba(23,21,15,.05);
+  --pop:  0 4px 16px rgba(23,21,15,.10);
+  --lift: 0 8px 28px rgba(23,21,15,.14);
+  --scrim: rgba(23,21,15,.28);
 }
 
 * { box-sizing: border-box; }
@@ -33,7 +87,7 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font: 15px/1.62 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -47,183 +101,233 @@ body {
 /* ── top bar ──────────────────────────────────────────────────────────────── */
 .topbar {
   position: sticky; top: 0; z-index: 5;
-  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
   backdrop-filter: saturate(1.2) blur(8px);
 }
 .topbar .bar {
-  width: 100%; margin: 0;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 18px 12px 14px;
+  padding: 9px 12px;
 }
-.left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.iconbtn {           /* the platform logo, pinned top-left; opens the user/chats menu */
-  border: 0; background: none; cursor: pointer; padding: 2px; border-radius: 10px;
-  display: grid; place-items: center; flex: 0 0 auto; line-height: 0; transition: background .15s var(--reveal);
+.left { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.right { display: flex; align-items: center; gap: 2px; }
+
+/* mark, wordmark and chevron are one control — the menu opens from the name */
+.brandbtn {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 0; background: none; cursor: pointer; font: inherit;
+  padding: 4px 8px 4px 6px; border-radius: var(--r); color: var(--ink);
+  transition: background .14s var(--reveal);
 }
-.iconbtn:hover { background: var(--tint); }
-.iconbtn img {
-  display: block;
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-}
-.brand { font-weight: 600; font-size: 18px; letter-spacing: -0.01em; white-space: nowrap; }
-.right { display: flex; align-items: center; gap: 14px; }
-.meta { color: var(--muted); font-size: 13px; }
+.brandbtn:hover { background: var(--tint); }
+.brandbtn .mark { display: block; color: var(--ink); }
+.brand { font-weight: 600; font-size: 15px; letter-spacing: -0.012em; white-space: nowrap; }
+.brand-chev { color: var(--muted); margin-left: -2px; }
+.brandbtn:hover .brand-chev { color: var(--ink-soft); }
+
 .ghost {
-  display: inline-flex; align-items: center; gap: 6px;
-  border: 0; background: none; cursor: pointer; font: inherit; font-size: 14.5px;
-  color: var(--ink-soft); padding: 7px 12px; border-radius: 9px;
-  transition: background .16s var(--reveal), color .16s var(--reveal);
+  border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px;
+  color: var(--ink-soft); padding: 6px 10px; border-radius: var(--r);
+  white-space: nowrap;
+  transition: background .14s var(--reveal), color .14s var(--reveal);
 }
 .ghost:hover { background: var(--tint); color: var(--ink); }
-body.panel-open #panelToggle { background: var(--accent); color: #fff; }   /* selected */
+.ghost.on { background: var(--tint); color: var(--ink); }
+/* The scope reads as data, not as a control, until it is hovered.
+   Nudged down a pixel so it shares the wordmark's BASELINE rather than its
+   centre. Flex centres the two boxes, but they are different heights (15px text
+   against 13px at the same line-height ratio), so centring them left the
+   baselines 1.4px apart — and two words side by side read as aligned when they
+   sit on one baseline, not when their boxes do. */
+.ghost.scope { color: var(--muted); margin-left: 2px; position: relative; top: 1px; }
+.ghost.scope:hover, .ghost.scope.on { color: var(--ink); }
+.ghost.scope.on { background: var(--tint); }
+#studyBtn span { display: block; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.iconbtn {
+  border: 0; background: none; cursor: pointer; color: var(--ink-soft);
+  padding: 7px; border-radius: var(--r); display: grid; place-items: center; line-height: 0;
+  flex: 0 0 auto; transition: color .14s var(--reveal), background .14s var(--reveal);
+}
+.iconbtn:hover { color: var(--ink); background: var(--tint); }
+/* On, not shouting. A fully inverted swatch in the corner of a dark page was the
+   brightest thing on screen and pulled the eye off the transcript. One step up
+   from the hover fill is enough to read as held-open. */
+.iconbtn.on, body.panel-open #panelToggle { color: var(--ink); background: var(--accent-weak); }
+
+.infobtn {
+  border: 0; background: none; cursor: pointer; color: var(--muted);
+  padding: 4px; margin-left: 8px; border-radius: var(--r-sm);
+  display: inline-grid; place-items: center; line-height: 0; vertical-align: 2px;
+  transition: color .14s var(--reveal), background .14s var(--reveal);
+}
+.infobtn:hover, .infobtn.on { color: var(--ink); background: var(--tint); }
 
 /* ── scroll / thread ──────────────────────────────────────────────────────── */
 /* No scroll-behavior: smooth. The transcript follows streaming output by setting
    scrollTop on every chunk; smoothed, each of those starts an animation that is still
    running when the next chunk re-targets it, so scrolling up meant fighting a scroll
    that kept pulling back. Instant lands and stops, which leaves the wheel to the reader. */
-.scroll { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
-.thread { padding: 8px 0 40px; display: flex; flex-direction: column; gap: 26px; }
+.scroll { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; }
+.thread { flex: 1 0 auto; padding: 6px 0 32px; display: flex; flex-direction: column; gap: 20px; }
 
-.welcome { padding: 13vh 0 0; }
-.welcome h1 { font-size: 30px; line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 10px; }
-.welcome .sub { color: var(--ink-soft); margin: 0 0 26px; max-width: 36rem; }
+/* An empty thread is a question and the place to answer it, sitting together just
+   above the composer. Stranded at the top of a blank page, the same sentence read
+   as a page title with nothing under it, and 13vh of padding was holding it there. */
+.thread:has(> .welcome) { justify-content: center; padding-bottom: 12vh; }
+.welcome { padding: 0; }
+.welcome h1 { font-size: 30px; line-height: 1.15; font-weight: 600; letter-spacing: -0.025em; margin: 0; }
 
 /* ── turns ────────────────────────────────────────────────────────────────── */
-.turn { animation: rise .35s var(--reveal) both; }
-@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.turn.user { display: flex; justify-content: flex-end; }
+.turn { animation: rise .3s var(--reveal) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.turn.user { display: flex; justify-content: flex-end; position: relative; align-items: flex-start; gap: 4px; }
 .turn.user .bubble {
-  background: var(--tint); color: var(--ink); padding: 11px 15px;
-  border-radius: 14px 14px 4px 14px; max-width: 80%; white-space: pre-wrap; word-wrap: break-word;
+  background: var(--tint); color: var(--ink); padding: 9px 13px;
+  border-radius: var(--r);
+  max-width: 80%; white-space: pre-wrap; word-wrap: break-word;
 }
 .turn.assistant .prose { color: var(--ink); }
 /* edit-and-resend: the control appears on hover so it never competes with the message */
-.turn.user { position: relative; align-items: flex-start; gap: 6px; }
 .turn-edit { opacity: 0; border: 0; background: none; cursor: pointer; color: var(--muted);
-  padding: 6px; border-radius: 8px; align-self: center; transition: opacity .14s, color .14s, background .14s; }
+  padding: 5px; border-radius: var(--r-sm); align-self: center;
+  transition: opacity .14s, color .14s, background .14s; }
 .turn.user:hover .turn-edit { opacity: 1; }
 .turn-edit:hover { color: var(--hover); background: var(--hover-weak); }
 .edit-box { width: min(80%, 34rem); margin-left: auto; }
-.edit-input { width: 100%; height: 44px; resize: none; font: inherit; font-size: 15px; color: var(--ink);
+.edit-input { width: 100%; height: 42px; resize: none; font: inherit; color: var(--ink);
   line-height: 1.5; overflow-y: auto;
-  background: var(--surface); border: 1px solid var(--hairline); border-radius: 14px;
-  padding: 11px 14px; outline: 0; }
-.edit-input:focus { border-color: var(--hover); box-shadow: 0 0 0 3px var(--hover-weak); }
-.edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-.edit-btn { border: 0; cursor: pointer; font: inherit; font-size: 13.5px; padding: 7px 13px;
-  border-radius: 9px; background: var(--tint); color: var(--ink-soft); transition: background .15s, color .15s; }
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 9px 12px; outline: 0; }
+.edit-input:focus { border-color: var(--ink); }
+.edit-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+.edit-btn { border: 0; cursor: pointer; font: inherit; font-size: 13px; padding: 6px 12px;
+  border-radius: var(--r); background: var(--tint); color: var(--ink-soft); transition: background .14s, color .14s; }
 .edit-btn:hover { color: var(--ink); }
-.edit-btn.primary { background: var(--accent); color: #fff; }
+.edit-btn.primary { background: var(--accent); color: var(--paper); }
 .edit-btn.primary:hover { background: var(--hover); }
-.figure { margin: 4px 0 2px; }
+
+.figure { margin: 2px 0; }
 .figure img {
-  display: block; width: 100%; height: auto; border-radius: 12px; background: var(--surface);
-  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.05);
+  display: block; width: 100%; height: auto; border-radius: var(--r-lg); background: var(--surface);
+  box-shadow: var(--rest);
 }
-/* a clickable card in the chat for an artifact -> opens it in the results panel */
+
+/* a clickable row in the chat for an artifact -> opens it in the results panel.
+   No "Open" label: a bordered row that lifts on hover is already a control. */
 .artifact-card {
-  display: inline-flex; align-items: center; gap: 10px; max-width: min(28rem, 100%);
+  display: flex; align-items: center; gap: 9px; width: 100%;
   border: 1px solid var(--hairline); background: var(--surface); cursor: pointer;
-  font: inherit; font-size: 14px; color: var(--ink); text-align: left;
-  padding: 9px 13px; border-radius: 11px;
-  transition: border-color .15s var(--reveal), box-shadow .15s var(--reveal), transform .1s;
+  font: inherit; font-size: 13px; color: var(--ink); text-align: left;
+  padding: 10px 12px; border-radius: var(--r);
+  transition: border-color .14s var(--reveal), background .14s var(--reveal);
 }
-/* The thread's 26px rhythm is for prose. A card is a control, not a paragraph, so it sits
+.artifact-card:hover { background: var(--tint); }
+.artifact-card .ac-go { flex: 0 0 auto; margin-left: auto; color: var(--muted); line-height: 0;
+  transition: color .14s var(--reveal), transform .14s var(--reveal); }
+.artifact-card:hover .ac-go { color: var(--ink-soft); transform: translateX(2px); }
+/* The thread's rhythm is for prose. A card is a control, not a paragraph, so it sits
    closer to the text that introduced it, and a run of cards reads as one group.
-   .thread is a flex column, so these do not collapse against a neighbour's margin the way
-   block margins would — they add to the 26px gap. -14 therefore means 12px of space. */
-.turn.artifact { margin-top: -14px; }
-.turn.artifact + .turn.artifact { margin-top: -19px; }
-.turn.artifact + .turn:not(.artifact) { margin-top: -8px; }
-/* A card straight after the step block had both pulls applied at once (-12 closing the
-   steps, -14 on the card) and landed flush against it. Nothing introduced this card, so
-   only one pull is wanted: back to the same 12px a card sits below its lead-in text. */
+   .thread is a flex column, so these do not collapse against a neighbour's margin the
+   way block margins would — they subtract from the 20px gap. */
+.turn.artifact { margin-top: -10px; }
+.turn.artifact + .turn.artifact { margin-top: -15px; }
+.turn.artifact + .turn:not(.artifact) { margin-top: -6px; }
 .turn.trace-turn + .turn.artifact { margin-top: -2px; }
-.artifact-card:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(0,0,0,.06); }
-.artifact-card:active { transform: translateY(1px); }
-.artifact-card .ac-ico { flex: 0 0 auto; color: var(--muted); display: grid; place-items: center; }
+.artifact-card:hover { border-color: var(--ink); }
+.artifact-card .ac-ico { flex: 0 0 auto; color: var(--muted); display: grid; place-items: center;
+  transition: color .14s var(--reveal); }
+.artifact-card:hover .ac-ico { color: var(--ink-soft); }
 .artifact-card .ac-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.artifact-card .ac-open { flex: 0 0 auto; margin-left: auto; color: var(--muted); font-size: 12.5px; }
+
 /* The turn's process: reasoning and steps, one collapsible, visibly not the answer.
    One rail down the whole block rather than a box per entry — nested borders would
    read as separate things, and this is one account of one turn. */
-.turn.trace-turn { margin-top: -12px; margin-bottom: -12px; }
-details.trace > summary {
-  list-style: none; cursor: pointer; color: var(--muted); font-size: 13.5px;
-  display: inline-flex; align-items: center; gap: 7px; padding: 1px 0;
+.turn.trace-turn { margin-top: -8px; margin-bottom: -8px; }
+details.trace > summary,
+.vp > summary {
+  list-style: none; cursor: pointer; color: var(--muted); font-size: 13px;
+  display: inline-flex; align-items: center; gap: 6px; padding: 1px 0;
 }
-details.trace > summary::-webkit-details-marker { display: none; }
-details.trace > summary::before {
-  content: ""; width: 5px; height: 5px; border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s var(--reveal);
+details.trace > summary::-webkit-details-marker,
+.vp > summary::-webkit-details-marker { display: none; }
+details.trace > summary::before,
+.vp > summary::before {
+  content: ""; width: 5px; height: 5px; border-right: 1.4px solid currentColor;
+  border-bottom: 1.4px solid currentColor; transform: rotate(-45deg);
+  transition: transform .15s var(--reveal);
 }
-details.trace[open] > summary::before { transform: rotate(45deg); }
-details.trace > summary:hover { color: var(--ink-soft); }
-/* Shown whole: a scrollbox inside a transcript that already scrolls means two nested
-   scrolls fighting over the same wheel, and this is read top to bottom or not at all.
-   Long tokens break rather than push a horizontal bar. overflow: hidden is what lets
-   the height be animated on open without the content spilling. */
-.tr-body {
-  margin-top: 9px; padding-left: 13px; border-left: 2px solid var(--hairline);
-  overflow: hidden;
-}
+details.trace[open] > summary::before,
+.vp[open] > summary::before { transform: rotate(45deg); }
+details.trace > summary:hover,
+.vp > summary:hover { color: var(--ink-soft); }
+/* One bordered block, its entries separated by hairlines. Not a rail down the left
+   margin: a vertical line beside a stack of reasoning is the single most recognisable
+   piece of chatbot furniture, and it says nothing that the indent and the disclosure
+   did not already say. Shown whole rather than scrolled — a scrollbox inside a
+   transcript that already scrolls means two nested scrolls fighting over one wheel.
+   overflow: hidden is what lets the height be animated on open. */
+.tr-body { margin-top: 8px; overflow: hidden; }
+.tr-body > * { border: 1px solid var(--hairline); border-bottom: 0; padding: 9px 12px; }
+.tr-body > :first-child { border-radius: var(--r) var(--r) 0 0; }
+.tr-body > :last-child { border-bottom: 1px solid var(--hairline); border-radius: 0 0 var(--r) var(--r); }
+.tr-body > :only-child { border-radius: var(--r); }
 /* Reasoning and steps sit in one column, distinguished by weight rather than by a
    frame: the narration recedes, the step it led to is the firmer line. */
-.tr-think {
-  color: var(--muted); font-size: 13.5px; line-height: 1.6; white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.tr-think + .tr-step, .tr-step + .tr-think { margin-top: 10px; }
-.tr-step + .tr-step { margin-top: 12px; }
+.tr-think { color: var(--muted); font-size: 13px; line-height: 1.58; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tr-step-label { font-size: 13px; color: var(--ink-soft); }
 /* wrapped, not scrolled, for the same reason as the reasoning above: a command or a call
    is read in full, and a long argument list should make the block taller rather than hide
    its own end behind a bar the reader has to find */
 .tr-detail {
-  margin: 6px 0 0; padding: 10px 12px; border-radius: 9px; background: #1f1d1b; color: #f4f1ea;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; line-height: 1.55;
+  margin: 7px 0 0; padding: 8px 10px; border-radius: var(--r-sm); background: var(--code-bg); color: var(--code-fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.55;
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
-.working { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
-.dots { display: inline-flex; gap: 4px; }
-.dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: blink 1.2s infinite both; }
-.dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; }
-@keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
-.notice { color: var(--ink-soft); background: var(--tint); padding: 10px 14px; border-radius: 12px; font-size: 14px; white-space: pre-wrap; }
-.notice.error { color: var(--hover); background: none; padding: 4px 2px; }
+
+.working { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 13px; }
+.pulse { flex: 0 0 6px; height: 6px; border-radius: 50%; background: currentColor;
+  animation: go-pulse 1.6s ease-in-out infinite; }
+.notice { color: var(--ink-soft); background: var(--tint); padding: 8px 12px; border-radius: var(--r); font-size: 13px; white-space: pre-wrap; }
+.notice.error { color: var(--hover); background: none; padding: 2px 0; }
 
 /* ── markdown prose ───────────────────────────────────────────────────────── */
 .prose > :first-child { margin-top: 0; } .prose > :last-child { margin-bottom: 0; }
-.prose p { margin: 0 0 .85em; }
-.prose h1, .prose h2, .prose h3, .prose h4 { line-height: 1.3; letter-spacing: -0.01em; margin: 1.4em 0 .5em; font-weight: 600; }
-.prose h1 { font-size: 1.35em; } .prose h2 { font-size: 1.2em; } .prose h3 { font-size: 1.05em; }
+.prose p { margin: 0 0 .8em; }
+.prose h1, .prose h2, .prose h3, .prose h4 { line-height: 1.3; letter-spacing: -0.012em; margin: 1.3em 0 .45em; font-weight: 600; }
+.prose h1 { font-size: 1.25em; } .prose h2 { font-size: 1.125em; } .prose h3 { font-size: 1em; }
 .prose h4 { font-size: 1em; color: var(--ink-soft); }
-.prose ul, .prose ol { margin: 0 0 .85em; padding-left: 1.35em; } .prose li { margin: .2em 0; }
-.prose a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-weak); }
+.prose ul, .prose ol { margin: 0 0 .8em; padding-left: 1.3em; } .prose li { margin: .18em 0; }
+.prose a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
 .prose a:hover { color: var(--hover); border-bottom-color: var(--hover); }
-.prose code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: var(--tint); padding: .12em .4em; border-radius: 6px; }
-.prose pre { background: #1f1d1b; color: #f4f1ea; padding: 14px 16px; border-radius: 12px; overflow-x: auto; font-size: .86em; line-height: 1.5; }
+.prose code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .875em; background: var(--tint); padding: .1em .35em; border-radius: var(--r-sm); }
+.prose pre { background: var(--code-bg); color: var(--code-fg); padding: 12px 14px; border-radius: var(--r); overflow-x: auto; font-size: .875em; line-height: 1.5; }
 .prose pre code { background: none; padding: 0; }
-.prose blockquote { margin: 0 0 .85em; padding: .1em 0 .1em 1em; border-left: 2px solid var(--hairline); color: var(--ink-soft); }
-.prose table { border-collapse: collapse; width: 100%; margin: 0 0 1em; font-size: .92em; }
-.prose th, .prose td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--hairline); }
+.prose blockquote { margin: 0 0 .8em; padding: 0 0 0 .9em; border-left: 1px solid var(--hairline); color: var(--ink-soft); }
+.prose table { border-collapse: collapse; width: 100%; margin: 0 0 .9em; font-size: .875em; }
+.prose th, .prose td { text-align: left; padding: 6px 11px 6px 0; border-bottom: 1px solid var(--hairline); }
 .prose th { font-weight: 600; color: var(--ink-soft); }
 
 /* ── composer ─────────────────────────────────────────────────────────────── */
-.composer { position: sticky; bottom: 0; background: linear-gradient(to top, var(--paper) 72%, transparent); padding: 8px 0 6px; }
+.composer { position: sticky; bottom: 0; background: linear-gradient(to top, var(--paper) 74%, transparent); padding: 6px 0 8px; }
+/* Said once, quietly, under the thing it is about. */
+.hint { color: var(--muted); font-size: 11px; text-align: center; padding: 7px 0 0; }
 .field {
-  display: flex; align-items: flex-end; gap: 8px; background: var(--surface); border-radius: var(--radius);
-  padding: 8px 8px 8px 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.06);
-  transition: box-shadow .2s var(--reveal);
+  display: flex; align-items: flex-end; gap: 6px; background: var(--surface);
+  border: 1px solid var(--hairline); border-radius: var(--r-lg);
+  padding: 6px 6px 6px 14px;
+  transition: border-color .16s var(--reveal);
 }
-.field:focus-within { box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 12px 36px rgba(75,85,99,.14); }
-textarea#input { flex: 1 1 auto; border: 0; outline: 0; resize: none; background: none; font: inherit; color: var(--ink); line-height: 1.55; max-height: 40vh; padding: 8px 0; }
+.field:focus-within { border-color: var(--ink); }
+/* 15px x 1.55 = 23.25; 4px of padding each side makes a single line 31.25px,
+   which is the send button's 32px. Bottom-aligned and centred are then the
+   same thing on one line, and the button stays at the bottom on three. */
+textarea#input { flex: 1 1 auto; border: 0; outline: 0; resize: none; background: none;
+  font: inherit; color: var(--ink); line-height: 1.55; max-height: 40vh; padding: 4px 0;
+  min-height: 32px; }
 textarea#input::placeholder { color: var(--muted); }
-#send { flex: 0 0 auto; width: 38px; height: 38px; border: 0; border-radius: 11px; display: grid; place-items: center; cursor: pointer; color: #fff; background: var(--accent); transition: background .18s, transform .1s; }
-#send:disabled { background: var(--hairline); color: var(--muted); cursor: default; }
+#send { flex: 0 0 auto; width: 32px; height: 32px; border: 0; border-radius: var(--r-sm); display: grid; place-items: center; cursor: pointer; color: var(--paper); background: var(--accent); transition: background .16s, transform .1s; }
+#send:disabled { background: var(--tint); color: var(--muted); cursor: default; }
 #send:not(:disabled):hover { background: var(--hover); }
 #send:not(:disabled):active { transform: translateY(1px); }
 /* The same control sends and stops: while a turn is running it becomes a stop button, so
@@ -234,559 +338,611 @@ body.streaming #send .ic-stop { display: block; }
 /* during the cancel-free window the stop reads as an undo, not an interruption */
 body.streaming.grace #send { background: var(--ink-soft); }
 body.streaming.grace #send:hover { background: var(--hover); }
-.hint { color: var(--muted); font-size: 12px; text-align: center; padding: 6px 0 0; }
 
 /* ── results panel ────────────────────────────────────────────────────────── */
 .panel {
   position: relative; flex: 0 0 var(--panel-w); width: var(--panel-w);
   border-left: 1px solid var(--hairline); background: var(--paper);
   display: flex; flex-direction: column; min-height: 0;
-  transition: margin-right .3s var(--reveal), opacity .22s var(--reveal);
+  transition: margin-right .28s var(--reveal), opacity .2s var(--reveal);
 }
 body:not(.panel-open) .panel { margin-right: calc(-1 * var(--panel-w) - 2px); opacity: 0; pointer-events: none; }
-.resize {                              /* drag the left edge to resize */
-  position: absolute; left: -3px; top: 0; width: 8px; height: 100%; cursor: col-resize; z-index: 6;
+.resize { position: absolute; left: -4px; top: 0; width: 9px; height: 100%; cursor: col-resize; z-index: 6; }
+.resize::after {
+  content: ""; position: absolute; left: 0; top: 50%; width: 3px; height: 72px;
+  margin-top: -36px; border-radius: var(--pill); background: var(--line);
+  opacity: 0; transition: opacity .14s var(--reveal), background .14s var(--reveal);
 }
-.resize::after { content: ""; position: absolute; left: 3px; top: 0; width: 1px; height: 100%; background: transparent; transition: background .15s; }
-.resize:hover::after, body.resizing .resize::after { background: var(--accent); }
-.panel-body { flex: 1 1 auto; overflow-y: auto; padding: 12px 12px 24px; }
+.resize:hover::after { opacity: 1; }
+body.resizing .resize::after { opacity: 1; background: var(--ink-soft); }
+.panel-head {
+  flex: 0 0 auto; display: flex; align-items: baseline; gap: 8px;
+  padding: 12px 14px 10px; border-bottom: 1px solid var(--hairline);
+}
+.ph-title { font-size: 12px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em; }
+.ph-count { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
+  margin-left: auto; }
+.panel-body { flex: 1 1 auto; overflow-y: auto; padding: 8px 10px 20px;
+  display: flex; flex-direction: column; }
+.tree { flex: 1 0 auto; display: flex; flex-direction: column; }
 
-/* directory tree — compact, hierarchy by indentation (no bold) */
-/* empty results: centered in the panel, robust to resizing (vh re-centers on resize) */
-.tree-empty { display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center; min-height: calc(100vh - 90px); padding: 24px; gap: 8px; }
-.te-title { font-size: 17px; font-weight: 500; color: var(--ink-soft); }
-.te-sub { font-size: 14px; color: var(--muted); line-height: 1.55; max-width: 22rem; }
+/* directory tree — compact, hierarchy by indentation. No folder glyph: the chevron
+   already says a row opens, and a second mark beside it says it twice. */
+.tree-empty { flex: 1 1 auto; display: grid; place-items: center; padding: 20px; }
+.te-title { font-size: 16px; font-weight: 400; color: var(--muted); }
 .folder-row, .item {
-  display: flex; align-items: center; gap: 7px; width: 100%;
-  border: 0; background: none; cursor: pointer; font: inherit; text-align: left;
-  padding: 4px 7px; border-radius: 7px; color: var(--ink); transition: background .12s var(--reveal);
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px; text-align: left;
+  padding: 3px 6px; border-radius: var(--r-sm); color: var(--ink); transition: background .12s var(--reveal);
 }
-.folder-row { font-size: 13px; }
 .folder-row:hover, .item:hover { background: var(--tint); }
-.chev { flex: 0 0 13px; color: var(--muted); transition: transform .16s var(--reveal); }
+.chev { flex: 0 0 12px; color: var(--muted); transition: transform .15s var(--reveal); }
 .folder.open > .folder-row .chev { transform: rotate(90deg); }
-.folder-row .count { margin-left: auto; color: var(--muted); font-size: 11px; }
-/* Shown only when two runs share a heading, so it reads as what tells them
-   apart rather than as a timestamp on everything. */
-.folder-row .when { margin-left: auto; color: var(--muted); font-size: 11px; }
-.folder-row .when + .count { margin-left: 8px; }
+/* The trailing group, in order: flag, stamp, count. The flag carries the auto
+   margin that pushes the group right, and its slot is reserved whether or not it
+   is filled — so the stamp and the count sit at one offset on every row. */
+.flag-slot { flex: 0 0 13px; margin-left: auto; display: grid; place-items: center;
+  color: var(--hover); line-height: 0; }
+.folder-row .when { margin-left: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.folder-row .count { margin-left: 10px; color: var(--muted); font-size: 11px;
+  font-variant-numeric: tabular-nums; min-width: 1ch; text-align: right; }
 .folder:not(.open) > .items { display: none; }     /* reliable collapse */
 /* a sample, holding the runs that are about it. Indentation carries the nesting,
    as it does for items, so a run reads the same whether it sits under a sample
    or on its own. */
-.group > .items > .folder > .folder-row { padding-left: 21px; }
-.group > .items > .folder .item { padding-left: 44px; }
-.group > .folder-row .name { color: var(--ink); }
-.item { padding-left: 30px; font-size: 13px; color: var(--ink-soft); }
+.group > .items > .folder > .folder-row { padding-left: 20px; }
+.group > .items > .folder .item { padding-left: 40px; }
+.item { padding-left: 26px; color: var(--ink-soft); }
 .item:hover { color: var(--ink); }
 .item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ico { flex: 0 0 15px; color: var(--muted); display: grid; place-items: center; }
+.ico { flex: 0 0 14px; color: var(--muted); display: grid; place-items: center; }
+/* said only when it is not fine */
+/* present, but not something that can be opened or downloaded */
+.item-stays { cursor: default; color: var(--muted); }
+.item-stays:hover { background: none; color: var(--muted); }
 
-/* artifact viewer */
-.viewer { padding: 2px 6px 8px; animation: rise .22s var(--reveal) both; }
-.v-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 2px; }
+/* work still going. Deliberately no panel, no border, no heading: rows in the same
+   list as everything else, distinguished by the pulse rather than by a box. */
+.going { padding: 0 0 6px; }
+.go-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: var(--r-sm); font-size: 13px; color: var(--ink-soft); }
+.go-row:hover { background: var(--tint); }
+.go-dot { flex: 0 0 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: go-pulse 1.6s ease-in-out infinite; }
+@keyframes go-pulse { 0%, 100% { opacity: .25; } 50% { opacity: .9; } }
+.go-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.go-time { margin-left: auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.go-stop { flex: 0 0 auto; border: 0; background: none; cursor: pointer; color: var(--muted);
+  display: grid; place-items: center; padding: 2px; border-radius: var(--r-sm); opacity: 0; }
+.go-row:hover .go-stop { opacity: 1; }
+.go-stop:hover { color: var(--hover); }
+
+/* ── artifact viewer ─────────────────────────────────────────────────────── */
+.viewer { padding: 0 4px 8px; animation: rise .2s var(--reveal) both; }
+.v-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .v-back, .v-dl {
   display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; cursor: pointer;
-  font: inherit; color: var(--muted); padding: 3px 5px; border-radius: 7px; text-decoration: none;
-  transition: color .14s, background .14s;
+  font: inherit; font-size: 13px; color: var(--muted); padding: 3px 4px; border-radius: var(--r-sm);
+  text-decoration: none; transition: color .14s;
 }
-.v-back { font-size: 14.5px; padding-left: 2px; }
-.v-dl { font-size: 14.5px; }
+.v-back { padding-left: 2px; }
 .v-back:hover, .v-dl:hover { color: var(--hover); }
-.viewer .v-name { font-weight: 500; font-size: 16px; margin: 0 0 4px; word-break: break-word; }
+.viewer .v-name { font-weight: 600; font-size: 15px; margin: 0 0 4px; word-break: break-word; }
 .v-desc-wrap { position: relative; margin: 0; }
-.v-desc-wrap.collapsed { max-height: 7.6em; overflow: hidden; }
+.v-desc-wrap.collapsed { max-height: 7.4em; overflow: hidden; }
 .v-desc-wrap.collapsed::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1.2em;
   background: linear-gradient(transparent, var(--paper)); pointer-events: none;
 }
-.v-more { border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px; color: var(--accent); padding: 1px 2px 2px; }
+.v-more { border: 0; background: none; cursor: pointer; font: inherit; font-size: 12px; color: var(--ink-soft); padding: 2px 0; }
 .v-more:hover { color: var(--hover); }
-/* clear gap between the description / Show more and the artifact body below */
-.viewer img, .viewer .v-tablewrap, .viewer pre.v-json, .viewer .v-text, .viewer .v-md, .viewer .v-note { margin-top: 16px; }
-/* ── settings used ──────────────────────────────────────────────────────────
-   Collapsed by default and in the muted register: it is what a reader opens to check a
-   number, not part of the result. Defaults are dimmed but present — omitting them is what
-   made the settings unverifiable in the first place. */
-.viewer .v-params { margin-top: 14px; }
-.vp > summary {
-  list-style: none; cursor: pointer; color: var(--muted); font-size: 13px;
-  display: inline-flex; align-items: center; gap: 7px; padding: 1px 0;
-}
-.vp > summary::-webkit-details-marker { display: none; }
-.vp > summary::before {
-  content: ""; width: 5px; height: 5px; border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor; transform: rotate(-45deg);
-  transition: transform .15s var(--reveal);
-}
-.vp[open] > summary::before { transform: rotate(45deg); }
-.vp > summary:hover { color: var(--ink-soft); }
-.vp-body { overflow: hidden; padding-left: 13px; border-left: 2px solid var(--hairline); margin-top: 8px; }
-.vp-fn { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin: 10px 0 3px; }
-.vp-fn:first-child { margin-top: 0; }
-.vp-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
-.vp-table th {
-  text-align: left; font-weight: 500; color: var(--ink-soft); padding: 3px 12px 3px 0;
-  white-space: nowrap; vertical-align: top; width: 1%;
-}
-.vp-table td { color: var(--ink); padding: 3px 0; overflow-wrap: anywhere; }
-.vp-table td.vp-tag { color: var(--muted); font-size: 11.5px; text-align: right; white-space: nowrap; width: 1%; padding-left: 10px; }
-.vp-table tr.is-default th, .vp-table tr.is-default td { color: var(--muted); }
-.viewer .v-desc { color: var(--ink-soft); font-size: 14.5px; margin: 0; line-height: 1.55; }
+.viewer .v-desc { color: var(--ink-soft); font-size: 13px; margin: 0; line-height: 1.55; }
 .viewer .v-desc > :first-child { margin-top: 0; } .viewer .v-desc > :last-child { margin-bottom: 0; }
-.viewer .v-desc p { margin: 0 0 .6em; } .viewer .v-desc ul, .viewer .v-desc ol { margin: 0 0 .6em; padding-left: 1.2em; }
+.viewer .v-desc p { margin: 0 0 .55em; } .viewer .v-desc ul, .viewer .v-desc ol { margin: 0 0 .55em; padding-left: 1.15em; }
 .viewer .v-desc strong { color: var(--ink); font-weight: 600; }
-.viewer img { width: 100%; height: auto; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 22px rgba(0,0,0,.06); }
+/* clear gap between the description and the artifact body below */
+.viewer img, .viewer .v-tablewrap, .viewer pre.v-json, .viewer .v-text, .viewer .v-md,
+.viewer .v-note, .viewer .v-jsonview { margin-top: 13px; }
+.viewer img { width: 100%; height: auto; border-radius: var(--r); box-shadow: var(--rest); }
 .viewer .v-text { white-space: pre-wrap; word-wrap: break-word; font-size: 13px; line-height: 1.6; color: var(--ink); }
+
+/* settings used — collapsed, and in the muted register: it is what a reader opens to
+   check a number, not part of the result. Defaults are dimmed but present. */
+.viewer .v-params { margin-top: 12px; }
+.vp-body { overflow: hidden; padding-left: 12px; border-left: 1px solid var(--hairline); margin-top: 7px; }
+.vp-fn { font-size: 12px; font-weight: 600; color: var(--ink-soft); margin: 9px 0 3px; }
+.vp-fn:first-child { margin-top: 0; }
+.vp-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.vp-table th {
+  text-align: left; font-weight: 400; color: var(--muted); padding: 3px 14px 3px 0;
+  white-space: nowrap; vertical-align: top; width: 1%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+}
+.vp-table td { color: var(--ink); padding: 3px 0; overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums; }
+.vp-table td.vp-tag { color: var(--muted); font-size: 11px; text-align: right; white-space: nowrap; width: 1%; padding-left: 10px; }
+.vp-table tr.is-default td { color: var(--ink-soft); }
+.vp-table tr:hover th, .vp-table tr:hover td { color: var(--ink); }
+
 /* a written result rendered from markdown (summaries, narratives, methods notes) */
-.viewer .v-md { font-size: 14px; line-height: 1.62; color: var(--ink); overflow-wrap: break-word; }
+.viewer .v-md { font-size: 13px; line-height: 1.6; color: var(--ink); overflow-wrap: break-word; }
 .viewer .v-md > :first-child { margin-top: 0; }
 .viewer .v-md > :last-child { margin-bottom: 0; }
 .viewer .v-md h1, .viewer .v-md h2, .viewer .v-md h3, .viewer .v-md h4 {
-  font-size: 14.5px; font-weight: 600; margin: 1.35em 0 .4em; letter-spacing: -0.005em; }
-.viewer .v-md p { margin: 0 0 .75em; }
-.viewer .v-md ul, .viewer .v-md ol { margin: 0 0 .75em; padding-left: 1.25em; }
-.viewer .v-md li { margin: .15em 0; }
-.viewer .v-md code { background: var(--tint); border-radius: 5px; padding: 1px 5px; font-size: .89em; }
-.viewer .v-md pre { background: #1f1d1b; color: #f4f1ea; padding: 12px 14px; border-radius: 10px;
-  overflow-x: auto; font-size: 12px; line-height: 1.5; }
+  font-size: 13px; font-weight: 600; margin: 1.3em 0 .35em; }
+.viewer .v-md p { margin: 0 0 .7em; }
+.viewer .v-md ul, .viewer .v-md ol { margin: 0 0 .7em; padding-left: 1.2em; }
+.viewer .v-md li { margin: .12em 0; }
+.viewer .v-md code { background: var(--tint); border-radius: var(--r-sm); padding: 1px 4px; font-size: .875em; }
+.viewer .v-md pre { background: var(--code-bg); color: var(--code-fg); padding: 11px 13px; border-radius: var(--r);
+  overflow-x: auto; font-size: 11px; line-height: 1.5; }
 .viewer .v-md pre code { background: none; padding: 0; }
-.viewer .v-md blockquote { margin: 0 0 .75em; padding-left: .9em; border-left: 2px solid var(--hairline);
-  color: var(--ink-soft); }
-.viewer .v-md table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 12.5px;
-  max-width: 100%; margin: 0 0 .75em; }
-.viewer .v-md th, .viewer .v-md td { padding: 6px 11px; border-bottom: 1px solid var(--hairline);
+.viewer .v-md blockquote { margin: 0 0 .7em; padding-left: .85em; border-left: 1px solid var(--hairline); color: var(--ink-soft); }
+.viewer .v-md table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 12px;
+  max-width: 100%; margin: 0 0 .7em; }
+.viewer .v-md th, .viewer .v-md td { padding: 5px 10px; border-bottom: 1px solid var(--hairline);
   white-space: nowrap; text-align: left; }
 .viewer .v-md th { font-weight: 600; color: var(--ink-soft); }
-.viewer pre.v-json { background: #1f1d1b; color: #f4f1ea; padding: 12px 14px; border-radius: 10px; overflow-x: auto; font-size: 12px; line-height: 1.5; }
-.v-tablewrap { overflow-x: auto; border: 1px solid var(--hairline); border-radius: 10px; }
-.v-table { border-collapse: collapse; font-size: 12.5px; width: max-content; min-width: 100%; }
-.v-table th, .v-table td { padding: 6px 11px; border-bottom: 1px solid var(--hairline); white-space: nowrap; text-align: left; }
-.v-table th { position: sticky; top: 0; background: var(--surface); font-weight: 600; color: var(--ink-soft); }
-.v-table tr:last-child td { border-bottom: 0; }
-.v-note { color: var(--muted); font-size: 12px; padding: 8px 2px 0; }
+.viewer pre.v-json { background: var(--code-bg); color: var(--code-fg); padding: 11px 13px; border-radius: var(--r); overflow-x: auto; font-size: 11px; line-height: 1.5; }
 
-/* ── structured view of a curated result: facts, then its record tables ──── */
-.viewer .v-jsonview { margin-top: 16px; }
-.v-jsonview > * + * { margin-top: 16px; }
-.v-facts { border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; }
-.v-fact { display: flex; gap: 14px; padding: 7px 13px; font-size: 12.5px;
-  border-bottom: 1px solid var(--hairline); }
+/* One table, everywhere. Numeric columns are right-aligned with tabular figures
+   because a column of numbers is read down, not across; the header is quiet
+   because it is read once; the first column holds the row's identity. Zebra
+   rather than a rule per row: on a wide table the eye tracks a band better than
+   it tracks a line, and a rule under every row of forty is forty rules. */
+.v-tablewrap { overflow: auto; max-height: 62vh; border: 1px solid var(--hairline); border-radius: var(--r); }
+.v-table { border-collapse: separate; border-spacing: 0; font-size: 12px; width: max-content; min-width: 100%; }
+.v-table th, .v-table td { padding: 5px 11px; white-space: nowrap; text-align: left; }
+.v-table th {
+  position: sticky; top: 0; z-index: 1; background: var(--surface);
+  font-weight: 500; font-size: 11px; color: var(--muted);
+  letter-spacing: .03em; text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+}
+.v-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--tint) 55%, transparent); }
+.v-table tbody tr:hover { background: var(--tint); }
+.v-table td.is-key { color: var(--ink); font-weight: 500; }
+.v-table td { color: var(--ink-soft); }
+.v-table .is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.v-table td.is-num { color: var(--ink); }
+.v-table td.is-empty { color: var(--muted); }
+/* A note under a result is read, not glanced at, so it is not the smallest
+   type in the app. Same size as the tooltip text and the settings table. */
+.v-note { color: var(--muted); font-size: 12px; padding: 7px 2px 0; }
+
+/* structured view of a curated result: facts, then its record tables */
+.v-jsonview > * + * { margin-top: 13px; }
+.v-facts { border: 1px solid var(--hairline); border-radius: var(--r); overflow: hidden; }
+.v-fact { display: flex; gap: 14px; padding: 6px 11px; font-size: 12px; border-bottom: 1px solid var(--hairline); }
 .v-fact:last-child { border-bottom: 0; }
-.v-fact-k { flex: 0 0 40%; color: var(--ink-soft); }
-.v-fact-v { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
-.v-section { font-size: 13px; font-weight: 600; color: var(--ink-soft); padding-top: 2px; }
+.v-fact:nth-child(even) { background: color-mix(in srgb, var(--tint) 55%, transparent); }
+.v-fact-k { flex: 0 0 11rem; color: var(--muted); }
+.v-fact-v { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
+.v-fact-v.is-num { font-variant-numeric: tabular-nums; }
+.v-section { display: flex; align-items: baseline; gap: 8px; font-size: 11px; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.v-section-n { font-weight: 400; letter-spacing: 0; text-transform: none;
+  font-variant-numeric: tabular-nums; }
 
 .backdrop { display: none; }
 
 @media (max-width: 980px) {
   .panel {
     position: fixed; top: 0; right: 0; height: 100vh; z-index: 30; margin-right: 0; opacity: 1;
-    box-shadow: -14px 0 50px rgba(0,0,0,.14); transform: translateX(0); transition: transform .3s var(--reveal);
+    box-shadow: var(--lift); transform: translateX(0); transition: transform .28s var(--reveal);
   }
   body:not(.panel-open) .panel { transform: translateX(101%); margin-right: 0; opacity: 1; }
-  body.panel-open .backdrop { display: block; position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.18); }
+  body.panel-open .backdrop { display: block; position: fixed; inset: 0; z-index: 20; background: var(--scrim); }
   .resize { display: none; }
 }
 @media (max-width: 700px) {
   .panel { width: min(92vw, var(--panel-w)); }
-  .welcome { padding-top: 9vh; } .welcome h1 { font-size: 25px; } .hint { display: none; }
+  .welcome h1 { font-size: 24px; }
+  /* Four labels plus the wordmark are wider than a phone. The strip scrolls rather
+     than being truncated or losing a control: everything stays reachable, and the
+     bar stops forcing a min-content width that pushed the whole page sideways. */
+  .topbar .bar { padding: 8px 10px; gap: 8px; }
+  .left { flex: 0 1 auto; min-width: 0; }
+  .brand { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* Pushed right by an auto margin, not by justify-content: flex-end. With
+     flex-end the overflow goes off the LEFT edge, which no scroll range covers —
+     scrollWidth equals clientWidth and the first control is unreachable. An auto
+     margin collapses to zero when there is no room, so the strip fills from the
+     left and scrolls the ordinary way. */
+  .right { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .right > :first-child { margin-left: auto; }
+  .right::-webkit-scrollbar { display: none; }
+  .right .ghost { padding: 6px 7px; }
+  #studyBtn span { max-width: 7rem; }
 }
 
-/* ── login page ──────────────────────────────────────────────────────────── */
-.login-body {
-  display: grid;
-  place-items: center;
-  min-height: 100vh;
-  background: var(--paper);
+/* ── login ───────────────────────────────────────────────────────────────── */
+/* No card. A card floating on a page with nothing else on it is a box drawn around
+   nothing, and the shadow under it is the only thing it adds. */
+.login-body { display: grid; place-items: center; min-height: 100vh; background: var(--paper); }
+.login { width: min(19rem, 88vw); }
+.login-brand { display: flex; flex-direction: column; gap: 12px; margin-bottom: 26px; }
+.login-brand .mark { display: block; color: var(--ink); }
+.login-brand span { font-weight: 600; font-size: 20px; letter-spacing: -0.024em; }
+#loginForm { display: flex; flex-direction: column; gap: 8px; }
+#loginForm input {
+  border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px;
+  font: inherit; font-size: 13px; color: var(--ink); outline: 0; background: var(--surface);
+  transition: border-color .14s;
 }
-.login { width: min(22rem, 92vw); }
-.login-card { background: var(--surface); border-radius: 18px; padding: 30px 28px;
-  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 16px 50px rgba(0,0,0,.08); }
-.login-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 18px; margin-bottom: 22px; line-height: 1; }
-.login-brand img { width: 48px; height: 48px; object-fit: contain; }
-#loginForm { display: flex; flex-direction: column; gap: 10px; }
-#loginForm input { border: 1px solid var(--hairline); border-radius: 11px; padding: 12px 14px;
-  font: inherit; font-size: 15px; outline: 0; background: var(--paper); transition: border-color .15s, box-shadow .15s; }
-#loginForm input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
-#loginBtn { margin-top: 4px; border: 0; border-radius: 11px; padding: 12px; font: inherit; font-size: 15px;
-  font-weight: 500; color: #fff; background: var(--accent); cursor: pointer; transition: background .18s; }
+#loginForm input::placeholder { color: var(--muted); }
+#loginForm input:focus { border-color: var(--ink); }
+#loginBtn {
+  margin-top: 4px; border: 0; border-radius: var(--r); padding: 10px; font: inherit; font-size: 13px;
+  font-weight: 500; color: var(--paper); background: var(--accent); cursor: pointer; transition: background .16s;
+}
 #loginBtn:hover:not(:disabled) { background: var(--hover); }
-#loginBtn:disabled { opacity: .6; cursor: default; }
-.login-error { color: var(--hover); font-size: 13px; min-height: 1em; margin-top: 12px; text-align: center; }
+#loginBtn:disabled { opacity: .5; cursor: default; }
+.login-error { color: var(--hover); font-size: 12px; min-height: 1em; margin-top: 10px; }
 
-/* ── user + chats popup ──────────────────────────────────────────────────── */
-.menu-backdrop { position: fixed; inset: 0; z-index: 40; }
+/* ── tooltip ─────────────────────────────────────────────────────────────────
+   The app's own, because the browser's cannot be styled and renders a list of
+   facts as one grey run. A pair list is a two-column grid; everything else is
+   lines. Pointer-events off, so it can never be the thing under the cursor. */
+.tip {
+  position: fixed; z-index: 200; max-width: 22rem;
+  background: var(--tint); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: var(--pop); padding: 7px 10px;
+  font-size: 12px; line-height: 1.5;
+  opacity: 0; visibility: hidden; transform: translateY(-2px);
+  transition: opacity .12s var(--reveal), transform .12s var(--reveal), visibility .12s;
+  pointer-events: none;
+}
+.tip.on { opacity: 1; visibility: visible; transform: none; }
+.tip-line + .tip-line { margin-top: 2px; }
+.tip-line b, .tip-v b { font-weight: 600; }
+.tip-rows { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
+.tip-k { color: var(--muted); white-space: nowrap; }
+.tip-v { color: var(--ink); overflow-wrap: anywhere; }
+
+/* ── popovers ────────────────────────────────────────────────────────────── */
+/* One shell for all three: same border, radius, shadow and padding, so they read as
+   the same object arriving from different buttons. */
 .menu-pop {
-  position: fixed; top: 58px; left: 12px; z-index: 50; width: 380px; max-height: 72vh;
-  display: flex; flex-direction: column; gap: 8px; padding: 10px;
-  background: var(--surface); border: 1px solid var(--hairline); border-radius: 14px;
-  box-shadow: 0 2px 6px rgba(0,0,0,.05), 0 18px 50px rgba(0,0,0,.14);
-  animation: rise .16s var(--reveal) both;
+  position: fixed; top: 48px; left: 10px; z-index: 50; width: 300px; max-height: 70vh;
+  display: flex; flex-direction: column; gap: 6px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-lg);
+  box-shadow: var(--pop); animation: rise .14s var(--reveal) both;
 }
 .menu-pop[hidden] { display: none; }   /* the attribute must win over display:flex above */
+.study-pop { left: auto; right: 10px; width: 240px; }
+.view-pop  { left: auto; right: 10px; width: 290px; }
+
 .mp-new { display: flex; align-items: center; gap: 8px; border: 0; background: none; cursor: pointer;
-  font: inherit; font-size: 14px; color: var(--ink); padding: 9px 10px; border-radius: 9px; transition: background .14s; }
+  font: inherit; font-size: 13px; color: var(--ink); padding: 7px 8px; border-radius: var(--r-sm); transition: background .14s; }
 .mp-new:hover { background: var(--tint); }
-.mp-search { border: 1px solid var(--hairline); border-radius: 9px; padding: 8px 11px; font: inherit;
-  font-size: 13.5px; outline: 0; background: var(--paper); }
-.mp-search:focus { border-color: var(--accent); }
-.mp-chats { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 40px; }
-.mp-empty { color: var(--muted); font-size: 13px; padding: 10px; }
-.mp-chat-row { display: flex; align-items: center; border-radius: 8px; transition: background .14s; }
+.mp-search { border: 1px solid var(--hairline); border-radius: var(--r-sm); padding: 6px 9px; font: inherit;
+  font-size: 13px; color: var(--ink); outline: 0; background: var(--paper); }
+.mp-search::placeholder { color: var(--muted); }
+.mp-search:focus { border-color: var(--ink); }
+.mp-chats { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; min-height: 34px; }
+.mp-empty, .vw-empty { color: var(--muted); font-size: 13px; padding: 7px 8px; }
+.mp-chat-row { display: flex; align-items: center; border-radius: var(--r-sm); transition: background .14s; }
 .mp-chat-row:hover { background: var(--tint); }
 .mp-chat-row.active { background: var(--accent-weak); }
 .mp-chat { flex: 1 1 auto; min-width: 0; border: 0; background: none; cursor: pointer; font: inherit;
-  font-size: 13.5px; color: var(--ink-soft); text-align: left; padding: 8px 10px; overflow: hidden;
+  font-size: 13px; color: var(--ink-soft); text-align: left; padding: 6px 8px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .mp-chat-row:hover .mp-chat, .mp-chat-row.active .mp-chat { color: var(--ink); }
-.mp-acts { display: none; gap: 1px; padding-right: 4px; flex: 0 0 auto; }
+.mp-acts { display: none; gap: 1px; padding-right: 3px; flex: 0 0 auto; }
 .mp-chat-row:hover .mp-acts { display: flex; }
-.mp-act { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 4px; border-radius: 6px;
-  display: grid; place-items: center; transition: color .14s, background .14s; }
-.mp-act:hover { color: var(--hover); background: var(--surface); }
-.mp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  border-top: 1px solid var(--hairline); padding-top: 8px; margin-top: 2px; }
-.mp-user { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mp-logout { border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px; color: var(--ink-soft);
-  padding: 5px 8px; border-radius: 7px; transition: color .14s, background .14s; flex: 0 0 auto; }
-.mp-logout:hover { color: var(--hover); background: var(--tint); }
+.mp-act { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 4px; border-radius: var(--r-sm);
+  display: grid; place-items: center; transition: color .14s; }
+.mp-act:hover { color: var(--hover); }
+.mp-foot { display: flex; align-items: center; gap: 6px;
+  border-top: 1px solid var(--hairline); padding: 7px 4px 1px; }
+.mp-user { margin-right: auto; }
+/* The theme switch: a glyph, because the row it sits in is already two words
+   long and the icon says which way it would go. */
+.mp-theme { border: 0; background: none; cursor: pointer; color: var(--muted);
+  padding: 4px; border-radius: var(--r-sm); display: grid; place-items: center;
+  line-height: 0; flex: 0 0 auto; transition: color .14s, background .14s; }
+.mp-theme:hover { color: var(--ink); background: var(--tint); }
+.mp-user { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-logout { border: 0; background: none; cursor: pointer; font: inherit; font-size: 12px; color: var(--ink-soft);
+  padding: 3px 5px; border-radius: var(--r-sm); transition: color .14s; flex: 0 0 auto; }
+.mp-logout:hover { color: var(--hover); }
 
-/* ── studies + capabilities popups ───────────────────────────────────────── */
-/* Two deliberately separate controls: capabilities sits with the name on the left (it
-   describes the product), study scope sits on the right with Results (it changes state). */
-.infobtn {
-  border: 0; background: none; cursor: pointer; color: var(--muted);
-  padding: 5px; border-radius: 8px; display: grid; place-items: center; line-height: 0;
-  flex: 0 0 auto; transition: color .15s var(--reveal), background .15s var(--reveal);
-}
-.infobtn:hover, .infobtn.on { color: var(--ink); background: var(--tint); }
-.ghost.on { background: var(--accent); color: #fff; }
-.ghost.on:hover { background: var(--accent); color: #fff; }
-#studyBtn span { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* studies */
+.sp-list { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; min-height: 32px; }
+.sp-item { display: flex; align-items: center; gap: 8px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 13px; color: var(--ink-soft); text-align: left; width: 100%;
+  padding: 6px 8px; border-radius: var(--r-sm); transition: background .14s, color .14s; }
+.sp-item:hover { background: var(--tint); color: var(--ink); }
+.sp-item.on { color: var(--ink); }
+.sp-box { flex: 0 0 auto; width: 15px; height: 15px; border-radius: var(--r-sm); display: grid; place-items: center;
+  border: 1px solid var(--line); color: transparent; transition: background .14s, border-color .14s; }
+.sp-item.on .sp-box { background: var(--accent); border-color: var(--accent); color: var(--paper); }
+.sp-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  border-top: 1px solid var(--hairline); padding: 7px 4px 1px; }
+.sp-all { border: 0; background: none; cursor: pointer; font: inherit; font-size: 12px; color: var(--ink-soft);
+  padding: 3px 5px; border-radius: var(--r-sm); transition: color .14s; }
+.sp-all:hover:not(:disabled) { color: var(--hover); }
+.sp-all:disabled { color: var(--muted); cursor: default; }
+.sp-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.pop-head { padding: 2px 4px 0; }
-.pop-title { font-size: 14.5px; font-weight: 600; }
-.pop-sub { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin-top: 3px; }
-.pop-foot { border-top: 1px solid var(--hairline); padding: 9px 4px 2px; margin-top: 2px;
-  color: var(--muted); font-size: 12px; line-height: 1.5; }
-
-/* studies: anchored under its button on the right */
-.study-pop { left: auto; right: 12px; width: 320px; }
-
-/* visualizers: the same anchored popover as studies. A viewer with nothing to open is
-   shown disabled rather than hidden, so it can be found before it works. */
-.view-pop { left: auto; right: 12px; width: 340px; }
-.vw-list { display: flex; flex-direction: column; gap: 2px; }
+/* visualizers. A viewer with nothing to open is shown disabled rather than hidden, so it
+   can be found before it works. */
+.vw-list { display: flex; flex-direction: column; gap: 1px; }
 .vw-item {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
   width: 100%; text-align: left; border: 0; background: none; font: inherit;
-  padding: 9px 10px; border-radius: 10px; cursor: pointer; color: var(--ink);
+  padding: 7px 8px; border-radius: var(--r-sm); cursor: pointer; color: var(--ink);
   transition: background .14s, color .14s;
 }
-.vw-item:hover:not([disabled]) { background: var(--tint); color: var(--hover); }
+.vw-item:hover:not([disabled]) { background: var(--tint); }
 .vw-item[disabled] { cursor: default; color: var(--muted); }
-.vw-name { font-size: 14px; font-weight: 600; }
-.vw-why { font-size: 12.4px; line-height: 1.45; color: var(--ink-soft); font-weight: 400; }
-.vw-item[disabled] .vw-why { color: var(--muted); }
-.vw-empty { font-size: 13px; color: var(--ink-soft); padding: 8px 10px; }
-
-/* the version grid: what exists, and which one is in play */
-.ver-card { max-width: 78rem; }
-.ver-body { overflow: auto; max-height: 62vh; margin-top: 10px; }
-.ver-grid { border-collapse: separate; border-spacing: 0; font-size: 12.8px; }
-.ver-grid th, .ver-grid td { padding: 4px 8px; text-align: left; white-space: nowrap; }
-.ver-grid tr th:first-child, .ver-grid tr td:first-child { position: sticky; left: 0; background: var(--paper); }
-.ver-grid tr:first-child th { position: sticky; top: 0; background: var(--paper); z-index: 2;
-  border-bottom: 1px solid var(--hairline); vertical-align: bottom; }
-.ver-grid tr:first-child th:first-child { z-index: 3; }
-.ver-col { font-weight: 600; font-size: 12.4px; }
-.ver-all { display: block; margin-top: 2px; border: 0; background: none; cursor: pointer;
-  font: inherit; font-size: 11px; font-weight: 400; color: var(--muted); padding: 0; }
-.ver-all:hover { color: var(--hover); }
-/* Setting the whole grid, above it rather than in a corner of it: it acts on
-   everything below, so it reads before what it acts on. */
-.ver-bulk { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; }
-.ver-bulk-say { font-size: 11.5px; color: var(--muted); }
-.ver-bulk-btn { border: 1px solid var(--hairline); background: none; cursor: pointer;
-  font: inherit; font-size: 11.8px; color: var(--ink-soft); padding: 2px 10px;
-  border-radius: 999px; transition: color .14s, border-color .14s; }
-.ver-bulk-btn:hover { color: var(--hover); border-color: currentColor; }
-.ver-row { font-weight: 500; color: var(--ink); border-right: 1px solid var(--hairline); }
-.ver-cell { position: relative; }
-.ver-none { color: var(--muted); }
-.ver-pill { border: 1px solid var(--hairline); background: none; cursor: pointer; font: inherit;
-  font-size: 12px; color: var(--ink-soft); padding: 1px 8px; border-radius: 999px;
-  font-variant-numeric: tabular-nums; transition: color .14s, border-color .14s; }
-.ver-pill:hover { color: var(--hover); border-color: currentColor; }
-/* Not the newest, and said quietly rather than shouted: a deliberate choice is
-   not a warning, it just should not be invisible. */
-.ver-old { border-style: dashed; color: var(--ink); }
-.ver-cleared { color: var(--muted); border-style: dotted; }
-.ver-section { font-size: 12.5px; font-weight: 600; color: var(--muted);
-  margin: 16px 0 4px; padding-top: 10px; border-top: 1px solid var(--hairline); }
-.ver-menu { position: absolute; top: 100%; left: 4px; z-index: 20; min-width: 17rem;
-  background: var(--paper); border: 1px solid var(--hairline); border-radius: 10px;
-  box-shadow: 0 8px 26px rgba(0,0,0,.13); padding: 5px; }
-.ver-menu-head { font-size: 11.5px; color: var(--muted); padding: 3px 8px 5px; }
-.ver-opt { display: flex; align-items: baseline; gap: 8px; width: 100%; border: 0;
-  background: none; cursor: pointer; font: inherit; font-size: 12.6px; text-align: left;
-  padding: 4px 8px; border-radius: 7px; color: var(--ink-soft); }
-.ver-opt:hover { background: var(--tint); color: var(--ink); }
-.ver-opt.on { color: var(--ink); font-weight: 600; }
-.ver-opt-n { flex: 0 0 1.8rem; font-variant-numeric: tabular-nums; }
-.ver-opt-t { flex: 1 1 auto; white-space: normal; }
-.ver-opt-w { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
-.ver-clear { margin-top: 3px; border-top: 1px solid var(--hairline); border-radius: 0 0 7px 7px;
-  padding-top: 7px; font-size: 12.2px; }
+.vw-name { font-size: 13px; font-weight: 500; }
+.vw-why { font-size: 12px; line-height: 1.4; color: var(--muted); font-weight: 400; }
 
 /* choosing which samples a viewer opens on */
 .vw-row { display: flex; flex-direction: column; }
 .vw-pick {
-  display: flex; align-items: center; gap: 6px; width: 100%;
+  display: flex; align-items: center; gap: 5px; width: 100%;
   border: 0; background: none; cursor: pointer; font: inherit; text-align: left;
-  padding: 3px 10px 5px 12px; margin: -2px 0 0; border-radius: 7px;
-  color: var(--muted); font-size: 12.4px; transition: color .14s, background .12s;
+  padding: 3px 8px 4px 10px; border-radius: var(--r-sm);
+  color: var(--muted); font-size: 12px; transition: color .14s, background .12s;
 }
 .vw-pick:hover { color: var(--hover); background: var(--tint); }
-.vw-pick-chev { flex: 0 0 12px; display: grid; place-items: center;
-  transition: transform .16s var(--reveal); }
+.vw-pick-chev { flex: 0 0 12px; display: grid; place-items: center; transition: transform .15s var(--reveal); }
 .vw-pick.open .vw-pick-chev { transform: rotate(90deg); }
 .vw-pick-count { margin-left: auto; font-variant-numeric: tabular-nums; }
-.vw-samples { padding: 2px 6px 8px 12px; }
-.vw-hint { font-size: 12.2px; line-height: 1.5; color: var(--muted); padding: 2px 4px 7px; }
-.vw-bulk { display: flex; gap: 6px; padding: 0 4px 6px; }
+.vw-samples { padding: 2px 4px 6px 10px; }
+.vw-bulk { display: flex; gap: 5px; padding: 0 3px 5px; }
 .vw-bulk-btn {
-  border: 1px solid var(--hairline); background: none; cursor: pointer; font: inherit;
-  font-size: 12px; color: var(--ink-soft); padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: none; cursor: pointer; font: inherit;
+  font-size: 11px; color: var(--ink-soft); padding: 1px 8px; border-radius: var(--pill);
   transition: color .14s, border-color .14s;
 }
 .vw-bulk-btn:hover { color: var(--hover); border-color: currentColor; }
 /* Tall enough to be worth scrolling, short enough that the menu never runs off
    the screen: nineteen samples is a list, not a page. */
 .vw-checks {
-  max-height: 232px; overflow-y: auto;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 1px 4px;
-  padding: 1px 4px;
+  max-height: 210px; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)); gap: 0 4px; padding: 1px 3px;
 }
-.vw-check {
-  display: flex; align-items: center; gap: 6px; cursor: pointer;
-  font-size: 12.8px; color: var(--ink-soft); padding: 3px 5px; border-radius: 6px;
-}
+.vw-check { display: flex; align-items: center; gap: 5px; cursor: pointer;
+  font-size: 12px; color: var(--ink-soft); padding: 2px 4px; border-radius: var(--r-sm); }
 .vw-check:hover { background: var(--tint); color: var(--ink); }
 .vw-check input { accent-color: var(--accent); cursor: pointer; margin: 0; }
-.sp-list { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; min-height: 36px; }
-.sp-item { display: flex; align-items: center; gap: 9px; border: 0; background: none; cursor: pointer;
-  font: inherit; font-size: 13.5px; color: var(--ink-soft); text-align: left; width: 100%;
-  padding: 8px 9px; border-radius: 8px; transition: background .14s, color .14s; }
-.sp-item:hover { background: var(--tint); color: var(--ink); }
-.sp-item.on { color: var(--ink); }
-.sp-box { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 5px; display: grid; place-items: center;
-  border: 1.5px solid var(--hairline); color: transparent; transition: background .14s, border-color .14s; }
-.sp-item.on .sp-box { background: var(--accent); border-color: var(--accent); color: #fff; }
-.sp-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  border-top: 1px solid var(--hairline); padding-top: 8px; margin-top: 2px; }
-.sp-all { border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px; color: var(--ink-soft);
-  padding: 5px 8px; border-radius: 7px; transition: color .14s, background .14s; }
-.sp-all:hover { color: var(--hover); background: var(--tint); }
-.sp-count { font-size: 12px; color: var(--muted); }
 
-/* capabilities: a centred panel, not an anchored popover. It is reference reading rather
-   than a control, so it gets the middle of the screen. One group at a time is open, because
-   all of it at once is more than anyone reads; closed, the panel is a list of subjects. */
+/* ── centred overlays: capabilities and versions ──────────────────────────── */
 .info-overlay {
-  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px;
-  background: rgba(20,18,16,.32); backdrop-filter: blur(2px); animation: fade .14s ease both;
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 14px;
+  background: var(--scrim); animation: fade .12s ease both;
 }
 .info-overlay[hidden] { display: none; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .info-card {
-  width: min(78rem, 100%); max-height: 90vh; display: flex; flex-direction: column;
-  background: var(--surface); border-radius: 18px; padding: 22px 26px 18px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.22); animation: rise .18s var(--reveal) both;
+  width: min(58rem, 100%); max-height: 88vh; display: flex; flex-direction: column;
+  background: var(--surface); border-radius: var(--r-lg); padding: 16px 18px 14px;
+  box-shadow: var(--lift); animation: rise .16s var(--reveal) both;
 }
-.info-card .pop-head { position: relative; padding: 0 34px 12px 0; }
-.info-card .pop-title { font-size: 20px; }
-.info-card .pop-sub { font-size: 14px; color: var(--ink-soft); max-width: 56rem; }
-.info-card .pop-foot { color: var(--ink-soft); font-size: 12.5px; padding-top: 11px; }
-.ip-close { position: absolute; top: -4px; right: -6px; border: 0; background: none; cursor: pointer;
-  color: var(--ink-soft); padding: 6px; border-radius: 8px; display: grid; place-items: center;
+/* the grid is as wide as it is; a fixed width around it is empty paper */
+/* A grid of twelve capabilities against twenty samples is a wide thing; the
+   dialog is as wide as the window allows rather than a fixed guess. */
+.ver-card { width: auto; min-width: 26rem; max-width: 100%; max-height: 92vh; }
+.pop-head { position: relative; display: flex; align-items: baseline; padding: 0 26px 10px 2px; }
+.pop-title { font-size: 15px; font-weight: 600; letter-spacing: -0.012em; }
+.pop-foot { border-top: 1px solid var(--hairline); margin-top: 10px; padding: 8px 2px 0;
+  color: var(--muted); font-size: 11px; }
+.ip-close { position: absolute; top: -3px; right: -6px; border: 0; background: none; cursor: pointer;
+  color: var(--muted); padding: 5px; border-radius: var(--r-sm); display: grid; place-items: center;
   transition: color .14s, background .14s; }
 .ip-close:hover { color: var(--hover); background: var(--tint); }
 
-.ip-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 2px 2px; }
-.ip-note { margin: 0 0 12px; font-size: 13.8px; line-height: 1.55; color: var(--ink-soft); }
-
-/* One subject per row, closed. The row stays flat on hover so nothing heavy sweeps down
-   the panel as the pointer moves; only the name and the chevron respond. */
+/* capabilities: one collapsed group per subject, because the whole of it at once is a
+   wall nobody reads. Closed, the panel is a list of subjects. */
+.ip-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 2px; }
+.ip-note { margin: 0 0 10px; font-size: 13px; line-height: 1.55; color: var(--ink-soft); }
 .ip-group { border-top: 1px solid var(--hairline); }
 .ip-group:first-child { border-top: 0; }
-.ip-group > summary {
-  list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 9px;
-  padding: 11px 4px;
-}
+.ip-group > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 8px; padding: 9px 2px; }
 .ip-group > summary::-webkit-details-marker { display: none; }
 .ip-group > summary:hover .ip-gname { color: var(--hover); }
-.ip-group > summary:hover .ip-chev { color: var(--ink); }
-.ip-chev { flex: 0 0 auto; color: var(--ink-soft); align-self: center;
-  transition: transform .18s var(--reveal), color .14s; }
+.ip-group > summary:hover .ip-chev { color: var(--ink-soft); }
+.ip-chev { flex: 0 0 auto; color: var(--muted); align-self: center; display: grid; place-items: center;
+  transition: transform .16s var(--reveal), color .14s; }
 .ip-group[open] > summary .ip-chev { transform: rotate(90deg); }
-.ip-gname { font-size: 15.5px; font-weight: 600; color: var(--ink); letter-spacing: -0.005em;
-  flex: 0 0 auto; transition: color .14s; }
-.ip-gsum { font-size: 13.5px; color: var(--ink-soft); min-width: 0; overflow: hidden;
+.ip-gname { font-size: 13px; font-weight: 600; color: var(--ink); flex: 0 0 auto; transition: color .14s; }
+.ip-gsum { font-size: 12px; color: var(--muted); min-width: 0; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 /* height is animated from JS on toggle; clipping the overflow is what makes that read as
    a reveal rather than a jump */
-.ip-content { padding: 0 4px 14px 26px; overflow: hidden; }
+.ip-content { padding: 0 2px 12px 16px; overflow: hidden; }
 
-.ip-list { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 7px; }
-.ip-list li { font-size: 14.2px; line-height: 1.52; color: var(--ink-soft); }
-.ip-list + .ip-flow, .ip-list + .ip-topics { margin-top: 14px; }
-.ip-flow + .ip-topics { margin-top: 14px; }
+.ip-list { margin: 0; padding-left: 1.05em; display: flex; flex-direction: column; gap: 5px; }
+.ip-list li { font-size: 13px; line-height: 1.5; color: var(--ink-soft); }
+.ip-list + .ip-flow, .ip-list + .ip-topics { margin-top: 12px; }
+.ip-flow + .ip-topics { margin-top: 12px; }
 
 /* The stages read left to right because that is the order they run in. The row scrolls
    rather than wrapping, so a sequence stays a sequence on a narrow window instead of
    folding into a list that implies no order at all. */
-.ip-flow { display: flex; align-items: stretch; gap: 4px; overflow-x: auto;
-  padding-bottom: 6px; }
-.ip-stage { flex: 1 1 0; min-width: 12rem; display: flex; flex-direction: column; gap: 7px; }
-.ip-stage-head { font-size: 13px; font-weight: 600; color: var(--ink); }
-.ip-stage-note { font-size: 12.6px; line-height: 1.45; color: var(--ink-soft);
-  margin: -3px 0 3px; }
-.ip-arrow { flex: 0 0 auto; align-self: center; color: var(--ink-soft); opacity: .55;
-  padding: 0 2px; }
-
-.ip-box { border: 1px solid var(--hairline); border-radius: 10px; padding: 9px 11px;
-  background: var(--paper); }
-.ip-box-name { font-size: 13.4px; font-weight: 600; color: var(--ink); line-height: 1.35; }
-.ip-box-what { font-size: 12.8px; line-height: 1.45; color: var(--ink-soft); margin-top: 3px; }
-.ip-box-needs { font-size: 12px; color: var(--ink-soft); opacity: .85; margin-top: 5px; }
-.ip-box-tag { display: inline-block; font-size: 11px; color: var(--ink-soft);
-  border: 1px solid var(--hairline); border-radius: 999px; padding: 1px 7px; margin-top: 6px; }
+.ip-flow { display: flex; align-items: stretch; gap: 3px; overflow-x: auto; padding-bottom: 5px; }
+.ip-stage { flex: 1 1 0; min-width: 8rem; display: flex; flex-direction: column; gap: 6px; }
+.ip-stage-head { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.ip-arrow { flex: 0 0 auto; align-self: center; color: var(--muted); padding: 0 1px; }
+.ip-box { border: 1px solid var(--hairline); border-radius: var(--r); padding: 8px 10px; background: var(--paper); }
+.ip-box-name { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.35; }
+.ip-box-what { font-size: 12px; line-height: 1.45; color: var(--ink-soft); margin-top: 2px; }
+.ip-box-needs, .ip-box-tag { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.ip-box-tag { display: inline-block; border: 1px solid var(--line); border-radius: var(--pill); padding: 0 7px; }
 
 /* No order between these, so they sit as a set rather than a row of stages. */
-.ip-topics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 30px; }
-.ip-topic h5 { margin: 0 0 2px; font-size: 14.2px; font-weight: 600; color: var(--ink); }
-.ip-topic p { margin: 0; font-size: 13.6px; line-height: 1.5; color: var(--ink-soft); }
-.ip-topic-needs { margin-top: 3px; opacity: .85; }
+.ip-topics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 26px; }
+.ip-topic h5 { margin: 0 0 1px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.ip-topic p { margin: 0; font-size: 12px; line-height: 1.48; color: var(--ink-soft); }
+.ip-topic-needs { margin-top: 2px; color: var(--muted); }
 
 @media (max-width: 1000px) { .ip-topics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 900px)  { .ip-stage { min-width: 11rem; } }
-@media (max-width: 700px)  { .ip-topics { grid-template-columns: 1fr; }
-                             .ip-content { padding-left: 6px; } }
+@media (max-width: 700px)  { .ip-topics { grid-template-columns: 1fr; } .ip-content { padding-left: 4px; } }
+
+/* the version grid. Dense, because it is a matrix: values in cells, no capsule
+   per cell, and column headings that wrap so a long capability name does not set
+   the column width for twenty rows of "v1". */
+.ver-body { overflow: auto; max-height: 74vh; }
+.ver-grid { border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.ver-grid th, .ver-grid td { padding: 0; text-align: left; }
+.ver-grid tr th:first-child, .ver-grid tr td:first-child {
+  position: sticky; left: 0; z-index: 1; background: var(--surface);
+  border-right: 1px solid var(--hairline);
+}
+.ver-grid tr:first-child th { position: sticky; top: 0; background: var(--surface); z-index: 2;
+  border-bottom: 1px solid var(--line); vertical-align: bottom; }
+.ver-grid tr:first-child th:first-child { z-index: 3; }
+.ver-grid tbody tr:hover td, .ver-grid tr:hover > td { background: color-mix(in srgb, var(--tint) 40%, transparent); }
+
+/* A heading that is also a button, over what it heads. The chevron appears on
+   hover so a closed grid reads as a grid, not as a row of dropdowns. */
+.ver-scope {
+  display: flex; align-items: flex-end; gap: 3px; width: 100%;
+  border: 0; background: none; cursor: pointer; font: inherit; font-size: 12px;
+  color: var(--ink-soft); padding: 6px 9px; border-radius: var(--r-sm);
+  text-align: left; transition: background .12s var(--reveal), color .12s var(--reveal);
+}
+.ver-colcell .ver-scope { max-width: 8.5rem; }
+.ver-colcell .ver-scope .vs-text { white-space: normal; line-height: 1.25; }
+.ver-scope .vs-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ver-scope .vs-chev { flex: 0 0 12px; display: grid; place-items: center; line-height: 0;
+  transform: rotate(90deg); opacity: 0; transition: opacity .12s var(--reveal); }
+.ver-scope:hover { background: var(--tint); color: var(--ink); }
+.ver-scope:hover .vs-chev { opacity: .65; }
+.ver-scope.ver-col { font-weight: 600; color: var(--ink); }
+.ver-row .ver-scope { font-weight: 500; color: var(--ink); padding: 3px 9px; }
+.ver-corner .ver-scope { color: var(--muted); font-size: 11px;
+  text-transform: uppercase; letter-spacing: .05em; }
+
+/* the value itself: the whole cell is the target */
+.ver-val {
+  display: block; width: 100%; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 12px; font-variant-numeric: tabular-nums;
+  color: var(--ink); text-align: left; padding: 3px 9px;
+  transition: background .1s var(--reveal), color .1s var(--reveal);
+}
+.ver-val:hover { background: var(--accent-weak); }
+/* Which cells have a choice, said by weight. A second glyph per cell in a grid
+   of glyphs is what made the first version read as dust. */
+.ver-val.is-only { color: var(--ink-soft); }
+/* Not the newest, and said quietly: a deliberate choice is not a warning, it just
+   should not be invisible. */
+.ver-val.is-old { text-decoration: underline dashed var(--line) 1px; text-underline-offset: 3px; }
+.ver-val.is-cleared { color: var(--muted); }
+.ver-none { color: var(--muted); padding: 3px 9px; }
+/* a divider row inside the grid, so the section below keeps the grid's columns */
+.ver-seprow th { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .05em; padding: 16px 9px 5px; border-bottom: 1px solid var(--hairline); }
+.ver-seprow th, .ver-grid .ver-seprow th:first-child { position: static; background: none; border-right: 0; }
+.ver-section { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .05em; margin: 18px 0 4px; padding-top: 10px; border-top: 1px solid var(--hairline); }
+
+/* ── the menu layer ──────────────────────────────────────────────────────────
+   Fixed to the viewport, on <body>, so nothing it opens inside can clip it. */
+.popmenu {
+  position: fixed; z-index: 210; min-width: 13rem; max-width: 22rem;
+  background: var(--tint); border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: var(--lift); padding: 4px;
+  animation: rise .12s var(--reveal) both;
+}
+.pm-head { font-size: 11px; color: var(--muted); padding: 4px 8px 6px; }
+.pm-sep { height: 1px; background: var(--hairline); margin: 4px 0; }
+.pm-item {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; border: 0;
+  background: none; cursor: pointer; font: inherit; font-size: 12px; text-align: left;
+  padding: 6px 8px; border-radius: var(--r-sm); color: var(--ink-soft);
+}
+.pm-item:hover:not(:disabled) { background: var(--accent-weak); color: var(--ink); }
+.pm-item:disabled { color: var(--muted); cursor: default; }
+.pm-item.on { color: var(--ink); font-weight: 600; }
+.pm-item.danger:hover:not(:disabled) { color: var(--hover); }
+.pm-lead { flex: 0 0 auto; font-variant-numeric: tabular-nums; min-width: 1.6rem; }
+.pm-lead:empty { display: none; }
+.pm-label { flex: 1 1 auto; }
+.pm-note { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
 
 /* ── in-app modal (replaces browser prompt/confirm) ──────────────────────── */
 .modal-back { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
-  background: rgba(20,18,16,.32); backdrop-filter: blur(2px); animation: fade .14s ease both; }
-@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
-.modal-card { width: min(24rem, 92vw); background: var(--surface); border-radius: 16px; padding: 22px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.22); animation: rise .18s var(--reveal) both; }
-.modal-title { font-size: 16px; font-weight: 600; }
-.modal-msg { color: var(--ink-soft); font-size: 14px; line-height: 1.5; margin-top: 6px; }
-.modal-input { width: 100%; border: 1px solid var(--hairline); border-radius: 10px; padding: 10px 12px;
-  font: inherit; font-size: 14px; outline: 0; background: var(--paper); margin-top: 14px; }
-.modal-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
-.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-.modal-btn { border: 0; cursor: pointer; font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 9px;
-  transition: background .15s, color .15s; }
-.modal-btn.cancel { background: var(--tint); color: var(--ink-soft); }
-.modal-btn.cancel:hover { color: var(--ink); }
-.modal-btn.confirm { background: var(--accent); color: #fff; }
-.modal-btn.confirm:hover { background: var(--ink); }
+  background: var(--scrim); animation: fade .12s ease both; }
+.modal-card { width: min(21rem, 90vw); background: var(--surface); border-radius: var(--r-lg); padding: 18px;
+  box-shadow: var(--lift); animation: rise .16s var(--reveal) both; }
+.modal-title { font-size: 15px; font-weight: 600; letter-spacing: -0.012em; }
+.modal-msg { color: var(--ink-soft); font-size: 13px; line-height: 1.5; margin-top: 4px; }
+.modal-input { width: 100%; border: 1px solid var(--line); border-radius: var(--r); padding: 9px 11px;
+  font: inherit; font-size: 13px; color: var(--ink); outline: 0; background: var(--paper); margin-top: 12px; }
+.modal-input:focus { border-color: var(--ink); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; }
+.modal-btn { border: 0; cursor: pointer; font: inherit; font-size: 13px; padding: 7px 13px; border-radius: var(--r);
+  transition: background .14s, color .14s; }
+.modal-btn.cancel { background: none; color: var(--ink-soft); }
+.modal-btn.cancel:hover { background: var(--tint); color: var(--ink); }
+.modal-btn.confirm { background: var(--accent); color: var(--paper); }
+.modal-btn.confirm:hover { background: var(--hover); }
 .modal-btn.confirm.danger { background: var(--hover); }
-.modal-btn.confirm.danger:hover { background: #7a1616; }
-.modal-btn:disabled { opacity: .45; cursor: default; }
+.modal-btn.confirm.danger:hover { background: var(--hover-deep); }
+.modal-btn:disabled { opacity: .4; cursor: default; }
 
 /* ── domain picker: one choice, made once at the start of a chat ─────────── */
-.modal-card.wide { width: min(30rem, 92vw); }
-/* the domain picker is a row of options that wraps into more rows as domains are added,
-   so the card is wide rather than tall */
-.modal-card.domains { width: min(46rem, 94vw); }
-.domain-grid { display: grid; gap: 10px; margin-top: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
-.dm-note { margin-top: 11px; font-size: 12.5px; color: var(--muted); }
+.modal-card.wide { width: min(28rem, 90vw); }
+/* a row of options that wraps into more rows as domains are added, so the card is
+   wide rather than tall */
+.modal-card.domains { width: min(42rem, 92vw); }
+.domain-grid { display: grid; gap: 7px; margin-top: 13px; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+.dm-note { margin-top: 9px; font-size: 11px; color: var(--muted); }
 .domain-btn { display: block; width: 100%; text-align: left; cursor: pointer; font: inherit;
-  background: var(--paper); border: 1px solid var(--hairline); border-radius: 12px;
-  padding: 13px 15px; color: var(--ink); transition: border-color .15s, background .15s, color .15s; }
-.domain-btn:hover { border-color: var(--hover); }
-.domain-btn .dm-name { font-size: 14px; font-weight: 600; }
-.domain-btn .dm-note { font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; margin-top: 3px; }
-/* hover previews the red, selection commits to it */
-.domain-btn.on { border-color: var(--hover); background: var(--hover-weak); box-shadow: inset 0 0 0 1px var(--hover); }
-.domain-btn.on .dm-name { color: var(--hover); }
-.domain-foot { display: flex; align-items: center; justify-content: space-between;
-  margin-top: 12px; font-size: 13px; }
-.dm-all { border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px;
-  color: var(--ink-soft); padding: 2px 0; }
+  background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r);
+  padding: 10px 12px; color: var(--ink); transition: border-color .14s, background .14s, color .14s; }
+.domain-btn:hover { border-color: var(--ink); }
+.domain-btn .dm-name { font-size: 13px; font-weight: 600; }
+.domain-btn .dm-note { font-size: 12px; color: var(--ink-soft); line-height: 1.42; margin-top: 2px; }
+.domain-btn.on { border-color: var(--ink); background: var(--accent-weak); }
+.domain-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 12px; }
+.domain-foot .dm-note { margin-top: 0; margin-right: auto; }
+.dm-all { border: 0; background: none; cursor: pointer; font: inherit; font-size: 12px; color: var(--ink-soft); padding: 2px 0; }
 .dm-all:hover:not(:disabled) { color: var(--hover); }
 .dm-all:disabled { color: var(--muted); cursor: default; }
-.dm-count { color: var(--muted); }
+.dm-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* the interactive viewer: a whole application, so the whole window */
+.viewer-overlay { position: fixed; inset: 0; z-index: 60; background: var(--paper); display: flex; flex-direction: column; }
+.vo-frame { flex: 1 1 auto; width: 100%; border: 0; }
+.vo-close {
+  position: absolute; top: 10px; right: 12px; z-index: 1;
+  border: 0; border-radius: var(--r-sm); padding: 5px 11px; cursor: pointer;
+  font: inherit; font-size: 12px; color: var(--paper); background: var(--ink);
+}
+.vo-close:hover { background: var(--hover); }
 
 /* ── print: the whole conversation, not just what is on screen ───────────────
    The transcript lives in a fixed-height scrolling column, so the browser's own
    print only ever captures the visible slice. Releasing those constraints and
    dropping the interactive chrome makes Cmd/Ctrl+P produce the full thread. */
 @media print {
+  /* Paper is paper. The whole sheet reads from tokens, so the light theme is this. */
+  :root {
+    --paper: #fff; --surface: #fff; --tint: #f4f2ee;
+    --ink: #17150f; --ink-soft: #56514a; --muted: #7d7770;
+    --hairline: #ddd9d1; --line: #c8c4bc;
+    --accent: #17150f; --accent-weak: #eae7e0;
+    --hover: #991b1b; --hover-weak: #f7eae9;
+    --code-bg: #f4f2ee; --code-fg: #17150f;
+  }
   html, body { height: auto; background: #fff; }
   .app { display: block; height: auto; overflow: visible; }
   .main-col { display: block; }
   .scroll { overflow: visible; height: auto; flex: none; }
   .thread { display: block; padding: 0; }
-  .turn { animation: none; page-break-inside: avoid; break-inside: avoid; margin: 0 0 16px; }
-  .turn.artifact { margin: 0 0 10px; }
+  .turn { animation: none; page-break-inside: avoid; break-inside: avoid; margin: 0 0 14px; }
+  .turn.artifact { margin: 0 0 8px; }
   .wrap { width: 100%; }
   /* interactive chrome has no meaning on paper */
-  .topbar, .composer, .panel, .resize-handle, #resize,
-  .menu-backdrop, .modal-back, .info-overlay, .foot, .chips, .chips-more { display: none !important; }
+  .topbar, .composer, .panel, #resize, .modal-back, .info-overlay, .menu-pop { display: none !important; }
   .prose a { color: inherit; border-bottom: 0; }
-  .prose pre, .v-json { background: #f4f2ee; color: #1f1d1b; }
-  .artifact-card { border-color: #ccc; }
+  .artifact-card { border-color: var(--line); }
   .v-table th { position: static; }
 }
-
-/* work still going, and the two things a finished run may need to say.
-   Deliberately no panel, no border, no heading: these are rows in the same
-   list, distinguished by weight rather than by being put in a box. */
-.going { padding: 2px 0 8px; }
-.go-row {
-  display: flex; align-items: center; gap: 7px;
-  padding: 4px 7px; border-radius: 7px; font-size: 13px; color: var(--ink-soft);
-}
-.go-row:hover { background: var(--tint); }
-.go-dot {
-  flex: 0 0 7px; height: 7px; border-radius: 50%; background: var(--muted);
-  animation: go-pulse 1.6s ease-in-out infinite;
-}
-@keyframes go-pulse { 0%, 100% { opacity: .25; } 50% { opacity: .9; } }
-.go-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.go-time { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.go-stop {
-  flex: 0 0 auto; border: 0; background: none; cursor: pointer; color: var(--muted);
-  display: grid; place-items: center; padding: 2px; border-radius: 5px; opacity: 0;
-}
-.go-row:hover .go-stop { opacity: 1; }
-.go-stop:hover { color: var(--ink); background: var(--hairline); }
-
-/* said only when it is not fine */
-.folder-flag {
-  flex: 0 0 auto; margin-left: 4px; width: 15px; height: 15px; border-radius: 50%;
-  display: grid; place-items: center; font-size: 10.5px; font-weight: 600;
-  color: var(--muted); background: var(--hairline);
-}
-/* present, but not something that can be opened or downloaded */
-.item-stays { cursor: default; color: var(--muted); }
-.item-stays:hover { background: none; color: var(--muted); }
-
-/* the interactive viewer: a whole application, so the whole window */
-.viewer-overlay {
-  position: fixed; inset: 0; z-index: 60; background: var(--bg);
-  display: flex; flex-direction: column;
-}
-.vo-frame { flex: 1 1 auto; width: 100%; border: 0; }
-.vo-close {
-  position: absolute; top: 12px; right: 14px; z-index: 1;
-  border: 0; border-radius: 8px; padding: 6px 12px; cursor: pointer;
-  font: inherit; font-size: 13px; color: var(--ink); background: var(--hairline);
-}
-.vo-close:hover { background: var(--tint); }

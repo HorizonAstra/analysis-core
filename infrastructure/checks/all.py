@@ -179,6 +179,24 @@ def main() -> int:
     if not ok:
         found.append(("the graph", out.strip()[-300:]))
 
+    # The other two graph targets, per site, because `--as pipeline` takes one.
+    # Left out until 2026-08-19, and in that time both stopped working: the
+    # renderer was never on the path so the pipeline could not be assembled at
+    # all, and the workflow block wrote qualified ids straight into Groovy
+    # identifiers, where a slash is division. Neither is subtle. Nothing ran
+    # them, which is the only reason they survived.
+    graph_bad = []
+    ok, out = _run([str(GRAPH), "--as", "workflow"])
+    if not ok:
+        graph_bad.append(("the workflow block", out.strip()[-300:]))
+    for path in profiles:
+        good, out = _run([str(GRAPH), "--as", "pipeline", "--profile", path.stem])
+        if not good:
+            graph_bad.append((f"pipeline for {path.stem}", out.strip()[-300:]))
+    say(f"  {'ok  ' if not graph_bad else 'FAIL'}  pipeline · workflow block, "
+        f"and one runnable pipeline per site")
+    found.extend(graph_bad)
+
     ok, out = _run([str(METHODS)])
     say(f"  {'ok  ' if ok else 'FAIL'}  methods · {out.strip().splitlines()[-1] if out.strip() else ''}")
     if not ok:

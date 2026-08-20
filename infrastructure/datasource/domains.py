@@ -147,7 +147,7 @@ def known_domains() -> list[str]:
 def role_names() -> frozenset:
     """Every role name any domain declares, across every shape.
 
-    `study:NSCLC-Neoadjuvant/counts` and `study:NSCLC-Neoadjuvant/1N` are the
+    `study:KunleOdunsisCohort/counts` and `study:KunleOdunsisCohort/1N` are the
     same shape, and only these declarations tell them apart. Asked here rather
     than worked out by each caller, because three of them were working it out
     and a domain adding a role should not have to remember any of their names.

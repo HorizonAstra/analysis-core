@@ -51,11 +51,11 @@ ACTIVITY_CHARS = int(os.environ.get("LLM_ACTIVITY_CHARS", "4000"))
 # the words the domain wrote, because a list kept here goes stale the moment
 # someone adds a capability and the interface then quietly says the wrong thing.
 TOOL_LABELS = {
-    "list_data": "Looking over the available studies",
-    "run_status": "Checking on the analysis",
-    "run_result": "Reviewing a result",
-    "list_runs": "Reviewing earlier work",
-    "cancel_run": "Stopping the analysis",
+    "list_data": "Listing studies",
+    "run_status": "Checking the run",
+    "run_result": "Reading a result",
+    "list_runs": "Listing earlier work",
+    "cancel_run": "Stopping",
     # One capability is overridden rather than taking its title. Its entry says
     # plainly that it runs submitted code, which is the right thing to tell the
     # model and the wrong thing to put in front of a reader: how an answer was
@@ -63,8 +63,8 @@ TOOL_LABELS = {
     "statistics_run_code": "Analyzing",
     # Their titles name the directory each one writes. What a reader wants to
     # know is that these are the things they can look at.
-    "spatial-transcriptomics_spatialview_bundle": "Interactive tissue view",
-    "spatial-transcriptomics_tree_bundle": "Region tree view",
+    "spatial-transcriptomics_spatialview_bundle": "Tissue view",
+    "spatial-transcriptomics_tree_bundle": "Region tree",
 }
 
 
@@ -155,7 +155,7 @@ def activity_label(name: str) -> str:
     if name in TOOL_LABELS:
         return TOOL_LABELS[name]
     title = _catalog_labels().get(name)
-    return title if title else "Working on the analysis"
+    return title if title else "Working"
 
 
 def capability_title(name: str) -> str:
@@ -232,16 +232,15 @@ def step_summary(name: str, payload) -> str:
     """
     p = payload if isinstance(payload, dict) else {}
     if name == "list_data":
-        return (f"Looked over {p['study']}" if p.get("study")
-                else "Checked which studies are available")
+        return (f"Read {p['study']}" if p.get("study") else "Listed studies")
     if name == "run_result":
-        return "Read the result back"
+        return "Read the result"
     if name == "run_status":
-        return "Checked whether the analysis had finished"
+        return "Checked the run"
     if name == "cancel_run":
-        return "Stopped the analysis"
+        return "Stopped"
     if name == "list_runs":
-        return "Reviewed the results so far"
+        return "Listed results"
 
     label = activity_label(name)
     where = p.get("sample") or p.get("study") or ""
@@ -413,11 +412,10 @@ def empty_response_note(step: dict) -> str:
     so the user never sees a blank turn."""
     fr = (step.get("finish_reason") or "").upper()
     if "MAX_TOKEN" in fr:
-        return ("The response was cut off before any text came back. Try a shorter "
-                "request, or raise the output limit (LLM_MAX_TOKENS).")
+        return "The response was cut off. Try a shorter request."
     if any(k in fr for k in ("SAFETY", "BLOCK", "PROHIBIT", "RECITATION")):
-        return "The model declined to answer that."
-    return "The model returned an empty response. Please try again."
+        return "That request was declined."
+    return "Empty response. Try again."
 
 
 def redact(msg: str) -> str:

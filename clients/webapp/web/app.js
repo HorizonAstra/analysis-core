@@ -84,15 +84,216 @@ function formatName(s) {
 }
 const enc = encodeURIComponent;
 
+// ── theme ────────────────────────────────────────────────────────────────────
+// Dark unless the person says otherwise, and their answer is remembered. Set on
+// <html> before anything paints, so a light-theme user does not see one frame of
+// dark on every load.
+const THEMES = ["dark", "light"];
+function currentTheme() {
+  const t = localStorage.getItem("theme");
+  return THEMES.includes(t) ? t : "dark";
+}
+// Two steps on purpose. The attribute is set at once, before anything paints;
+// the button is labelled later, because the icon set is declared further down
+// this file and reaching for it here would be a use-before-initialisation.
+function applyTheme(name) {
+  const t = THEMES.includes(name) ? name : "dark";
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem("theme", t);
+  labelTheme(t);
+}
+function labelTheme(t) {
+  const btn = $("#mpTheme");
+  if (!btn || typeof ICON === "undefined") return;
+  const next = t === "dark" ? "light" : "dark";
+  btn.innerHTML = t === "dark" ? ICON.sun : ICON.moon;
+  tip(btn, `Switch to the ${next} theme`);
+  btn.setAttribute("aria-label", `Switch to the ${next} theme`);
+}
+document.documentElement.dataset.theme = currentTheme();
+
+// ── menus ────────────────────────────────────────────────────────────────────
+// One menu, in a fixed layer on <body>. The version menus used to be absolutely
+// positioned inside the cell they belonged to — which is inside a sticky <th>,
+// inside a scrolling <div>, inside a dialog. Every one of those clips: a menu on
+// a right-hand column or a bottom row was cut off or hidden outright. Measured
+// from the anchor and placed in the viewport, nothing can clip it, and there is
+// one implementation instead of two that drift.
+let menuEl = null, menuAway = null;
+
+function closeMenuLayer() {
+  // Swept from the DOM rather than only through the handle. The handle going
+  // stale is exactly how a menu got stranded on screen with its own dismissal
+  // listener already unregistered, and no amount of clicking could reach it.
+  for (const stray of document.querySelectorAll(".popmenu")) stray.remove();
+  menuEl = null;
+  if (menuAway) { document.removeEventListener("click", menuAway, true); menuAway = null; }
+}
+// items: {head} | {label, note, on, disabled, danger, onClick} | {sep:true}
+function menuAt(anchor, items) {
+  closeMenuLayer();
+  hideTip();
+  const m = el("popmenu");
+  for (const it of items) {
+    if (!it) continue;
+    if (it.head !== undefined) {
+      const h = el("pm-head"); h.textContent = it.head; m.appendChild(h); continue;
+    }
+    if (it.sep) { m.appendChild(el("pm-sep")); continue; }
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "pm-item" + (it.on ? " on" : "") + (it.danger ? " danger" : "");
+    b.disabled = !!it.disabled;
+    b.innerHTML = `<span class="pm-lead"></span><span class="pm-label"></span><span class="pm-note"></span>`;
+    b.querySelector(".pm-lead").textContent = it.lead || "";
+    b.querySelector(".pm-label").textContent = it.label;
+    b.querySelector(".pm-note").textContent = it.note || "";
+    if (!it.disabled) b.addEventListener("click", () => { closeMenuLayer(); it.onClick(); });
+    m.appendChild(b);
+  }
+  document.body.appendChild(m);
+  menuEl = m;
+
+  const r = anchor.getBoundingClientRect();
+  const b = m.getBoundingClientRect();
+  const gap = 4;
+  let top = r.bottom + gap;
+  if (top + b.height > window.innerHeight - 8) top = Math.max(8, r.top - b.height - gap);
+  let left = r.left;
+  if (left + b.width > window.innerWidth - 8) left = Math.max(8, r.right - b.width);
+  m.style.top = Math.round(top) + "px";
+  m.style.left = Math.round(left) + "px";
+
+  // Capture phase, because the dialog card stops clicks bubbling to the document:
+  // listening the ordinary way meant the only way out was to choose something, and
+  // deciding to change nothing is the commonest reason to open a menu.
+  //
+  // Registered SYNCHRONOUSLY, on a local. The previous version deferred it with
+  // setTimeout(0) and passed the module-level `menuAway` to addEventListener — so
+  // if anything closed or reopened a menu before that timer fired, the variable
+  // was null by then, `addEventListener("click", null, true)` is a silent no-op,
+  // and the menu on screen had nothing left that could dismiss it. No timer is
+  // needed either way: this runs during the click that opened the menu, whose
+  // capture phase is already over, so the new listener cannot see that click.
+  const away = (e) => { if (!e.target.closest(".popmenu")) closeMenuLayer(); };
+  menuAway = away;
+  document.addEventListener("click", away, true);
+}
+// The layer is measured against the viewport, so anything that moves the anchor
+// invalidates it.
+window.addEventListener("scroll", closeMenuLayer, true);
+window.addEventListener("resize", closeMenuLayer);
+window.addEventListener("blur", closeMenuLayer);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenuLayer(); });
+
+// ── tooltips ─────────────────────────────────────────────────────────────────
+// One floating element for the whole app, instead of the browser's own tooltip.
+// The native one cannot be styled, arrives after a delay nobody chose, wraps
+// where it likes, and renders a `·`-joined string as one grey run — which is how
+// "finished · ran on randi · not reproducible" ended up being the least legible
+// text in the product. This takes the same facts as structure and draws them.
+//
+//   tip(node, "one line")
+//   tip(node, ["a line", "another"])
+//   tip(node, [["Finished", "14 Aug, 2:14 pm"], ["Site", "randi"]])
+//
+// A pair list becomes a two-column grid; anything else becomes lines. Bold with
+// **text**. Passing a falsy value removes the tooltip.
+let tipEl = null, tipTimer = null, tipFor = null;
+
+function tipNode() {
+  if (!tipEl) {
+    tipEl = el("tip");
+    tipEl.setAttribute("role", "tooltip");
+    document.body.appendChild(tipEl);
+  }
+  return tipEl;
+}
+// The one rich-text helper: escape first, then allow **bold** and line breaks.
+// Shared by the tooltip and the modal so a message reads the same in both.
+function fmtText(t) {
+  return escapeHtml(String(t))
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/\n/g, "<br>");
+}
+function tipMarkup(content) {
+  const bold = fmtText;
+  const pairs = Array.isArray(content) && content.length
+    && content.every((r) => Array.isArray(r) && r.length === 2);
+  if (pairs) {
+    return `<div class="tip-rows">${content
+      .filter(([, v]) => v !== "" && v !== null && v !== undefined)
+      .map(([k, v]) => `<span class="tip-k">${bold(k)}</span><span class="tip-v">${bold(v)}</span>`)
+      .join("")}</div>`;
+  }
+  const lines = (Array.isArray(content) ? content : String(content).split("\n")).filter(Boolean);
+  return lines.map((l) => `<div class="tip-line">${bold(l)}</div>`).join("");
+}
+// Placed after it is measured, and flipped above the target when there is no
+// room below — a tooltip clipped by the window edge is worse than none.
+function showTip(node, content) {
+  const t = tipNode();
+  t.innerHTML = tipMarkup(content);
+  t.classList.add("on");
+  const r = node.getBoundingClientRect();
+  const b = t.getBoundingClientRect();
+  const gap = 7;
+  let top = r.bottom + gap;
+  if (top + b.height > window.innerHeight - 8) top = Math.max(8, r.top - b.height - gap);
+  let left = r.left + r.width / 2 - b.width / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - b.width - 8));
+  t.style.top = Math.round(top) + "px";
+  t.style.left = Math.round(left) + "px";
+  tipFor = node;
+}
+function hideTip() {
+  clearTimeout(tipTimer);
+  tipFor = null;
+  if (tipEl) tipEl.classList.remove("on");
+}
+function tip(node, content) {
+  if (!node) return node;
+  node.removeAttribute("title");          // never both
+  node._tip = content || null;
+  if (node.dataset.tipWired) return node;
+  node.dataset.tipWired = "1";
+  const open = () => {
+    if (!node._tip) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(() => showTip(node, node._tip), 320);
+  };
+  node.addEventListener("mouseenter", open);
+  node.addEventListener("focus", open);
+  node.addEventListener("mouseleave", hideTip);
+  node.addEventListener("blur", hideTip);
+  node.addEventListener("mousedown", hideTip);   // a click has its own answer
+  return node;
+}
+// Anything that moves the target invalidates the position, and re-measuring on
+// scroll is cheaper than being wrong about where the thing being described is.
+window.addEventListener("scroll", () => { if (tipFor) hideTip(); }, true);
+window.addEventListener("resize", () => { if (tipFor) hideTip(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTip(); });
+
 // ── transcript rendering ─────────────────────────────────────────────────────
 function clearTranscript() { thread.innerHTML = ""; working = null; liveProse = null; resetLive(); }
+// The empty thread. One sentence, centred, and nothing else — the capabilities
+// panel is reached from the chats menu, which is where it stays reachable once
+// this heading is gone.
 function showWelcome() {
   clearTranscript();
   const w = el("welcome");
-  w.innerHTML = `<h1>What would you like to look into?</h1>
-    <p class="sub">Ask in plain language, or in precise technical terms. I’ll inspect the
-    data, choose sound methods, and show you the results, figures included.</p>`;
+  w.innerHTML = `<h1>What&rsquo;s today&rsquo;s research question?</h1>`;
   thread.appendChild(w);
+}
+
+// Opened from the chats menu. Kept as its own function so the wiring is one place.
+function openCaps() {
+  const pop = $("#infoPop");
+  if (!pop) return;
+  const wasClosed = pop.hidden;
+  closePops();
+  if (wasClosed) { pop.hidden = false; renderCaps(); }
 }
 function addUserTurn(text, index) {
   const w = thread.querySelector(".welcome"); if (w) w.remove();
@@ -104,8 +305,9 @@ function addUserTurn(text, index) {
   if (typeof index === "number") {
     turn.dataset.index = String(index);
     const edit = document.createElement("button");
-    edit.className = "turn-edit"; edit.type = "button"; edit.title = "Edit and resend";
-    edit.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 20h4l10-10-4-4L4 16zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    edit.className = "turn-edit"; edit.type = "button";
+    edit.innerHTML = ICON.pencil;
+    tip(edit, "Edit and resend.");
     edit.addEventListener("click", () => startEdit(turn, text, index));
     turn.appendChild(edit);
   }
@@ -322,7 +524,7 @@ function traceBody() {
   liveTrace = document.createElement("details");
   liveTrace.className = "trace";
   liveTrace.open = false;                      // available, never in the way
-  liveTrace.innerHTML = '<summary><span class="tr-label">Thinking…</span></summary><div class="tr-body"></div>';
+  liveTrace.innerHTML = '<summary><span class="tr-label">Steps</span></summary><div class="tr-body"></div>';
   animateDetails(liveTrace, liveTrace.querySelector(".tr-body"));
   turn.appendChild(liveTrace);
   place(turn);
@@ -363,8 +565,8 @@ function addActivity(label, detail) {
 function settleTrace() {
   if (!liveTrace) return;
   liveTrace.querySelector(".tr-label").textContent = liveStepCount
-    ? `Thought process · ${liveStepCount} step${liveStepCount === 1 ? "" : "s"}`
-    : "Thought process";
+    ? `${liveStepCount} step${liveStepCount === 1 ? "" : "s"}`
+    : "Reasoning";
   liveTrace = null; liveThinkPara = null; liveStepCount = 0;
 }
 
@@ -414,7 +616,9 @@ function addArtifactCard(a) {
   const turn = el("turn assistant artifact");
   const card = document.createElement("button");
   card.className = "artifact-card";
-  card.innerHTML = `<span class="ac-ico">${iconForFmt(a)}</span><span class="ac-name">${escapeHtml(formatName(a.name))}</span><span class="ac-open">Open</span>`;
+  card.innerHTML = `<span class="ac-ico">${iconForFmt(a)}</span>` +
+                   `<span class="ac-name">${escapeHtml(formatName(a.name))}</span>` +
+                   `<span class="ac-go">${ICON.chevSm}</span>`;
   card.addEventListener("click", () => { setPanelOpen(true); openItem(a.ref || a.topic, a.name); });
   turn.appendChild(card); place(turn);
 }
@@ -425,7 +629,7 @@ function addRunStarted(ev) {
   const step = el("tr-step tr-run");
   const head = el("tr-step-label");
   head.textContent = `${ev.label || "Analysis"} · started`;
-  head.title = ev.site ? `Running on ${ev.site}` : "";
+  if (ev.site) tip(head, [["Running on", ev.site]]);
   step.appendChild(head);
   step.dataset.run = ev.run || "";
   traceBody().appendChild(step);
@@ -434,7 +638,7 @@ function addRunStarted(ev) {
 }
 function startWorking() {
   working = el("turn assistant");
-  working.innerHTML = '<div class="working"><span class="dots"><i></i><i></i><i></i></span><span class="label">Thinking…</span></div>';
+  working.innerHTML = '<div class="working"><span class="pulse"></span><span class="label">Working</span></div>';
   thread.appendChild(working); toBottom(true);
 }
 function setWorking(label) { if (!working) startWorking(); working.querySelector(".label").textContent = label; }
@@ -449,7 +653,7 @@ async function streamChat(message) {
     signal: controller.signal,      // stopping aborts this, which cancels the turn server-side
   });
   if (res.status === 401) { window.location.href = "/login"; return; }
-  if (!res.ok || !res.body) { stopWorking(); addNotice("Couldn’t reach the analysis service.", true); return; }
+  if (!res.ok || !res.body) { stopWorking(); addNotice("Couldn’t reach the server.", true); return; }
   const reader = res.body.getReader(); const decoder = new TextDecoder(); let buf = "";
   while (true) {
     const { value, done } = await reader.read(); if (done) break;
@@ -506,7 +710,7 @@ async function submit(text) {
   try { await streamChat(text); }
   catch (e) {
     if (e && e.name === "AbortError") endStopped(text);
-    else { stopWorking(); addNotice("The connection was interrupted.", true); }
+    else { stopWorking(); addNotice("Connection lost.", true); }
   }
   finally {
     streaming = false; controller = null; graceWindow = false;
@@ -555,7 +759,7 @@ function renderChatList() {
   const q = ($("#mpSearch").value || "").toLowerCase();
   const box = $("#mpChats"); box.innerHTML = "";
   const shown = chatList.filter((c) => !q || (c.title || "").toLowerCase().includes(q));
-  if (!shown.length) { box.innerHTML = '<div class="mp-empty">No chats yet.</div>'; return; }
+  if (!shown.length) { box.innerHTML = '<div class="mp-empty">No chats</div>'; return; }
   for (const c of shown) {
     const row = document.createElement("div");
     row.className = "mp-chat-row" + (c.id === currentChatId ? " active" : "");
@@ -563,11 +767,11 @@ function renderChatList() {
     b.className = "mp-chat"; b.textContent = c.title || "New chat";
     b.addEventListener("click", () => switchChat(c.id));
     const acts = document.createElement("div"); acts.className = "mp-acts";
-    const ren = document.createElement("button"); ren.className = "mp-act"; ren.title = "Rename";
-    ren.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 20h4L18 10l-4-4L4 16v4zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const ren = document.createElement("button"); ren.className = "mp-act";
+    ren.innerHTML = ICON.pencil; tip(ren, "Rename");
     ren.addEventListener("click", (e) => { e.stopPropagation(); renameChat(c); });
-    const del = document.createElement("button"); del.className = "mp-act"; del.title = "Delete";
-    del.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14"><path d="M5 7h14M9 7V5h6v2M6 7l1 13h10l1-13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const del = document.createElement("button"); del.className = "mp-act";
+    del.innerHTML = ICON.trash; tip(del, "Delete");
     del.addEventListener("click", (e) => { e.stopPropagation(); deleteChat(c); });
     acts.append(ren, del); row.append(b, acts); box.appendChild(row);
   }
@@ -578,7 +782,7 @@ function modal({ title, message, input, confirmText = "Confirm", danger = false 
   return new Promise((resolve) => {
     const back = el("modal-back"), card = el("modal-card");
     card.innerHTML = `<div class="modal-title">${escapeHtml(title)}</div>` +
-      (message ? `<div class="modal-msg">${escapeHtml(message)}</div>` : "") +
+      (message ? `<div class="modal-msg">${fmtText(message)}</div>` : "") +
       (input !== undefined ? '<input class="modal-input" type="text" />' : "") +
       `<div class="modal-actions"><button class="modal-btn cancel">Cancel</button>` +
       `<button class="modal-btn confirm${danger ? " danger" : ""}">${escapeHtml(confirmText)}</button></div>`;
@@ -601,12 +805,16 @@ function pickDomains(options, preselected) {
   return new Promise((resolve) => {
     const back = el("modal-back"), card = el("modal-card");
     card.classList.add("wide", "domains");
-    card.innerHTML = `<div class="modal-title">Domain Selection</div>` +
+    // One footer row, not three: the note, the count and the two controls were
+    // stacking into more chrome than the choice itself.
+    card.innerHTML = `<div class="modal-title">Domain</div>` +
       `<div class="domain-grid"></div>` +
-      `<div class="dm-note">Fixed for this chat once started.</div>` +
-      `<div class="domain-foot"><button class="dm-all" type="button">Select all</button>` +
-      `<span class="dm-count"></span></div>` +
-      `<div class="modal-actions"><button class="modal-btn confirm">Start</button></div>`;
+      `<div class="domain-foot">` +
+        `<button class="dm-all" type="button">All</button>` +
+        `<span class="dm-note">Fixed once the chat starts</span>` +
+        `<span class="dm-count"></span>` +
+        `<button class="modal-btn confirm">Start</button>` +
+      `</div>`;
     const grid = card.querySelector(".domain-grid");
     const go = card.querySelector(".confirm");
     const all = card.querySelector(".dm-all");
@@ -615,8 +823,7 @@ function pickDomains(options, preselected) {
 
     function sync() {
       for (const b of grid.children) b.classList.toggle("on", chosen.has(b.dataset.name));
-      count.textContent = chosen.size === options.length
-        ? `All ${options.length}` : `${chosen.size} of ${options.length}`;
+      count.textContent = `${chosen.size} of ${options.length}`;
       all.disabled = chosen.size === options.length;
       go.disabled = chosen.size === 0;
     }
@@ -663,7 +870,7 @@ async function renameChat(c) {
   await loadChats();
 }
 async function deleteChat(c) {
-  const ok = await modal({ title: "Delete chat", message: `“${c.title || "New chat"}” will be permanently deleted.`, confirmText: "Delete", danger: true });
+  const ok = await modal({ title: "Delete chat", message: c.title || "New chat", confirmText: "Delete", danger: true });
   if (!ok) return;
   await fetch(`/api/chats/${c.id}`, { method: "DELETE" });
   if (c.id === currentChatId) {
@@ -766,7 +973,14 @@ function initMenu() {
   btn.addEventListener("click", () => (pop.hidden ? openMenu() : closeMenu()));   // touch/click
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
   $("#mpNew").addEventListener("click", () => { closeMenu(); newChat(); });
+  // stopPropagation, or the document click handler that closes popovers runs next
+  // on this very event, sees a target outside .info-card, and shuts it again.
+  $("#mpCaps").addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); openCaps(); });
   $("#mpSearch").addEventListener("input", renderChatList);
+  $("#mpTheme").addEventListener("click", (e) => {
+    e.stopPropagation();
+    applyTheme(currentTheme() === "dark" ? "light" : "dark");
+  });
   $("#mpLogout").addEventListener("click", async () => { await fetch("/api/logout", { method: "POST" }); window.location.href = "/login"; });
 }
 
@@ -839,7 +1053,7 @@ async function renderCaps() {
   const body = $("#ipBody");
   let d;
   try { d = await (await fetch("/api/capabilities")).json(); }
-  catch { body.innerHTML = `<p class="ip-note">This could not be loaded just now.</p>`; return; }
+  catch { body.innerHTML = `<p class="ip-note">Couldn’t load</p>`; return; }
   capsShown = true;
 
   const box = (it) => `
@@ -851,14 +1065,13 @@ async function renderCaps() {
       ${it.across_samples ? `<div class="ip-box-tag">Across samples</div>` : ""}
     </div>`;
 
+  // The stage note said in prose what the left-to-right order already says. The
+  // heading alone is the stage; a sentence under each one is three sentences of
+  // caption above the thing being captioned.
   const flow = (sts) => `<div class="ip-flow">${sts.map((s, i) => `
-    ${i ? `<div class="ip-arrow" aria-hidden="true">
-             <svg viewBox="0 0 24 24" width="15" height="15"><path d="M9 6l6 6-6 6" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-           </div>` : ""}
+    ${i ? `<div class="ip-arrow" aria-hidden="true">${ICON.chevSm}</div>` : ""}
     <div class="ip-stage">
       <div class="ip-stage-head">${escapeHtml(s.stage)}</div>
-      <div class="ip-stage-note">${escapeHtml(s.note)}</div>
       ${s.items.map(box).join("")}
     </div>`).join("")}</div>`;
 
@@ -879,9 +1092,7 @@ async function renderCaps() {
   body.innerHTML = d.groups.map((g) => `
     <details class="ip-group">
       <summary>
-        <svg class="ip-chev" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path
-          d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2"
-          stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="ip-chev">${ICON.chevSm}</span>
         <span class="ip-gname">${escapeHtml(g.name)}</span>
         <span class="ip-gsum">${escapeHtml(g.summary || "")}</span>
       </summary>
@@ -908,12 +1119,12 @@ async function renderCaps() {
 async function renderViewers() {
   const list = $("#vwList");
   anchorPopTo("#viewPop", "#viewBtn");
-  list.innerHTML = `<div class="vw-empty">Looking…</div>`;
+  list.innerHTML = `<div class="vw-empty">Loading</div>`;
   let d;
   try { d = await (await fetch(`/api/viewers?chat_id=${enc(currentChatId || "")}`)).json(); }
-  catch { list.innerHTML = `<div class="vw-empty">Could not load these just now.</div>`; return; }
+  catch { list.innerHTML = `<div class="vw-empty">Couldn’t load</div>`; return; }
   if (!d.viewers || !d.viewers.length) {
-    list.innerHTML = `<div class="vw-empty">Nothing here can be opened this way.</div>`;
+    list.innerHTML = `<div class="vw-empty">Nothing to open</div>`;
     return;
   }
   list.innerHTML = "";
@@ -946,10 +1157,10 @@ function viewerRow(v) {
     // a viewer with nothing in it, so that is what is stopped, at the button.
     open.disabled = n === 0;
     why.textContent = n === 0
-      ? "No samples ticked, so there is nothing to open"
+      ? "No samples selected"
       : (choices.length > 1 && n < choices.length
-        ? `Opens ${n} of ${choices.length} samples`
-        : `${v.samples} sample${v.samples === 1 ? "" : "s"} prepared in this chat`);
+        ? `${n} of ${choices.length} samples`
+        : `${v.samples} sample${v.samples === 1 ? "" : "s"}`);
   };
   say();
   open.addEventListener("click", () => {
@@ -974,22 +1185,18 @@ function viewerRow(v) {
   const chev = document.createElement("span");
   chev.className = "vw-pick-chev"; chev.innerHTML = ICON.chev;
   const pickName = document.createElement("span");
-  pickName.className = "vw-pick-name"; pickName.textContent = "Choose Samples";
+  pickName.className = "vw-pick-name"; pickName.textContent = "Samples";
   const count = document.createElement("span");
   count.className = "vw-pick-count";
   pick.append(chev, pickName, count);
   const tally = () => {
     const n = picked().length;
-    count.textContent = n === 0 ? "none"
-      : n === choices.length ? `all ${n}` : `${n} of ${choices.length}`;
+    count.textContent = `${n} of ${choices.length}`;
   };
   tally();
 
   const box = el("vw-samples");
   box.hidden = true;
-  const hint = el("vw-hint");
-  hint.textContent = "Tick the samples to open. A viewer loads every one you give it, "
-                   + "so fewer open faster.";
   const bulk = el("vw-bulk");
   const checks = el("vw-checks");
   const boxes = [];
@@ -1020,7 +1227,7 @@ function viewerRow(v) {
     });
     bulk.appendChild(b);
   }
-  box.append(hint, bulk, checks);
+  box.append(bulk, checks);
   pick.addEventListener("click", () => {
     box.hidden = !box.hidden;
     pick.setAttribute("aria-expanded", String(!box.hidden));
@@ -1047,9 +1254,9 @@ function capTitle(name) {
 
 async function renderVersions() {
   const body = $("#verBody");
-  body.innerHTML = `<div class="vw-empty">Looking…</div>`;
+  body.innerHTML = `<div class="vw-empty">Loading</div>`;
   try { verData = await (await fetch(`/api/versions?chat_id=${enc(currentChatId || "")}`)).json(); }
-  catch { body.innerHTML = `<div class="vw-empty">These could not be loaded just now.</div>`; return; }
+  catch { body.innerHTML = `<div class="vw-empty">Couldn’t load</div>`; return; }
   drawVersions();
 }
 
@@ -1061,7 +1268,7 @@ async function pickVersion(picked) {
   // rather than making somebody send something before the grid will work.
   let id = currentChatId;
   if (!id) { try { id = await ensureChatExists(); } catch { id = null; } }
-  if (!id) { versionsNote("This needs a chat to belong to."); return; }
+  if (!id) { versionsNote("Start a chat first."); return; }
 
   let got = null, ok = false;
   try {
@@ -1077,7 +1284,7 @@ async function pickVersion(picked) {
   // it into a large one: the body has no columns, so a screen full of real
   // results redrew as "nothing has finished yet".
   if (!ok || !got || !got.columns) {
-    versionsNote((got && got.error) || "That could not be saved just now.");
+    versionsNote((got && got.error) || "Couldn’t save");
     return;
   }
   verData = got;
@@ -1089,45 +1296,44 @@ function versionsNote(text) {
   if (foot) foot.textContent = text;
 }
 
+// The grid. Samples down, capabilities across, one cell per pair.
+//
+// The controls are folded into the headings rather than sitting beside them. It
+// used to carry a "Newest" button under every column heading plus an "All cells"
+// bar above the table — thirteen visible buttons before a single version was
+// chosen, and still no way to act on one sample. Now the heading IS the control:
+// a column heading acts on its column, a row label on its row, and the corner
+// cell on everything. Same three scopes, no extra furniture, and the one scope
+// that was missing is the one a person actually asks for ("redo this sample").
 function drawVersions() {
+  closeMenuLayer();          // the anchors below are about to be replaced
   const body = $("#verBody"), foot = $("#verFoot");
   const cols = (verData && verData.columns) || [];
   const rows = (verData && verData.rows) || [];
   if (!cols.length) {
-    body.innerHTML = '<div class="vw-empty">Nothing has finished yet. ' +
-      'Once an analysis lands it appears here with its versions.</div>';
+    body.innerHTML = '<div class="vw-empty">Nothing yet</div>';
     foot.textContent = "";
     return;
   }
   body.innerHTML = "";
-  body.appendChild(everyCellBar());
   const table = document.createElement("table");
   table.className = "ver-grid";
 
   const head = document.createElement("tr");
-  head.appendChild(document.createElement("th"));
+  const corner = document.createElement("th");
+  corner.className = "ver-corner";
+  corner.appendChild(scopeButton("All", () => everyCell(),
+    `Every cell · ${rows.length} sample${rows.length === 1 ? "" : "s"} × ${cols.length}`));
+  head.appendChild(corner);
   for (const c of cols) {
     const th = document.createElement("th");
-    const name = document.createElement("div");
+    th.className = "ver-colcell";
     // The data column is named by the domain that owns the data — "Space Ranger"
     // rather than "Data" — because that is what the people reading this call the
     // thing every analysis starts from.
-    name.className = "ver-col";
-    name.textContent = c === verDataColumn()
+    const label = c === verDataColumn()
       ? ((verData && verData.data_label) || "Data") : capTitle(c);
-    // Setting one capability across every sample at once. The common move by
-    // far: a parameter is reconsidered for the study, not for one sample.
-    const all = document.createElement("button");
-    all.className = "ver-all"; all.type = "button"; all.textContent = "all newest";
-    all.title = c === verDataColumn()
-      ? "Read every sample from the newest version of its data"
-      : `Point every sample's ${capTitle(c)} at its newest version`;
-    all.addEventListener("click", () => {
-      const picked = {};
-      for (const r of rows) if (r.cells[c] && r.cells[c].versions.length) picked[`${r.subject}::${c}`] = null;
-      pickVersion(picked);
-    });
-    th.append(name, all);
+    th.appendChild(scopeButton(label, () => cellsInColumn(c), label, "ver-col"));
     head.appendChild(th);
   }
   table.appendChild(head);
@@ -1135,27 +1341,39 @@ function drawVersions() {
   for (const r of rows) {
     const tr = document.createElement("tr");
     const label = document.createElement("th");
-    label.className = "ver-row"; label.textContent = r.label;
+    label.className = "ver-row";
+    label.appendChild(scopeButton(r.label, () => cellsInRow(r.subject), r.label));
     tr.appendChild(label);
     for (const c of cols) tr.appendChild(versionCell(r.subject, c, r.cells[c]));
     table.appendChild(tr);
   }
-  body.appendChild(table);
 
-  for (const a of (verData.across || [])) {
-    const note = el("ver-section");
-    note.textContent = "Across samples";
-    body.appendChild(note);
-    const t2 = document.createElement("table");
-    t2.className = "ver-grid";
-    const tr = document.createElement("tr");
-    const label = document.createElement("th");
-    label.className = "ver-row"; label.textContent = a.label;
-    tr.appendChild(label);
-    for (const c of Object.keys(a.cells)) tr.appendChild(versionCell(a.subject, c, a.cells[c]));
-    t2.appendChild(tr);
-    body.appendChild(t2);
+  // The cross-sample rows go in THIS table, under a divider, rather than in a
+  // second one below it. A separate table sizes its own columns, so "Cohort"
+  // and its values landed under nothing in particular while the grid above them
+  // was still lined up — the one thing a matrix may not do.
+  const across = verData.across || [];
+  if (across.length) {
+    const sep = document.createElement("tr");
+    sep.className = "ver-seprow";
+    const th = document.createElement("th");
+    th.colSpan = cols.length + 1;
+    th.textContent = "Across samples";
+    sep.appendChild(th);
+    table.appendChild(sep);
+    for (const a of across) {
+      const tr = document.createElement("tr");
+      const label = document.createElement("th");
+      label.className = "ver-row";
+      label.appendChild(scopeButton(a.label, () => cellsInRow(a.subject), a.label));
+      tr.appendChild(label);
+      // Walked over the grid's own columns, so a capability this row has no cell
+      // for leaves a gap in the right place instead of shifting everything left.
+      for (const c of cols) tr.appendChild(versionCell(a.subject, c, a.cells[c]));
+      table.appendChild(tr);
+    }
   }
+  body.appendChild(table);
 
   // Counted over the capability columns only. The data column is what the
   // results were computed from, not a result, and counting it as one would
@@ -1163,9 +1381,49 @@ function drawVersions() {
   const made = cols.filter((c) => c !== verDataColumn());
   const filled = rows.reduce((n, r) => n + made.filter((c) => r.cells[c] && r.cells[c].versions.length).length, 0);
   const choices = rows.reduce((n, r) => n + made.filter((c) => r.cells[c] && r.cells[c].versions.length > 1).length, 0);
-  foot.textContent = `${filled} result${filled === 1 ? "" : "s"}, ` +
-    `${choices === 0 ? "none with more than one version" :
-       choices + " with more than one version"}.`;
+  foot.textContent = `${filled} result${filled === 1 ? "" : "s"}` +
+    (choices ? ` · ${choices} with more than one version` : "");
+}
+
+// A row highlights itself with tr:hover. A column has no selector at all — CSS
+// cannot reach "the cells above and below this one" — so the cells in it are
+// marked as the pointer moves. Delegated to the table, and the marks are only
+// rewritten when the column index actually changes, so travelling along a row
+// costs one comparison per event rather than 240 class writes.
+//
+// The label column is skipped: highlighting a column of sample names says
+// nothing, and it would fight the sticky background that keeps that column
+// readable over the scrolling grid.
+function trackColumnHover(table) {
+  let current = -1;
+  const paint = (idx) => {
+    if (idx === current) return;
+    for (const c of table.querySelectorAll(".col-hot")) c.classList.remove("col-hot");
+    current = idx;
+    if (idx < 1) return;
+    for (const row of table.rows) {
+      const c = row.cells[idx];
+      // A divider row is one cell spanning the grid, so it has nothing at idx.
+      if (c && !row.classList.contains("ver-seprow")) c.classList.add("col-hot");
+    }
+  };
+  table.addEventListener("mousemove", (e) => {
+    const cell = e.target.closest("td, th");
+    paint(cell && table.contains(cell) ? cell.cellIndex : -1);
+  });
+  table.addEventListener("mouseleave", () => paint(-1));
+}
+
+// A heading that acts on what it heads. The chevron appears on hover so a closed
+// grid still reads as a grid rather than as a row of dropdowns.
+function scopeButton(text, cellsFn, _unused, extraClass) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "ver-scope" + (extraClass ? " " + extraClass : "");
+  b.innerHTML = `<span class="vs-text"></span><span class="vs-chev">${ICON.chevSm}</span>`;
+  b.querySelector(".vs-text").textContent = text;
+  b.addEventListener("click", (e) => { e.stopPropagation(); openScopeMenu(b, text, cellsFn()); });
+  return b;
 }
 
 function verDataColumn() {
@@ -1184,41 +1442,31 @@ function everyCell() {
   }
   return out;
 }
+function cellsInColumn(col) {
+  return everyCell().filter(([, c]) => c === col);
+}
+function cellsInRow(subject) {
+  return everyCell().filter(([sub]) => sub === subject);
+}
 
-// Setting the whole grid at once. The per-column control next to each heading is
-// the common move — one parameter reconsidered for the study — and this is the
-// other one: starting over, either by following everything that has landed or by
-// emptying it all so the next question is answered from scratch.
-function everyCellBar() {
-  const bar = el("ver-bulk");
-  const say = document.createElement("span");
-  say.className = "ver-bulk-say"; say.textContent = "Every cell:";
-  bar.appendChild(say);
-
-  const act = (text, title, value) => {
-    const b = document.createElement("button");
-    b.className = "ver-bulk-btn"; b.type = "button"; b.textContent = text;
-    b.title = title;
-    b.addEventListener("click", () => {
-      const picked = {};
-      for (const [subject, c, cell] of everyCell()) {
-        // Data is on disk or it is not, so there is nothing to empty. Skipped
-        // rather than sent, since sending it would record a cleared cell that
-        // nothing acts on and that the column has no way to show.
-        if (value === "" && cell.clearable === false) continue;
-        picked[`${subject}::${c}`] = value;
-      }
-      pickVersion(picked);
-    });
-    bar.appendChild(b);
+// One menu for all three scopes. Only the actions that would change something
+// are offered: a scope whose cells are all on their newest version has nothing
+// to point at newest, and the data column cannot be cleared at all.
+function openScopeMenu(anchor, title, cells) {
+  const clearable = cells.filter(([, , cell]) => cell.clearable !== false);
+  const stale = cells.filter(([, , cell]) => cell.cleared || cell.active !== cell.newest);
+  const set = (list, value) => () => {
+    const picked = {};
+    for (const [subject, c] of list) picked[`${subject}::${c}`] = value;
+    pickVersion(picked);
   };
-  act("All latest", "Point every cell at the newest version it has, including "
-                  + "any that were emptied", null);
-  act("Clear all", "Empty every result cell, so the next time any of this is "
-                 + "asked for it is computed again rather than re-used. The data "
-                 + "column keeps its version, since data is not something that "
-                 + "can be run again.", "");
-  return bar;
+  menuAt(anchor, [
+    { head: `${title} · ${cells.length} cell${cells.length === 1 ? "" : "s"}` },
+    { label: "Newest", note: stale.length ? `${stale.length} to change` : "already newest",
+      disabled: !stale.length, onClick: set(cells, null) },
+    { label: "Clear", note: clearable.length ? `${clearable.length} cell${clearable.length === 1 ? "" : "s"}` : "not clearable",
+      disabled: !clearable.length, onClick: set(clearable, "") },
+  ]);
 }
 
 // A version of a result is named by when it was submitted, and a version of data
@@ -1229,84 +1477,64 @@ function verWhen(at) {
   return isNaN(d.getTime()) ? at : d.toLocaleDateString();
 }
 
+// A cell is text you can click, not a capsule. Two hundred bordered pills in a
+// grid read as an answer sheet: every cell drew its own outline, so the outlines
+// became the pattern and the values disappeared between them. State is carried by
+// weight and by one dashed underline, which is what the values needed all along.
 function versionCell(subject, capability, cell) {
   const td = document.createElement("td");
   td.className = "ver-cell";
-  if (!cell || !cell.versions.length) { td.textContent = "—"; td.classList.add("ver-none"); return td; }
-  if (cell.cleared) {
-    const b = document.createElement("button");
-    b.className = "ver-pill ver-cleared"; b.type = "button"; b.textContent = "empty";
-    b.title = "Cleared on purpose. Asking for this again runs it fresh.";
-    b.addEventListener("click", () => openVersionMenu(td, subject, capability, cell));
-    td.appendChild(b);
+  if (!cell || !cell.versions.length) {
+    td.classList.add("ver-none");
+    td.textContent = "—";
     return td;
   }
-  const active = cell.versions.find((v) => v.identity === cell.active) || cell.versions[0];
   const b = document.createElement("button");
-  b.className = "ver-pill" + (active.identity === cell.newest ? "" : " ver-old");
   b.type = "button";
-  b.textContent = "v" + active.ordinal + (cell.versions.length > 1 ? " ▾" : "");
-  b.title = [capTitle(capability), active.label, active.identity === cell.newest ? "" : "not the newest",
-             active.runs > 1 ? `${active.runs} runs produced this same result` : ""]
-    .filter(Boolean).join(" · ");
-  b.addEventListener("click", () => openVersionMenu(td, subject, capability, cell));
+  b.className = "ver-val";
+  if (cell.cleared) {
+    b.classList.add("is-cleared");
+    b.textContent = "empty";
+    tip(b, "Cleared. The next request runs it fresh.");
+  } else {
+    const active = cell.versions.find((v) => v.identity === cell.active) || cell.versions[0];
+    if (active.identity !== cell.newest) b.classList.add("is-old");
+    if (cell.versions.length === 1) b.classList.add("is-only");
+    b.textContent = "v" + active.ordinal;
+    tip(b, [
+      ["Version", active.label || verWhen(active.at)],
+      ["State", active.identity === cell.newest ? "Newest" : "Not the newest"],
+      active.runs > 1 ? ["Runs", `${active.runs} produced this same result`] : ["", ""],
+      ["", cell.versions.length > 1 ? `${cell.versions.length} versions to choose from` : ""],
+    ]);
+  }
+  b.addEventListener("click", (e) => { e.stopPropagation(); openVersionMenu(b, subject, capability, cell); });
   td.appendChild(b);
   return td;
 }
 
-// The click that closes the open version menu, while one is open. Kept so it can
-// be taken off again: a watcher per menu, left registered, would close the next
-// menu on the click that opened it.
-let verMenuAway = null;
-
-function openVersionMenu(td, subject, capability, cell) {
-  closeVersionMenu();
-  const menu = el("ver-menu");
-  const head = el("ver-menu-head");
-  head.textContent = `${subject || "across samples"} · ${capTitle(capability)}`;
-  menu.appendChild(head);
+function openVersionMenu(anchor, subject, capability, cell) {
+  const items = [{ head: `${subject || "Across samples"} · ${capTitle(capability)}` }];
   for (const v of cell.versions) {
-    const b = document.createElement("button");
-    b.className = "ver-opt" + (v.identity === cell.active ? " on" : "");
-    b.type = "button";
-    const n = document.createElement("span"); n.className = "ver-opt-n"; n.textContent = "v" + v.ordinal;
-    const t = document.createElement("span"); t.className = "ver-opt-t";
-    t.textContent = v.label || verWhen(v.at);
-    const w = document.createElement("span"); w.className = "ver-opt-w";
-    w.textContent = v.identity === cell.newest ? "newest" : verWhen(v.at);
-    b.append(n, t, w);
-    b.addEventListener("click", () => { closeVersionMenu(); pickVersion({ [`${subject}::${capability}`]: v.identity }); });
-    menu.appendChild(b);
+    items.push({
+      lead: "v" + v.ordinal,
+      label: v.label || verWhen(v.at),
+      note: v.identity === cell.newest ? "newest" : verWhen(v.at),
+      on: v.identity === cell.active,
+      onClick: () => pickVersion({ [`${subject}::${capability}`]: v.identity }),
+    });
   }
   // Emptying a cell asks for the work to be done again, and data is not work.
   // It is on disk or it is not, so this column offers the choice without it.
   if (cell.clearable !== false) {
-    const clear = document.createElement("button");
-    clear.className = "ver-opt ver-clear" + (cell.cleared ? " on" : "");
-    clear.type = "button";
-    clear.textContent = "Clear — run this fresh next time";
-    clear.title = "Nothing is selected for this cell. Asking for it again computes it "
-                + "again instead of handing back what is already there.";
-    clear.addEventListener("click", () => { closeVersionMenu(); pickVersion({ [`${subject}::${capability}`]: "" }); });
-    menu.appendChild(clear);
+    items.push({ sep: true });
+    items.push({ label: "Clear", note: "recomputed next time", on: !!cell.cleared,
+                 onClick: () => pickVersion({ [`${subject}::${capability}`]: "" }) });
   }
-  td.appendChild(menu);
-  // Watched from the document in the capture phase, because the popover card
-  // stops clicks from bubbling out to it. Listening the ordinary way meant no
-  // click inside the card ever reached this, so the only way to close the menu
-  // was to choose something — and looking at the options and deciding to change
-  // nothing is the most common reason to open it.
-  verMenuAway = (e) => { if (!e.target.closest(".ver-menu")) closeVersionMenu(); };
-  setTimeout(() => document.addEventListener("click", verMenuAway, true), 0);
+  menuAt(anchor, items);
 }
 
-function closeVersionMenu() {
-  for (const m of document.querySelectorAll(".ver-menu")) m.remove();
-  if (verMenuAway) {
-    document.removeEventListener("click", verMenuAway, true);
-    verMenuAway = null;
-  }
-}
+function closeVersionMenu() { closeMenuLayer(); }
 
 function initPops() {
   initPopover("#studyBtn", "#studyPop", () => { anchorStudyPop(); renderStudyPop(); });
@@ -1390,7 +1618,7 @@ function updateStudyLabel() {
 }
 function renderStudyPop() {
   const box = $("#spList"); box.innerHTML = "";
-  if (!studies.length) { box.innerHTML = '<div class="mp-empty">No studies available.</div>'; }
+  if (!studies.length) { box.innerHTML = '<div class="mp-empty">No studies</div>'; }
   const sel = new Set(scopedStudies());
   for (const name of studies) {
     const b = document.createElement("button"); b.type = "button";
@@ -1402,7 +1630,7 @@ function renderStudyPop() {
   }
   const all = sel.size === studies.length;
   $("#spAll").disabled = all;
-  $("#spCount").textContent = all ? `All ${studies.length}` : `${sel.size} of ${studies.length}`;
+  $("#spCount").textContent = `${sel.size} of ${studies.length}`;
 }
 function toggleStudy(name) {
   const sel = new Set(scopedStudies());
@@ -1429,14 +1657,32 @@ async function applyStudies(list) {
 const tree = $("#tree"), viewer = $("#viewer");
 const expanded = new Set();
 let resultsData = { topics: [] };
+// One set, one grammar: a 24 viewBox, a 1.5 stroke, round caps and joins, two shapes at
+// most. The ones that were three overlapping shapes at 1.6 and 1.7 read as clutter at
+// 15px — at that size an icon is a silhouette and detail is noise.
+//
+// Solid is used only where solid IS the meaning, and there it overrides the stroke rule:
+// a stop square, a warning triangle, the dot of an i, and the tick — which carries 2.2
+// because it is knocked out of a filled box at 12px and 1.5 would read as a hairline
+// crack. The info glyph in index.html is the one three-shape icon, for the same reason:
+// a circle, a stem and a dot is what the letter is.
+const STROKE = 'fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"';
 const ICON = {
-  chev: '<svg class="chev" viewBox="0 0 24 24" width="14" height="14"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  folder: '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
-  table: '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M4 5h16v14H4zM4 10h16M4 15h16M10 5v14" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
-  image: '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M4 5h16v14H4z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="M5 18l5-5 4 4 2-2 3 3" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
-  doc: '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M6 3h8l4 4v14H6z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13 3v5h5M9 13h6M9 16h6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
-  stop: '<svg viewBox="0 0 24 24" width="12" height="12"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>',
-  check: '<svg viewBox="0 0 24 24" width="11" height="11"><path d="M5 12.5l4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chev:   `<svg class="chev" viewBox="0 0 24 24" width="12" height="12"><path d="M9.5 6l6 6-6 6" ${STROKE}/></svg>`,
+  chevSm: `<svg viewBox="0 0 24 24" width="12" height="12"><path d="M9.5 6l6 6-6 6" ${STROKE}/></svg>`,
+  // A table is rows; a figure is a frame with a horizon; a document is a page with lines.
+  table:  `<svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 8.5h16M4 15.5h16" ${STROKE}/><rect x="4" y="4.5" width="16" height="15" rx="1.5" ${STROKE}/></svg>`,
+  image:  `<svg viewBox="0 0 24 24" width="14" height="14"><rect x="4" y="4.5" width="16" height="15" rx="1.5" ${STROKE}/><path d="M4.5 15.5l4.5-4 4 3.2 2.5-2.2 4 3.5" ${STROKE}/></svg>`,
+  doc:    `<svg viewBox="0 0 24 24" width="14" height="14"><rect x="5.5" y="3.5" width="13" height="17" rx="1.5" ${STROKE}/><path d="M9 10h6M9 14h6" ${STROKE}/></svg>`,
+  pencil: `<svg viewBox="0 0 24 24" width="14" height="14"><path d="M4.5 19.5h4l11-11-4-4-11 11z" ${STROKE}/></svg>`,
+  trash:  `<svg viewBox="0 0 24 24" width="14" height="14"><path d="M4.5 7h15M9.5 4.5h5" ${STROKE}/><path d="M7 7l.8 12.5h8.4L17 7" ${STROKE}/></svg>`,
+  back:   `<svg viewBox="0 0 24 24" width="15" height="15"><path d="M14.5 18l-6-6 6-6" ${STROKE}/></svg>`,
+  stop:   '<svg viewBox="0 0 24 24" width="11" height="11"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>',
+  check:  '<svg viewBox="0 0 24 24" width="12" height="12"><path d="M5.5 12.5l4.5 4.5L18.5 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn:   '<svg viewBox="0 0 24 24" width="13" height="13"><path d="M12 4.5L21.5 20.5H2.5z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>',
+  sun:    `<svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="4.2" ${STROKE}/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.8 5.8l1.4 1.4M16.8 16.8l1.4 1.4M18.2 5.8l-1.4 1.4M7.2 16.8l-1.4 1.4" ${STROKE}/></svg>`,
+  moon:   `<svg viewBox="0 0 24 24" width="14" height="14"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" ${STROKE}/></svg>`,
+  info:   '<svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11.4v5.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.05" fill="currentColor"/></svg>',
 };
 function iconForFmt(it) {
   const k = (it.kind || "").toLowerCase();
@@ -1468,10 +1714,11 @@ async function refreshGoing() {
   for (const r of running) {
     const row = el("go-row");
     row.innerHTML = `<span class="go-dot"></span><span class="go-name"></span>` +
-                    `<span class="go-time"></span><button class="go-stop" title="Stop">${ICON.stop || "&times;"}</button>`;
+                    `<span class="go-time"></span><button class="go-stop">${ICON.stop}</button>`;
     row.querySelector(".go-name").textContent = r.label || "Analysis";
     row.querySelector(".go-time").textContent = r.elapsed || "";
-    row.title = `Running on ${r.site}`;
+    tip(row, [["Running on", r.site || ""], ["Elapsed", r.elapsed || ""]]);
+    tip(row.querySelector(".go-stop"), "Stop this run.");
     row.querySelector(".go-stop").addEventListener("click", async () => {
       row.querySelector(".go-time").textContent = "stopping";
       try { await fetch(`/api/runs/${enc(r.run)}/cancel`, { method: "POST" }); } catch {}
@@ -1486,18 +1733,24 @@ async function refreshGoing() {
   clearTimeout(goingTimer);
   goingTimer = setTimeout(refreshGoing, running.length ? 4000 : 20000);
 }
-// Whether another run in this panel carries the same heading. Asked of what is
-// being drawn rather than decided on the server, because it is a fact about the
-// list a person is looking at: the same heading twice needs telling apart, and
-// once does not.
-function sameLabelElsewhere(t) {
-  const all = (resultsData && resultsData.topics) || [];
-  return all.filter((x) => x.label === t.label).length > 1;
-}
-function shortTime(iso) {
+// When a run finished, at the resolution a reader needs: the clock for today,
+// the date for anything older, and the year only once it stops being obvious.
+function whenLabel(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  return isNaN(d) ? "" : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (isNaN(d)) return "";
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return time;
+  const day = d.toLocaleDateString([], d.getFullYear() === now.getFullYear()
+    ? { day: "numeric", month: "short" }
+    : { day: "numeric", month: "short", year: "2-digit" });
+  return `${day}, ${time}`;
+}
+function fullWhen(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleString();
 }
 // One run, as a folder of the things it produced. Built on its own so it can be
 // dropped straight into the panel or inside a sample, without the two cases
@@ -1506,46 +1759,47 @@ function runFolder(t) {
   const folder = document.createElement("div");
   folder.className = "folder" + (expanded.has(t.key) ? " open" : "");
   const row = document.createElement("button"); row.className = "folder-row";
-  // The time is part of the name when two runs are headed the same way. A run
-  // of code written for one question is named after what it produced, and the
-  // same work run twice produces the same names — two folders reading exactly
-  // alike, with no way to tell which is which without opening both.
-  const apart = sameLabelElsewhere(t) ? shortTime(t.finished) : "";
-  row.innerHTML = `${ICON.chev}<span class="ico">${ICON.folder}</span>` +
-                  `<span class="name">${escapeHtml(t.label)}</span>` +
-                  (apart ? `<span class="when">${escapeHtml(apart)}</span>` : "") +
+  // The flag goes FIRST, in a slot every row reserves whether or not it is
+  // filled. Appended last it pushed nothing, but it did mean a flagged row's
+  // trailing elements sat at different offsets from every unflagged row beside
+  // it, so the column of counts stopped being a column.
+  const bad = t.verified === false || t.reproducible === false;
+  // When it ran is shown on every row, not only when two share a heading. It is
+  // the one fact that orders the panel, and it was being withheld until a
+  // collision made it necessary.
+  const when = whenLabel(t.finished);
+  // The flag leads the trailing group — before the stamp and the count, not
+  // before the name. Its slot is reserved on every row, so the stamp and the
+  // count sit at the same offset whether a row is flagged or not.
+  row.innerHTML = `${ICON.chev}<span class="name">${escapeHtml(t.label)}</span>` +
+                  `<span class="flag-slot">${bad ? ICON.warn : ""}</span>` +
+                  `<span class="when">${escapeHtml(when)}</span>` +
                   `<span class="count">${t.items.length}</span>`;
-  // Where it ran and when, on hover rather than on screen. A row per run is
-  // already the answer to "what did I do"; the rest is for the moment someone
-  // asks whether they can rely on it, and that moment is rare enough that it
-  // should not cost every row a second line.
-  const when = t.finished ? new Date(t.finished).toLocaleString() : "";
-  row.title = [t.label, when && `finished ${when}`, t.site && `ran on ${t.site}`,
-               t.reproducible === false && "not reproducible",
-               t.verified === false && "the pinned code had changed when this ran"]
-    .filter(Boolean).join(" · ");
-  // Said out loud only when it is not fine. Silence is the normal case.
-  if (t.verified === false || t.reproducible === false) {
-    const flag = el("folder-flag");
-    flag.textContent = "!";
-    flag.title = t.verified === false
-      ? "The pinned code had changed when this ran, so it may not match the recorded version."
-      : "This run is not reproducible: the same inputs may not give the same answer.";
-    row.appendChild(flag);
-  }
+  if (bad) row.querySelector(".flag-slot").classList.add("on");
+  // The facts about a run, as facts rather than as one dot-joined sentence.
+  tip(row, [
+    ["Finished", fullWhen(t.finished)],
+    ["Ran on", t.site || ""],
+    ["Outputs", String(t.items.length)],
+    t.verified === false
+      ? ["Warning", "The pinned code had changed when this ran, so it may not match the recorded version."]
+      : t.reproducible === false
+        ? ["Warning", "Not reproducible: the same inputs may not give the same answer."]
+        : ["", ""],
+  ]);
   row.addEventListener("click", () => { const open = folder.classList.toggle("open"); if (open) expanded.add(t.key); else expanded.delete(t.key); });
   const items = document.createElement("div"); items.className = "items";
   // Something to open in a viewer, when the domain said one can open it.
   if (t.viewer) {
     const v = document.createElement("button"); v.className = "item item-view";
-    v.innerHTML = `<span class="ico">${ICON.image}</span><span class="name">Open in viewer</span>`;
+    v.innerHTML = `<span class="ico">${ICON.image}</span><span class="name">Viewer</span>`;
     v.addEventListener("click", () => openViewer(`${t.viewer}/${t.key}`));
     items.appendChild(v);
   }
   for (const it of t.items) {
     const b = document.createElement("button"); b.className = "item";
     b.innerHTML = `<span class="ico">${iconForFmt(it)}</span><span class="name">${escapeHtml(formatName(it.name))}</span>`;
-    b.title = it.description || formatName(it.name);
+    if (it.description) tip(b, it.description);
     b.addEventListener("click", () => openItem(it.ref, it.name));
     items.appendChild(b);
   }
@@ -1553,11 +1807,11 @@ function runFolder(t) {
   // the machine it ran on has still produced it, and a user who is not told
   // that concludes it produced nothing.
   for (const name of (t.stays || [])) {
-    const s = document.createElement("div"); s.className = "item item-stays";
-    s.innerHTML = `<span class="ico">${ICON.doc}</span><span class="name"></span>`;
-    s.querySelector(".name").textContent = formatName(name);
-    s.title = "This stays on the machine it was computed on and cannot be downloaded.";
-    items.appendChild(s);
+    const st = document.createElement("div"); st.className = "item item-stays";
+    st.innerHTML = `<span class="ico">${ICON.doc}</span><span class="name"></span>`;
+    st.querySelector(".name").textContent = formatName(name);
+    tip(st, "Stays on the machine it was computed on.");
+    items.appendChild(st);
   }
   folder.appendChild(row); folder.appendChild(items);
   return folder;
@@ -1566,9 +1820,10 @@ function runFolder(t) {
 function renderTree() {
   tree.innerHTML = "";
   const topics = resultsData.topics || [];
+  const count = $("#phCount");
+  if (count) count.textContent = topics.length ? String(topics.length) : "";
   if (!topics.length) {
-    tree.innerHTML = '<div class="tree-empty"><div class="te-title">Nothing here yet!</div>' +
-      '<div class="te-sub">Ask for an analysis, and the results you want to keep (tables, figures, summaries) will appear here.</div></div>';
+    tree.innerHTML = '<div class="tree-empty"><div class="te-title">Nothing here yet.</div></div>';
     return;
   }
   // Nearly every capability works on one sample, so a study's worth of work is
@@ -1597,10 +1852,9 @@ function renderTree() {
     const group = document.createElement("div");
     group.className = "folder group" + (expanded.has(key) ? " open" : "");
     const row = document.createElement("button"); row.className = "folder-row";
-    row.innerHTML = `${ICON.chev}<span class="ico">${ICON.folder}</span>` +
-                    `<span class="name"></span><span class="count">${mine.length}</span>`;
+    row.innerHTML = `${ICON.chev}<span class="name"></span>` +
+                    `<span class="flag-slot"></span><span class="count">${mine.length}</span>`;
     row.querySelector(".name").textContent = name;
-    row.title = `Sample ${name} · ${mine.length} ${mine.length === 1 ? "result" : "results"}`;
     row.addEventListener("click", () => {
       const open = group.classList.toggle("open");
       if (open) expanded.add(key); else expanded.delete(key);
@@ -1639,7 +1893,7 @@ async function openItem(ref, name) {
   viewer.innerHTML = "";
   const vhead = el("v-head");
   const back = document.createElement("button"); back.className = "v-back";
-  back.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Results</span>';
+  back.innerHTML = `${ICON.back}<span>Results</span>`;
   back.addEventListener("click", showTree);
   const dl = document.createElement("a"); dl.className = "v-dl"; dl.href = `/api/results/file?chat_id=${currentChatId}&ref=${enc(ref)}&name=${enc(name)}`;
   // The name the server gave it. This used to append the format to the output's
@@ -1647,7 +1901,7 @@ async function openItem(ref, name) {
   // and for a file that already carried its extension, as `.tsv.bin`. What an
   // output is called is the store's answer, from what the domain declared.
   dl.setAttribute("download", item.filename || name.split("/").pop());
-  dl.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Download</span>';
+  dl.textContent = "Download";
   vhead.appendChild(back); vhead.appendChild(dl); viewer.appendChild(vhead);
 
   const head = document.createElement("div");
@@ -1657,15 +1911,15 @@ async function openItem(ref, name) {
   // as a format problem rather than a missing file
   if (!item || item.error) {
     dl.remove();
-    const n = el("v-note"); n.textContent = "This result could not be opened. It may have been removed.";
+    const n = el("v-note"); n.textContent = "Couldn’t open this — it may have been removed";
     viewer.appendChild(n); tree.hidden = true; viewer.hidden = false; return;
   }
   if (item.description_html) {
     const wrap = el("v-desc-wrap collapsed"); const d = el("v-desc"); d.innerHTML = item.description_html;
     wrap.appendChild(d); viewer.appendChild(wrap);
-    const more = document.createElement("button"); more.className = "v-more"; more.textContent = "Show more"; viewer.appendChild(more);
+    const more = document.createElement("button"); more.className = "v-more"; more.textContent = "More"; viewer.appendChild(more);
     requestAnimationFrame(() => { if (d.scrollHeight <= wrap.clientHeight + 4) { more.remove(); wrap.classList.remove("collapsed"); } });
-    more.addEventListener("click", () => { more.textContent = wrap.classList.toggle("collapsed") ? "Show more" : "Show less"; });
+    more.addEventListener("click", () => { more.textContent = wrap.classList.toggle("collapsed") ? "More" : "Less"; });
   }
   if (item.parameters) viewer.appendChild(buildParams(item.parameters));
   if (item.view === "image") { const img = document.createElement("img"); img.src = item.src; img.alt = item.name || name; viewer.appendChild(img); }
@@ -1677,7 +1931,7 @@ async function openItem(ref, name) {
     if (item.html) { const d = el("v-md", item.html); viewer.appendChild(d); }
     else { const d = el("v-text"); d.textContent = item.text || ""; viewer.appendChild(d); }
   }
-  else { const n = el("v-note"); n.textContent = "No inline preview for this file type. Use Download above."; viewer.appendChild(n); }
+  else { const n = el("v-note"); n.textContent = "No preview for this file type"; viewer.appendChild(n); }
   tree.hidden = true; viewer.hidden = false;
 }
 // The settings an analysis ran with. Defaults are shown, and shown as defaults: they are
@@ -1688,16 +1942,22 @@ function buildParams(groups) {
   const box = el("v-params");
   const d = document.createElement("details");
   d.className = "vp";
-  const n = groups.reduce((t, g) => t + g.values.length, 0);
-  const what = groups.length === 1 ? groups[0].function : `${groups.length} analyses`;
-  d.innerHTML = `<summary><span class="vp-label">Settings used · ${escapeHtml(what)}</span></summary>`;
+  // The manifest records the function by its own id, so it arrives as
+  // `alpha_diversity`. Titled here rather than shown raw: an underscore in the
+  // interface is an internal name that escaped.
+  const what = groups.length === 1 ? capTitle(groups[0].function) : `${groups.length} analyses`;
+  d.innerHTML = `<summary><span class="vp-label">Settings · ${escapeHtml(what)}</span></summary>`;
   const body = el("vp-body");
   for (const g of groups) {
-    if (groups.length > 1) { const h = el("vp-fn"); h.textContent = g.function; body.appendChild(h); }
+    if (groups.length > 1) { const h = el("vp-fn"); h.textContent = capTitle(g.function); body.appendChild(h); }
     const tbl = document.createElement("table"); tbl.className = "vp-table";
     for (const v of g.values) {
       const tr = document.createElement("tr");
       if (v.defaulted) tr.className = "is-default";
+      // Left exactly as recorded, unlike the capability name above. A capability
+      // is a concept a reader has a word for; a parameter name IS the setting,
+      // and someone checking that the rank was `species` wants the spelling the
+      // method uses, not a prettified version of it.
       const k = document.createElement("th"); k.textContent = v.name;
       const val = document.createElement("td");
       val.textContent = v.value === null || v.value === undefined ? "none"
@@ -1715,9 +1975,16 @@ function buildParams(groups) {
   return box;
 }
 
-// Numbers come back at full float precision, which makes a table of p-values or CLR
-// values unreadable. Show something a human can scan, without lying about magnitude:
-// very small and very large values keep exponent form, the rest round.
+// ── display utilities ────────────────────────────────────────────────────────
+// Everything that draws data goes through here: one table, one fact list, one
+// number formatter. The panel used to build a <table> inline at each call site
+// with every column left-aligned, so a column of p-values and a column of
+// species names were typeset identically and neither could be scanned. A table
+// of numbers is read down the column, which needs the digits to line up.
+
+// Full float precision makes a column of p-values unreadable. Show something a
+// human can scan without lying about magnitude: very small and very large keep
+// exponent form, the rest round.
 function fmtCell(v) {
   if (v === null || v === undefined) return "";
   if (typeof v !== "number" || !Number.isFinite(v) || Number.isInteger(v)) return String(v);
@@ -1725,18 +1992,97 @@ function fmtCell(v) {
   if (a < 1e-4 || a >= 1e7) return v.toExponential(3);
   return String(Math.round(v * 1e6) / 1e6);
 }
-function buildTable(item) {
-  const wrap = el("v-tablewrap"); const tbl = document.createElement("table"); tbl.className = "v-table";
-  const thead = document.createElement("thead"); const htr = document.createElement("tr");
-  for (const c of item.columns) { const th = document.createElement("th"); th.textContent = c; htr.appendChild(th); }
-  thead.appendChild(htr); tbl.appendChild(thead);
-  const tb = document.createElement("tbody");
-  for (const row of item.rows) { const tr = document.createElement("tr"); for (const cell of row) { const td = document.createElement("td"); td.textContent = fmtCell(cell); tr.appendChild(td); } tb.appendChild(tr); }
-  tbl.appendChild(tb); wrap.appendChild(tbl);
-  const c = document.createElement("div"); c.appendChild(wrap);
-  if (item.truncated) { const n = el("v-note"); n.textContent = `Showing ${item.rows.length} of ${item.shape[0]} rows.`; c.appendChild(n); }
-  return c;
+
+// Whether a column holds numbers, asked of the column rather than of each cell:
+// one stray null or "NA" among four hundred floats does not make it a text
+// column, and aligning it as one would undo the point.
+function numericColumns(columns, rows) {
+  return columns.map((_, i) => {
+    let seen = 0;
+    for (const r of rows) {
+      const v = r[i];
+      if (v === null || v === undefined || v === "") continue;
+      if (typeof v !== "number") return false;
+      seen++;
+    }
+    return seen > 0;
+  });
 }
+
+// The one table. Numeric columns are right-aligned with tabular figures so the
+// digits form a column; the first column is the row's identity and holds the
+// left edge; the header is quiet because it is read once and the data is read
+// many times.
+function dataTable({ columns, rows, truncated, shape, note }) {
+  const box = document.createElement("div");
+  const wrap = el("v-tablewrap");
+  const tbl = document.createElement("table");
+  tbl.className = "v-table";
+  const num = numericColumns(columns, rows);
+
+  const thead = document.createElement("thead");
+  const htr = document.createElement("tr");
+  columns.forEach((c, i) => {
+    const th = document.createElement("th");
+    th.textContent = c;
+    if (num[i]) th.className = "is-num";
+    htr.appendChild(th);
+  });
+  thead.appendChild(htr); tbl.appendChild(thead);
+
+  const tb = document.createElement("tbody");
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    row.forEach((cell, i) => {
+      const td = document.createElement("td");
+      td.textContent = fmtCell(cell);
+      const cls = [];
+      if (num[i]) cls.push("is-num");
+      if (i === 0) cls.push("is-key");
+      if (cell === null || cell === undefined || cell === "") cls.push("is-empty");
+      if (cls.length) td.className = cls.join(" ");
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  }
+  tbl.appendChild(tb); wrap.appendChild(tbl); box.appendChild(wrap);
+
+  const said = note || (truncated && shape
+    ? `${rows.length.toLocaleString()} of ${shape[0].toLocaleString()} rows`
+    : rows.length > 12 ? `${rows.length.toLocaleString()} rows` : "");
+  if (said) { const n = el("v-note"); n.textContent = said; box.appendChild(n); }
+  return box;
+}
+function buildTable(item) { return dataTable(item); }
+
+// The one fact list: a short block of name/value pairs, for the scalars at the
+// top of a curated result and for anything else shaped like a record of one.
+function factList(pairs) {
+  const dl = el("v-facts");
+  for (const [k, v] of pairs) {
+    const row = el("v-fact");
+    const a = el("v-fact-k"); a.textContent = k;
+    const b = el("v-fact-v");
+    b.textContent = v === null || v === undefined ? "" : (typeof v === "number" ? fmtCell(v) : String(v));
+    if (typeof v === "number") b.classList.add("is-num");
+    row.append(a, b); dl.appendChild(row);
+  }
+  return dl;
+}
+
+// A section heading inside the viewer, with its size beside it rather than
+// inside the same string.
+function sectionHead(title, count) {
+  const h = el("v-section");
+  h.innerHTML = `<span>${escapeHtml(title)}</span>`;
+  if (count !== undefined) {
+    const c = document.createElement("span");
+    c.className = "v-section-n"; c.textContent = count.toLocaleString();
+    h.appendChild(c);
+  }
+  return h;
+}
+
 // A curated result is a JSON object whose interesting part is almost always a list of
 // records — the genes, the regions, the comparisons. Showing that as raw JSON hands the
 // user braces to read instead of a result. So: scalars become a compact summary, record
@@ -1761,45 +2107,37 @@ function buildJson(data) {
   const box = el("v-jsonview");
   if (data === null || typeof data !== "object" || Array.isArray(data)) {
     if (isRecordList(data)) { box.appendChild(recordTable(data)); return box; }
-    const p = document.createElement("pre"); p.className = "v-json";
-    p.textContent = JSON.stringify(data, null, 2); box.appendChild(p); return box;
+    box.appendChild(codeBlock(JSON.stringify(data, null, 2)));
+    return box;
   }
   const scalars = [], tables = [], rest = {};
   for (const [k, v] of Object.entries(data)) {
-    if (v === null || ["string", "number", "boolean"].includes(typeof v)) scalars.push([k, v]);
+    if (v === null || ["string", "number", "boolean"].includes(typeof v)) scalars.push([prettyKey(k), v]);
     else if (isRecordList(v)) tables.push([k, v]);
     else if (Array.isArray(v) && v.every((x) => x === null || typeof x !== "object")) {
-      scalars.push([k, v.length ? v.join(", ") : "(none)"]);
+      scalars.push([prettyKey(k), v.length ? v.join(", ") : "none"]);
     } else rest[k] = v;
   }
-  if (scalars.length) {
-    const dl = el("v-facts");
-    for (const [k, v] of scalars) {
-      const row = el("v-fact");
-      const a = el("v-fact-k"); a.textContent = prettyKey(k);
-      const b = el("v-fact-v"); b.textContent = v === null ? "" : (typeof v === "number" ? fmtCell(v) : String(v));
-      row.append(a, b); dl.appendChild(row);
-    }
-    box.appendChild(dl);
-  }
+  if (scalars.length) box.appendChild(factList(scalars));
   for (const [k, rows] of tables) {
-    const h = el("v-section"); h.textContent = `${prettyKey(k)} (${rows.length})`;
-    box.append(h, recordTable(rows));
+    box.append(sectionHead(prettyKey(k), rows.length), recordTable(rows));
   }
-  if (Object.keys(rest).length) {
-    const p = document.createElement("pre"); p.className = "v-json";
-    p.textContent = JSON.stringify(rest, null, 2); box.appendChild(p);
-  }
+  if (Object.keys(rest).length) box.appendChild(codeBlock(JSON.stringify(rest, null, 2)));
   return box;
 }
 function recordTable(rows) {
   const cols = columnsOf(rows);
-  return buildTable({
+  return dataTable({
     columns: cols,
     rows: rows.map((r) => cols.map((c) => (r[c] === undefined ? null : r[c]))),
     shape: [rows.length, cols.length],
     truncated: false,
   });
+}
+function codeBlock(text) {
+  const p = document.createElement("pre");
+  p.className = "v-json"; p.textContent = text;
+  return p;
 }
 
 // The server decides how many records a turn wrote, so the count is read back rather
@@ -1891,6 +2229,7 @@ async function boot() {
   studies = health.studies || [];
   updateStudyLabel();
   initPanel(); initMenu(); initPops();
+  labelTheme(currentTheme());   // ICON exists by now, so the switch can be drawn
   await loadChats();
   // Always a new conversation. Opening the page is not the same as asking to
   // carry on with something, and resuming the last one put a person back in the

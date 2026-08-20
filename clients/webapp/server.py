@@ -87,6 +87,27 @@ def _warm() -> None:
                 offered.for_user(who)
             except Exception:              # noqa: BLE001 - one user, not all of them
                 continue
+        # And what each machine holds that this client never submitted. The
+        # store is the record of what has been run; the registry is a record of
+        # what was asked for here, and the versions grid reads the second. Work
+        # batched straight onto a scheduler, or started from a terminal, is real
+        # work that the grid would otherwise never show. Here because it is the
+        # same shape as the rest of this: a question per machine per person,
+        # asked once at start-up so nobody waits on it.
+        import adopt
+        import paths
+        for who in list(access.ACCESS) or [""]:
+            for site in reachable.names():
+                try:
+                    ex = reachable.for_owner(site, paths.safe_user(who),
+                                             paths.user_state_root(who),
+                                             paths.user_outputs_root(who))
+                    found = adopt.reconcile(ex, ex.registry, site=site)
+                    if found:
+                        print(f"[warm] adopted {len(found)} run(s) from {site} "
+                              f"for {who}", flush=True)
+                except Exception:          # noqa: BLE001 - one machine, not all
+                    continue
     except Exception as e:                 # noqa: BLE001 - never delay start-up
         print(f"[warm] {type(e).__name__}: {e}", flush=True)
 
@@ -127,7 +148,7 @@ async def login(request: Request):
     body = await request.json()
     username = auth.authenticate(body.get("username") or "", body.get("password") or "")
     if not username:
-        return JSONResponse({"error": "Invalid username or password."}, status_code=401)
+        return JSONResponse({"error": "Incorrect email or password."}, status_code=401)
     resp = JSONResponse({"ok": True, "username": username})
     resp.set_cookie(_COOKIE, auth.make_session(username), httponly=True, samesite="lax",
                     secure=config.COOKIE_SECURE, max_age=config.SESSION_TTL, path="/")

@@ -40,15 +40,15 @@ import entry as C     # noqa: E402
 # rather than in the page, because the page should not know what a level is.
 STAGES = {
     0: ("Preparation",
-        "Turns what the instrument produced into the files every later step reads."),
+        "Turns instrument output into the files later steps read."),
     1: ("From One Sample",
-        "Needs nothing except that sample's own measurements."),
-    2: ("Built On An Earlier Result",
-        "Reads what an earlier step produced for the same sample."),
+        "Needs only that sample's own measurements."),
+    2: ("From An Earlier Result",
+        "Reads an earlier step's output for the same sample."),
     3: ("Built On That",
-        "Describes a result that an earlier step already found."),
+        "Describes an earlier result."),
     4: ("Across Samples",
-        "Answers for the whole set rather than for one sample in it."),
+        "Answers for the whole set, not one sample."),
 }
 
 # How the client itself works. There is no declaration to read this off, so it is
@@ -56,49 +56,39 @@ STAGES = {
 # come and go.
 HOW_A_CHAT_WORKS = (
     {
-        "name": "Domain Selection",
-        "summary": "The kind of data a chat works in",
+        "name": "Domains",
+        "summary": "What a chat can reach",
         "points": [
-            "A domain is a kind of data. A chat works in one or more of them, "
-            "chosen when it starts.",
-            "They cannot be changed afterwards. Start a new chat to work with "
-            "different ones.",
-            "The domain decides which studies can be selected and which analyses "
-            "apply.",
+            "A chat works in one or more kinds of data, chosen at the start.",
+            "Cannot be changed later. Start a new chat instead.",
+            "Decides which studies and which analyses apply.",
         ],
     },
     {
-        "name": "Study Selection",
-        "summary": "The studies a chat draws on",
+        "name": "Studies",
+        "summary": "What a chat draws on",
         "points": [
-            "Pick studies from the Studies button. Everything else applies to that "
-            "selection.",
-            "Select more than one to analyse them together. The study name stays in "
-            "the comparison as a label.",
+            "Pick studies from the Studies button. Everything applies to that selection.",
+            "Select several to analyse together; the study name stays as a label.",
             "Each chat holds its own selection.",
         ],
     },
     {
         "name": "Orientation",
-        "summary": "What a study holds, and what has already been done to it",
+        "summary": "What is there already",
         "points": [
-            "Every study you can reach, what kind of data it is, and how many "
-            "samples it holds.",
-            "What each sample carries, and which samples are missing a part the "
-            "others have.",
-            "Results already on the machine, including work finished before this "
-            "chat started.",
+            "Every study you can reach, its kind of data and its sample count.",
+            "What each sample carries, and what any of them is missing.",
+            "Results already on the machine, from any chat.",
         ],
     },
     {
-        "name": "Cohort Creation",
-        "summary": "Defining groups to compare",
+        "name": "Cohorts",
+        "summary": "Groups to compare",
         "points": [
-            "Split on a field, a threshold, a time window, an earlier result, or a "
-            "value derived from one.",
-            "Conditions combine freely. Describe the split you want in words.",
-            "A group is saved as a labelled table and can be used again in later "
-            "questions.",
+            "Split on a field, a threshold, a time window, or an earlier result.",
+            "Describe the split in words; conditions combine freely.",
+            "Saved as a labelled table, reusable later.",
         ],
     },
 )
@@ -174,8 +164,12 @@ def _stages(contracts: list[dict]) -> list[dict]:
         here = [c for c in contracts if c.get("level") == level]
         if not here:
             continue
-        name, note = STAGES[level]
-        out.append({"stage": name, "note": note,
+        # The note is the stage's definition, kept in STAGES for whoever reads
+        # this code. The panel shows the heading and the capabilities under it;
+        # a sentence of caption above each column was three captions above the
+        # thing being captioned.
+        name = STAGES[level][0]
+        out.append({"stage": name,
                     "items": [_one(c, by_id) for c in
                               sorted(here, key=lambda c: _title(c))]})
     return out
@@ -243,33 +237,27 @@ def for_user(user: str) -> dict:
         if submitted:
             methods = methods + [{
                 "name": "Anything Else",
-                "what": "Questions the methods above do not cover. An analysis "
-                        "written for the occasion is reported with its method and "
-                        "its caveats.",
+                "what": "Questions the methods above do not cover. Reported with "
+                        "its method and its caveats.",
             }]
         groups.append({
             "name": "Statistics",
-            "summary": "Applies to any table an analysis produced",
+            "summary": "Any table an analysis produced",
             "points": [
-                "These read a table, whatever produced it. Nothing has to run "
-                "first.",
-                "Ask for the method by name, or describe the question and let it "
-                "be chosen.",
+                "Reads any table, whatever produced it. Nothing has to run first.",
+                "Ask by name, or describe the question and let it be chosen.",
             ],
             "topics": methods,
         })
 
     if by_domain.get("visualization") and domain_allowed("visualization"):
         points = [
-            "Charts are drawn from any table an analysis produced, on the machine "
-            "the table is on.",
-            "Ask for a chart directly, or ask for the analysis and say you want it "
-            "plotted.",
+            "Charts from any table an analysis produced.",
+            "Ask for a chart, or ask for the analysis plotted.",
         ]
         seen = _viewers(by_domain, reachable)
         if seen:
-            points.append("Some results can be opened and moved around rather than "
-                          "read. Those are listed below.")
+            points.append("Some results can be opened and explored. Listed below.")
         groups.append({
             "name": "Visualization",
             "summary": "Charts, and results you can look at",

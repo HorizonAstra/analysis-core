@@ -27,8 +27,14 @@ RUNNER = _ROOT / "infrastructure" / "runner" / "run.py"
 CATALOG = _ROOT / "domains"
 sys.path.insert(0, str(_ROOT / "interfaces" / "catalog"))
 sys.path.insert(0, str(_ROOT / "infrastructure" / "sites"))
+# The renderer declares the processes; this file writes the workflow that calls
+# them. It is imported rather than partly reimplemented here, so that a process
+# name and the name used to call it cannot disagree. This path was missing, which
+# is why `--as pipeline` could not import it and so could not run at all.
+sys.path.insert(0, str(_ROOT / "infrastructure" / "render-targets"))
 import entry as C
 import profile as P
+import render
 
 CAPS = CATALOG  # every domain's catalog, not one project's
 
@@ -161,7 +167,15 @@ def as_workflow(caps: dict) -> str:
 
     for cid in seq:
         c = caps[cid]
-        proc = "".join(w.capitalize() for w in cid.split("_"))
+        # The names this block writes have to be the names render.py declares,
+        # so they come from render.py rather than from a second derivation here.
+        # `within` is the domain this entry sits in, which is what a bare
+        # `produced_by` is relative to; resolving it is what edges() already does
+        # and what this block did not, so it named a producer that no process
+        # here is called.
+        proc = render.process_name(cid)
+        chan = render.channel_name(cid)
+        within = cid.rsplit("/", 1)[0]
 
         srcs = sorted({p for p, cons, _, _ in edges(caps) if cons == cid})
         gathers = [i for i in c["inputs"] if i.get("aggregates")]
@@ -172,38 +186,57 @@ def as_workflow(caps: dict) -> str:
             # collect, and call the process a single time. The sample identifier
             # is replaced by a cohort label, because the result belongs to the
             # set and not to any member of it.
-            waited = sorted({p for i in gathers for p in i["aggregates"]})
+            waited = sorted({C.resolve_ref(p, within)
+                             for i in gathers for p in i["aggregates"]})
             out.append(f"  // {cid}: runs once over the whole cohort, after every "
                        f"sample has finished {', '.join(waited)}")
             out.append(f"  //   the cohort directory is assembled outside this "
                        f"workflow; what is gathered here is the barrier")
             barrier = "\n      .mix(".join(
-                f"{p}_out.manifest" for p in waited) + ")" * (len(waited) - 1)
-            out.append(f"  {cid}_ready = {barrier}")
+                f"{render.channel_name(p)}_out.manifest" for p in waited
+            ) + ")" * (len(waited) - 1)
+            out.append(f"  {chan}_ready = {barrier}")
             out.append(f"    .collect()")
             args = ", ".join(
                 f"params.{i['name']}" if i.get("aggregates") else f"ch_{i['name']}"
                 for i in c["inputs"])
-            out.append(f"  // {cid}_out = {proc}({args})   // needs a cohort "
+            out.append(f"  // {chan}_out = {proc}({args})   // needs a cohort "
                        f"directory; see the note in its contract")
             out.append("")
             continue
 
         # Build the channel this process consumes: start from the first input's
         # source, join the rest on sample_id, then flatten to one tuple.
+        # What the producer calls the output, which is not always what the
+        # consumer calls the input: `tree_bundle` takes slab's `scores` as
+        # `slab_scores`, because a bundle drawing from six capabilities needs
+        # names that stay distinct. `produced_output` records that, plan.py has
+        # always read it, and this block did not — so it asked slab to emit a
+        # channel named after the consumer's input, which slab does not declare.
         parts = []
         for i in c["inputs"]:
-            parts.append(f"{i['produced_by']}_out.{i['name']}"
-                         if i.get("produced_by") else f"ch_{i['name']}")
+            if i.get("produced_by"):
+                producer = render.channel_name(C.resolve_ref(i["produced_by"], within))
+                parts.append(f"{producer}_out.{i.get('produced_output') or i['name']}")
+            else:
+                parts.append(f"ch_{i['name']}")
 
-        if len(parts) == 1:
+        if not parts:
+            # Reads no files, so there is nothing to join and nothing to take a
+            # sample identifier from. It still runs once per sample and its
+            # output is still filed under one, so the identifier alone is the
+            # channel. Without this branch parts[0] raised IndexError and no
+            # pipeline could be emitted at all while such a capability existed.
+            channel = "samples.map { r -> r.sample_id }"
+        elif len(parts) == 1:
             channel = parts[0]
         else:
             channel = parts[0] + "".join(f"\n      .join({p})" for p in parts[1:])
 
-        why = "reads the samplesheet" if not srcs else "after " + ", ".join(srcs)
+        why = ("reads nothing; runs once per sample" if not parts else
+               "reads the samplesheet" if not srcs else "after " + ", ".join(srcs))
         out.append(f"  // {cid}: {why}")
-        out.append(f"  {cid}_out = {proc}(")
+        out.append(f"  {chan}_out = {proc}(")
         out.append(f"    {channel}")
         out.append(f"  )")
         out.append("")
@@ -220,8 +253,6 @@ def as_pipeline(caps: dict, profile_name: str) -> str:
     capability's inputs. Generating the two halves separately and expecting a
     person to reconcile them is how the two drift.
     """
-    import render
-
     profile = P.load_profile(profile_name)
     out = ["#!/usr/bin/env nextflow",
            "",

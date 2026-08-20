@@ -110,6 +110,38 @@ def _build(site: str):
     return LocalExecutor(site=site, registry=registry, store=store)
 
 
+def for_owner(site: str, owner: str, state_root, results_root=None):
+    """One site as it looks to one person, built rather than taken from the cache.
+
+    `_build` reads the environment, which is right for a process that belongs to
+    one person: a tool server is started with that person's state, results root
+    and owner already set. A web app is not that process. It serves everybody
+    from one environment, and the per-person parts are settled per request, so
+    asking it for "the executor for randi" gets a machine with nobody's results
+    root and nobody's registry.
+
+    That is fine while nothing above needs to answer for a particular person.
+    Something does now: work is adopted from a machine's store into the registry
+    of whoever it belongs to, and both halves of that are per person.
+
+    Not cached, and deliberately. The cache is keyed on the site, and a second
+    key would have to be the person, at which point what is being cached is a
+    handle over ssh rather than an answer worth keeping.
+    """
+    profile = P.load_profile(site)
+    registry = JobRegistry(Path(state_root) / f"registry-{site}.json")
+    if is_remote(profile):
+        host = os.environ.get(f"ANALYSIS_SSH_{site.upper().replace('-', '_')}", site)
+        root = profile.get("artifact_root")
+        return SlurmSshExecutor(ssh_host=host, site=site, registry=registry,
+                                artifact_root=(f"{root.rstrip('/')}/{owner}"
+                                               if root and owner else root))
+    return LocalExecutor(site=site, registry=registry,
+                         store=ArtifactStore(results_root
+                                             or profile.get("artifact_root")
+                                             or (Path(state_root) / "results")))
+
+
 def sites() -> dict:
     """Every reachable machine, in preference order."""
     return {name: executor(name) for name in names()}

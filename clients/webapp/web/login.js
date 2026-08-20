@@ -18,11 +18,11 @@ form.addEventListener("submit", async (e) => {
       window.location.href = "/";
     } else {
       const d = await r.json().catch(() => ({}));
-      err.textContent = d.error || "Sign in failed.";
+      err.textContent = d.error || "Incorrect email or password.";
       btn.disabled = false;
     }
   } catch {
-    err.textContent = "Could not reach the server.";
+    err.textContent = "Couldn’t reach the server.";
     btn.disabled = false;
   }
 });

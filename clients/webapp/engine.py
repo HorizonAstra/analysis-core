@@ -134,8 +134,8 @@ _MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS") or os.environ.get("ANTHROPIC_
 # it is done; this is the backstop for when it never does (a tool that keeps failing, a
 # goal it cannot reach), so one question cannot bill indefinitely.
 _MAX_STEPS = int(os.environ.get("LLM_MAX_STEPS", "25"))
-_STEP_LIMIT_NOTE = ("This analysis reached its step limit before it finished. Anything "
-                    "already computed has been saved. Try narrowing the question.")
+_STEP_LIMIT_NOTE = ("Step limit reached; what was computed is saved. "
+                    "Try narrowing the question.")
 # How many chats keep a live provider in memory. Beyond this the least recently used is
 # dropped; its history is on disk, so the next message in it rehydrates transparently.
 # Only ever a memory bound, never a correctness one.
@@ -602,13 +602,13 @@ class Engine:
         if _SEND_GRACE > 0:
             # `undoable` tells the client this is still the free window, so a stop here
             # returns the text to the composer instead of leaving a half-turn in the chat
-            yield {"type": "status", "label": "Sending…", "undoable": True}
+            yield {"type": "status", "label": "Sending", "undoable": True}
             await asyncio.sleep(_SEND_GRACE)
             # Close the window on the client before saving anything, not after the setup
             # work below. Otherwise there is a stretch where the client still believes a
             # stop is free while the message has already been stored, and a stop there
             # would clear the bubble on screen but leave it in the chat on reload.
-            yield {"type": "status", "label": "Thinking…"}
+            yield {"type": "status", "label": "Working"}
         chats.append_message(user, chat_id, {"role": "user", "text": text}, set_title_from=text)
         rec_msgs: list[dict] = []   # assistant-side records to persist (no bulky images)
         rec_runs: list[str] = []
@@ -644,7 +644,7 @@ class Engine:
                 system = (self.system_prompt(user, chat_id) + render.scope_note(scope)
                           + self._outcomes_note(user, chat_id))
                 for _ in range(_MAX_STEPS):
-                    yield {"type": "status", "label": "Thinking…"}
+                    yield {"type": "status", "label": "Working"}
                     step = None
                     think = []
                     async for kind, payload in self._model_step(provider, system):
@@ -681,7 +681,7 @@ class Engine:
                         break
 
                     yield {"type": "status",
-                           "label": render.TOOL_LABELS.get(step["tool_calls"][0]["name"], "Working") + "…"}
+                           "label": render.TOOL_LABELS.get(step["tool_calls"][0]["name"], "Working")}
                     results: list[dict] = []
                     async for ev in self._execute_tools(session, step["tool_calls"], results,
                                                         rec_msgs, rec_runs, carded, user):
@@ -702,7 +702,7 @@ class Engine:
                 # The type and message, never the traceback.
                 said = extract_error_message(e)
                 if not said:
-                    said = f"Something went wrong while running that analysis. ({type(e).__name__}: {e})".strip()
+                    said = f"That analysis failed. ({type(e).__name__}: {e})".strip()
                 m = render.redact(said)
                 rec_msgs.append({"role": "error", "text": m})
                 yield {"type": "error", "message": m}

@@ -216,7 +216,7 @@ def _about(answers: list[dict]) -> str:
     names = [n for n in names if n]
     if not names:
         return ""
-    head = ", ".join(names[:2]) + (f" and {len(names) - 2} more" if len(names) > 2 else "")
+    head = ", ".join(names[:2]) + (f" +{len(names) - 2}" if len(names) > 2 else "")
     return head[:1].upper() + head[1:]
 
 
@@ -624,8 +624,7 @@ def _elsewhere(built: int) -> str:
     """
     if not built:
         return ""
-    return (f"{built} result{'' if built == 1 else 's'} finished, still being copied "
-            f"to this machine. This opens once that lands.")
+    return f"{built} result{'' if built == 1 else 's'} finished, still copying"
 
 
 def viewers(user: str, chat_id: str) -> dict:
@@ -688,9 +687,9 @@ def viewers(user: str, chat_id: str) -> dict:
             # available rather than repeating what it is. Three reasons, and
             # they lead somewhere different: install it, wait for it, or run it.
             "why": ("" if ready else
-                    "Not installed on this server." if hit else
+                    "Not installed" if hit else
                     _elsewhere(built.get(about.get("capability", ""), 0)) or
-                    "Nothing has produced one yet. Ask for it on a sample."),
+                    "Nothing to open yet — ask for it on a sample"),
         })
     return {"viewers": out}
 
@@ -765,11 +764,9 @@ def item(user: str, chat_id: str, ref: str, name: str) -> dict:
         # terms rather than handed over as a broken download link.
         n = detailed.get("file_count")
         out["view"] = "text"
-        out["text"] = (f"This is a folder of {n:,} files prepared for a viewer."
-                       if n else "This is a folder prepared for a viewer.") + \
-                      "\n\nOpen it with the viewer offered beside this result, or " \
-                      "from the Visualizers menu, where you can also choose which " \
-                      "samples to load."
+        out["text"] = (f"{n:,} files prepared for a viewer."
+                       if n else "A folder prepared for a viewer.") + \
+                      "\n\nOpen it from the Visualizers menu."
         out["html"] = render.render_markdown(out["text"])
         out["truncated"] = False
     elif kind == "image":
@@ -793,7 +790,7 @@ def item(user: str, chat_id: str, ref: str, name: str) -> dict:
     elif kind == "text":
         text = "\n".join(detailed.get("lines", []))
         if len(text) > _TEXT_PREVIEW_CHARS:
-            text = text[:_TEXT_PREVIEW_CHARS] + "\n\n...(truncated; download for the full file)"
+            text = text[:_TEXT_PREVIEW_CHARS] + "\n\n…(truncated)"
         out["view"], out["text"] = "text", text
         out["html"] = render.render_markdown(text)
         out["truncated"] = bool(detailed.get("truncated"))

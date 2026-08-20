@@ -9,9 +9,9 @@ Here rather than in each executor because it was in each executor, written out
 twice, identical. That is fine until the reference grows a part — which it did,
 when data started being kept in versions — and then it is two places to change
 and one of them gets missed. Both copies read the version as part of the study
-name and asked whether the machine held a study called `NSCLC@2026-08-13`. It
-does not, so nothing could reach it, so work was routed to whichever machine
-happened to come first.
+name and asked whether the machine held a study called
+`KunleOdunsisCohort@2026-08-13`. It does not, so nothing could reach it, so
+work was routed to whichever machine happened to come first.
 
 An executor is passed in rather than inherited from, because what differs
 between machines is how they answer, not what the question means.
