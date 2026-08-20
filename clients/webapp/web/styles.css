@@ -489,22 +489,45 @@ body.resizing .resize::after { opacity: 1; background: var(--ink-soft); }
    because it is read once; the first column holds the row's identity. Zebra
    rather than a rule per row: on a wide table the eye tracks a band better than
    it tracks a line, and a rule under every row of forty is forty rules. */
-.v-tablewrap { overflow: auto; max-height: 62vh; border: 1px solid var(--hairline); border-radius: var(--r); }
+/* A result table. Unboxed, like everything else here: the header rule and the
+   note underneath are the edges, and a border around it would be a card. Rows
+   are told apart by rhythm and a hairline rather than by striping, which is
+   fill doing a job that space does better and which turns every table in the
+   product into the same grey ladder. */
+.v-tablewrap { overflow: auto; max-height: 62vh; }
 .v-table { border-collapse: separate; border-spacing: 0; font-size: 12px; width: max-content; min-width: 100%; }
-.v-table th, .v-table td { padding: 5px 11px; white-space: nowrap; text-align: left; }
+.v-table th, .v-table td { padding: 5px 14px 5px 0; white-space: nowrap; text-align: left; }
+.v-table th:first-child, .v-table td:first-child { padding-left: 2px; }
 .v-table th {
-  position: sticky; top: 0; z-index: 1; background: var(--surface);
+  position: sticky; top: 0; z-index: 2; background: var(--paper);
   font-weight: 500; font-size: 11px; color: var(--muted);
-  letter-spacing: .03em; text-transform: uppercase;
   border-bottom: 1px solid var(--line);
 }
-.v-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--tint) 55%, transparent); }
-.v-table tbody tr:hover { background: var(--tint); }
-.v-table td.is-key { color: var(--ink); font-weight: 500; }
-.v-table td { color: var(--ink-soft); }
+/* The row's identity holds the left edge and stays there while the rest scrolls
+   sideways, so a wide result never leaves you looking at numbers with no name
+   against them. */
+.v-table .is-key { position: sticky; left: 0; z-index: 1; background: var(--paper);
+  color: var(--ink); font-weight: 500; padding-right: 18px; }
+.v-table th.is-key { z-index: 3; }
+.v-table tbody td { color: var(--ink-soft); border-bottom: 1px solid var(--hairline); }
+.v-table tbody tr:last-child td { border-bottom: 0; }
 .v-table .is-num { text-align: right; font-variant-numeric: tabular-nums; }
 .v-table td.is-num { color: var(--ink); }
 .v-table td.is-empty { color: var(--muted); }
+/* The crosshair. Both arms at hover weight and neither stronger than the other,
+   because this is where the pointer is and not what is selected — `--tint` is
+   the hover fill everywhere else in the app and it stays that here.
+   Painted on the cell rather than the row: the first column is sticky and has
+   its own background, so a row fill would slide under it and stop at the edge.
+   The point of it is the two labels. Reading a number out of the middle of a
+   wide table means knowing which row and which column it is in, so the header
+   and the row's own name come up to full ink while the arms are only tinted. */
+.v-table tbody tr:hover td, .v-table tbody td.is-cross { background: var(--tint); }
+.v-table tbody tr:hover td.is-key,
+.v-table tbody td.is-key.is-cross { background: color-mix(in srgb, var(--tint) 80%, var(--paper)); }
+.v-table tbody tr:hover td.is-cross { background: color-mix(in srgb, var(--tint) 70%, var(--line)); }
+.v-table tbody tr:hover td.is-key { color: var(--ink); }
+.v-table th.is-cross { color: var(--ink); background: color-mix(in srgb, var(--tint) 55%, var(--paper)); }
 /* A note under a result is read, not glanced at, so it is not the smallest
    type in the app. Same size as the tooltip text and the settings table. */
 .v-note { color: var(--muted); font-size: 12px; padding: 7px 2px 0; }
@@ -797,7 +820,16 @@ body.resizing .resize::after { opacity: 1; background: var(--ink-soft); }
 .ver-grid tr:first-child th { position: sticky; top: 0; background: var(--surface); z-index: 2;
   border-bottom: 1px solid var(--line); vertical-align: bottom; }
 .ver-grid tr:first-child th:first-child { z-index: 3; }
-.ver-grid tbody tr:hover td, .ver-grid tr:hover > td { background: color-mix(in srgb, var(--tint) 40%, transparent); }
+/* The crosshair, the same one the result tables use. Both arms at hover weight;
+   the row's name and the column's heading come up to full ink, because those two
+   labels are the whole reason for lighting a row and a column at all. The first
+   column and the header row are sticky and carry their own background, so they
+   are lit by their text rather than by a fill that would sit under them. */
+.ver-grid tbody tr:hover td, .ver-grid tr:hover > td,
+.ver-grid td.is-cross { background: color-mix(in srgb, var(--tint) 55%, transparent); }
+.ver-grid tr:hover > td.is-cross { background: var(--tint); }
+.ver-grid tr:hover > .ver-row .ver-scope,
+.ver-grid th.is-cross .ver-scope { color: var(--ink); }
 
 /* A heading that is also a button, over what it heads. The chevron appears on
    hover so a closed grid reads as a grid, not as a row of dropdowns. */

@@ -1367,12 +1367,14 @@ function drawVersions() {
   const head = document.createElement("tr");
   const corner = document.createElement("th");
   corner.className = "ver-corner";
+  corner.dataset.col = 0;
   corner.appendChild(scopeButton("All", () => everyCell(),
     `Every cell · ${rows.length} sample${rows.length === 1 ? "" : "s"} × ${cols.length}`));
   head.appendChild(corner);
-  for (const c of cols) {
+  cols.forEach((c, ci) => {
     const th = document.createElement("th");
     th.className = "ver-colcell";
+    th.dataset.col = ci + 1;
     // The data column is named by the domain that owns the data — "Space Ranger"
     // rather than "Data" — because that is what the people reading this call the
     // thing every analysis starts from.
@@ -1380,16 +1382,21 @@ function drawVersions() {
       ? ((verData && verData.data_label) || "Data") : capTitle(c);
     th.appendChild(scopeButton(label, () => cellsInColumn(c), label, "ver-col"));
     head.appendChild(th);
-  }
+  });
   table.appendChild(head);
 
   for (const r of rows) {
     const tr = document.createElement("tr");
     const label = document.createElement("th");
     label.className = "ver-row";
+    label.dataset.col = 0;
     label.appendChild(scopeButton(r.label, () => cellsInRow(r.subject), r.label));
     tr.appendChild(label);
-    for (const c of cols) tr.appendChild(versionCell(r.subject, c, r.cells[c]));
+    cols.forEach((c, ci) => {
+      const td = versionCell(r.subject, c, r.cells[c]);
+      td.dataset.col = ci + 1;
+      tr.appendChild(td);
+    });
     table.appendChild(tr);
   }
 
@@ -1410,15 +1417,25 @@ function drawVersions() {
       const tr = document.createElement("tr");
       const label = document.createElement("th");
       label.className = "ver-row";
+      label.dataset.col = 0;
       label.appendChild(scopeButton(a.label, () => cellsInRow(a.subject), a.label));
       tr.appendChild(label);
       // Walked over the grid's own columns, so a capability this row has no cell
       // for leaves a gap in the right place instead of shifting everything left.
-      for (const c of cols) tr.appendChild(versionCell(a.subject, c, a.cells[c]));
+      cols.forEach((c, ci) => {
+        const td = versionCell(a.subject, c, a.cells[c]);
+        td.dataset.col = ci + 1;
+        tr.appendChild(td);
+      });
       table.appendChild(tr);
     }
   }
   body.appendChild(table);
+  // Same crosshair as a result table. A matrix nineteen rows deep and ten across
+  // is the place it earns most: a cell in the middle of it is a version of some
+  // capability for some sample, and without both arms lit you are counting
+  // across with a finger.
+  crosshair(table);
 
   // Counted over the capability columns only. The data column is what the
   // results were computed from, not a result, and counting it as one would
@@ -2027,14 +2044,47 @@ function buildParams(groups) {
 // species names were typeset identically and neither could be scanned. A table
 // of numbers is read down the column, which needs the digits to line up.
 
-// Full float precision makes a column of p-values unreadable. Show something a
-// human can scan without lying about magnitude: very small and very large keep
-// exponent form, the rest round.
-function fmtCell(v) {
-  if (v === null || v === undefined) return "";
-  if (typeof v !== "number" || !Number.isFinite(v) || Number.isInteger(v)) return String(v);
+// A column of numbers is read down, so the decision is the column's and not the
+// cell's. The comment above has said so since this was written; `fmtCell` did
+// not do it, and rounded each value on its own, which is how one column came out
+// as 0.0637 / 5.55 / 1483 with the decimal point in three places and nothing to
+// scan along. Decided once per column, every value in it formatted the same way.
+//
+// Three shapes, chosen by what the column actually holds:
+//   whole numbers      no decimal point at all
+//   very small or very large    exponent form, same precision throughout
+//   everything else    a fixed number of decimals, from the column's own magnitude
+function columnFormat(values) {
+  const nums = values.filter((v) => typeof v === "number" && Number.isFinite(v));
+  if (!nums.length) return (v) => (v === null || v === undefined ? "" : String(v));
+  const abs = nums.map(Math.abs).filter((v) => v > 0);
+  const big = abs.length ? Math.max(...abs) : 0;
+  const small = abs.length ? Math.min(...abs) : 0;
+
+  if (nums.every(Number.isInteger) && big < 1e15) {
+    return (v) => (typeof v === "number" ? v.toLocaleString() : plain(v));
+  }
+  if (big >= 1e7 || (small > 0 && small < 1e-4)) {
+    return (v) => (typeof v === "number" && Number.isFinite(v) ? v.toExponential(2) : plain(v));
+  }
+  // Enough decimals to separate values of this size, and the same count for all
+  // of them. Four significant places past the leading digit is the most this
+  // ever needs, and a column in the thousands needs none.
+  const mag = big > 0 ? Math.floor(Math.log10(big)) : 0;
+  const dp = Math.min(6, Math.max(0, 3 - mag));
+  return (v) => (typeof v === "number" && Number.isFinite(v) ? v.toFixed(dp) : plain(v));
+}
+function plain(v) {
+  return v === null || v === undefined ? "" : String(v);
+}
+
+// One value on its own, for a fact list, where there is no column to line up
+// with. Keeps exponent form at the extremes and rounds the rest.
+function fmtOne(v) {
+  if (typeof v !== "number" || !Number.isFinite(v)) return plain(v);
+  if (Number.isInteger(v)) return v.toLocaleString();
   const a = Math.abs(v);
-  if (a < 1e-4 || a >= 1e7) return v.toExponential(3);
+  if (a < 1e-4 || a >= 1e7) return v.toExponential(2);
   return String(Math.round(v * 1e6) / 1e6);
 }
 
@@ -2054,23 +2104,41 @@ function numericColumns(columns, rows) {
   });
 }
 
-// The one table. Numeric columns are right-aligned with tabular figures so the
-// digits form a column; the first column is the row's identity and holds the
-// left edge; the header is quiet because it is read once and the data is read
-// many times.
+// The one table.
+//
+// Built to the rules at the top of the stylesheet rather than around them.
+// "Hierarchy from space, weight" and "no bordered cards" — this used to be a
+// rounded box with zebra striping and uppercased headings, which is decoration
+// standing in for structure, and it made every result look the same whatever it
+// held.
+//
+// What carries the structure instead:
+//   the first column is the row's identity, so it holds the left edge and stays
+//     put while the rest scrolls sideways. A hundred-column result is unreadable
+//     without it — you scroll right and lose which row you are on.
+//   numbers are right-aligned with tabular figures and one format per column,
+//     so the digits form a column that can be scanned down.
+//   the header is quiet: read once, against data read many times, and never
+//     uppercased, because these are identifiers and `DA_Object` is not
+//     `DA_OBJECT`.
+//   hovering marks the row and the column, so a value in the middle of a wide
+//     table can be traced back to both of its labels.
 function dataTable({ columns, rows, truncated, shape, note }) {
   const box = document.createElement("div");
   const wrap = el("v-tablewrap");
   const tbl = document.createElement("table");
   tbl.className = "v-table";
   const num = numericColumns(columns, rows);
+  const fmt = columns.map((_, i) => columnFormat(rows.map((r) => r[i])));
 
   const thead = document.createElement("thead");
   const htr = document.createElement("tr");
   columns.forEach((c, i) => {
     const th = document.createElement("th");
     th.textContent = c;
-    if (num[i]) th.className = "is-num";
+    th.dataset.col = i;
+    if (num[i]) th.classList.add("is-num");
+    if (i === 0) th.classList.add("is-key");
     htr.appendChild(th);
   });
   thead.appendChild(htr); tbl.appendChild(thead);
@@ -2080,17 +2148,17 @@ function dataTable({ columns, rows, truncated, shape, note }) {
     const tr = document.createElement("tr");
     row.forEach((cell, i) => {
       const td = document.createElement("td");
-      td.textContent = fmtCell(cell);
-      const cls = [];
-      if (num[i]) cls.push("is-num");
-      if (i === 0) cls.push("is-key");
-      if (cell === null || cell === undefined || cell === "") cls.push("is-empty");
-      if (cls.length) td.className = cls.join(" ");
+      td.textContent = num[i] ? fmt[i](cell) : plain(cell);
+      td.dataset.col = i;
+      if (num[i]) td.classList.add("is-num");
+      if (i === 0) td.classList.add("is-key");
+      if (cell === null || cell === undefined || cell === "") td.classList.add("is-empty");
       tr.appendChild(td);
     });
     tb.appendChild(tr);
   }
   tbl.appendChild(tb); wrap.appendChild(tbl); box.appendChild(wrap);
+  crosshair(tbl);
 
   const said = note || (truncated && shape
     ? `${rows.length.toLocaleString()} of ${shape[0].toLocaleString()} rows`
@@ -2098,7 +2166,30 @@ function dataTable({ columns, rows, truncated, shape, note }) {
   if (said) { const n = el("v-note"); n.textContent = said; box.appendChild(n); }
   return box;
 }
-function buildTable(item) { return dataTable(item); }
+
+// Row and column, marked together, on any grid whose cells carry a column index.
+// A column cannot be selected in CSS — there is no parent of a cell that stands
+// for the column it is in — so the column half is the only thing here that needs
+// script, and the row half is left to `:hover` where it belongs.
+//
+// Delegated, so a table that is rebuilt keeps working, and cleared on leaving so
+// nothing is left marked when the pointer goes somewhere else entirely.
+function crosshair(table) {
+  if (table.dataset.crosshair) return;
+  table.dataset.crosshair = "1";
+  let marked = [];
+  const clear = () => { for (const c of marked) c.classList.remove("is-cross"); marked = []; };
+  table.addEventListener("mouseover", (e) => {
+    const cell = e.target.closest("td, th");
+    if (!cell || !table.contains(cell)) return;
+    const i = cell.dataset.col;
+    if (i === undefined) return clear();
+    clear();
+    marked = [...table.querySelectorAll(`[data-col="${i}"]`)];
+    for (const c of marked) c.classList.add("is-cross");
+  });
+  table.addEventListener("mouseleave", clear);
+}
 
 // The one fact list: a short block of name/value pairs, for the scalars at the
 // top of a curated result and for anything else shaped like a record of one.
@@ -2108,7 +2199,7 @@ function factList(pairs) {
     const row = el("v-fact");
     const a = el("v-fact-k"); a.textContent = k;
     const b = el("v-fact-v");
-    b.textContent = v === null || v === undefined ? "" : (typeof v === "number" ? fmtCell(v) : String(v));
+    b.textContent = v === null || v === undefined ? "" : (typeof v === "number" ? fmtOne(v) : String(v));
     if (typeof v === "number") b.classList.add("is-num");
     row.append(a, b); dl.appendChild(row);
   }
