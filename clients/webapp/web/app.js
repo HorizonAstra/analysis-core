@@ -1885,7 +1885,8 @@ function renderTree() {
   const count = $("#phCount");
   if (count) count.textContent = topics.length ? String(topics.length) : "";
   if (!topics.length) {
-    tree.innerHTML = '<div class="tree-empty"><div class="te-title">Nothing here yet.</div></div>';
+    tree.innerHTML = '<div class="tree-empty"><div class="te-title">Nothing here yet!</div>'
+      + '<div class="te-sub">Tables and figures will show up here as analyses finish.</div></div>';
     return;
   }
   // Nearly every capability works on one sample, so a study's worth of work is

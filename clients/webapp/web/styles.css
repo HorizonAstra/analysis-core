@@ -369,8 +369,13 @@ body.resizing .resize::after { opacity: 1; background: var(--ink-soft); }
 
 /* directory tree — compact, hierarchy by indentation. No folder glyph: the chevron
    already says a row opens, and a second mark beside it says it twice. */
-.tree-empty { flex: 1 1 auto; display: grid; place-items: center; padding: 20px; }
-.te-title { font-size: 16px; font-weight: 400; color: var(--muted); }
+/* Rare, now that the panel shows a person's work rather than one conversation's,
+   which is exactly why it should say what would be here rather than only that
+   nothing is. 20 and 13 are on the type scale; the 16px it used to be was not. */
+.tree-empty { flex: 1 1 auto; display: grid; place-items: center; padding: 20px;
+  text-align: center; align-content: center; gap: 6px; }
+.te-title { font-size: 20px; font-weight: 500; color: var(--ink-soft); }
+.te-sub { font-size: 13px; color: var(--muted); max-width: 28ch; line-height: 1.45; }
 .folder-row, .item {
   display: flex; align-items: center; gap: 6px; width: 100%;
   border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px; text-align: left;
